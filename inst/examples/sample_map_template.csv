@@ -1,0 +1,5 @@
+file,sample_id,patient_id,timepoint,is_control
+Blood samples_HC-1.fcs,HC-1,HC-1,baseline,FALSE
+Blood samples_HC-2;2.fcs,HC-2,HC-2,baseline,FALSE
+Blood samples_Cohort-A patient-1.fcs copy,Cohort-A patient-1,Cohort-A patient-1,baseline,FALSE
+Blood samples_Cohort-B patient-1.fcs,Cohort-B patient-1,Cohort-B patient-1,baseline,FALSE

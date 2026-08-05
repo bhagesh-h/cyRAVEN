@@ -1,0 +1,5 @@
+patient_id,cohort,age_years,sex
+HC-1,healthy control,10,male
+HC-2,healthy control,12,female
+Cohort-A patient-1,cohort A,9,female
+Cohort-B patient-1,cohort B,11,male

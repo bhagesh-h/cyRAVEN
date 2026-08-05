@@ -1,0 +1,21 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
+^\.github$
+^results.*$
+^README\.Rmd$
+# The full-resolution logo masters (1.6 MB PNG + 4 MB SVG). They stay in the
+# repository as the source of truth for the artwork, but shipping them would
+# put the installed package over the 5 MB size threshold for the sake of an
+# image nothing in the package reads. The 250 px man/figures/logo.png is the
+# copy that ships, and is what the README and the pkgdown site use.
+^inst/assets$
+^LICENSE\.md$
+^\.Rhistory$
+^cran-comments\.md$
+^CRAN-SUBMISSION$
+^codecov\.yml$
+^\.lintr$
+^benchmark$

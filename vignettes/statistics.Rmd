@@ -1,0 +1,160 @@
+---
+title: "Statistical choices, and what they cost"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Statistical choices, and what they cost}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+set.seed(1)
+```
+
+```{r setup}
+library(cyRAVEN)
+```
+
+This vignette explains why the tests are the ones they are. Every choice below
+trades something away, and the trade is stated rather than implied.
+
+## 1. Cells are not replicates
+
+The number of cells in an FCS file is a property of how long somebody left the
+cytometer running. Treating cells as independent observations makes the p-value a
+function of acquisition time.
+
+Concretely: pooling cells across a cohort and running a rank test on marker
+intensity gives *n* in the tens of thousands. Almost any difference reaches
+significance, and a difference produced entirely by one deeply-acquired donor is
+indistinguishable from one shared by the whole cohort.
+
+The remedy is the one `diffcyt` uses: aggregate to one value per sample per
+population first, then model those values. `stats_marker_state()` does exactly
+this, and *n* becomes the number of donors — which is what the design actually
+provides.
+
+```{r ds}
+mfi <- expand.grid(sample_id = sprintf("S%02d", 1:12),
+                   population = "CD4 T cells", marker = "HLA-DR",
+                   stringsAsFactors = FALSE)
+mfi$n_cells <- 500
+mfi$median_asinh <- rnorm(12, 2, 0.3) + rep(c(0, 0.8), each = 6)
+mfi$pct_positive <- pmin(100, pmax(0, rnorm(12, 30, 5) + rep(c(0, 10), each = 6)))
+mfi$is_control <- FALSE; mfi$qc_status <- "pass"
+grp <- setNames(rep(c("HC", "Patient"), each = 6), sprintf("S%02d", 1:12))
+
+res <- stats_marker_state(mfi, grp, reference = "HC")
+res[, c("marker", "measure", "n_reference", "n_comparison", "delta_median", "p_value")]
+```
+
+Note `n_reference` is 6, not 3,000.
+
+The package still reports cell-level effect sizes — `stats_subcluster_shifts()`
+ranks marker shifts over pooled cells — but deliberately attaches **no p-value**
+to them. They are for generating hypotheses, not testing them.
+
+## 2. Rank tests, not limma or a mixed model
+
+`diffcyt` fits limma's moderated *t*, borrowing variance across markers through
+an empirical-Bayes prior. That is an excellent trade at mass-cytometry marker
+counts (30–40) and designed-experiment sample counts.
+
+At the sizes this package is built for — a dozen markers, single-digit donors per
+cohort — the prior is estimated from too few markers to stabilise anything, and
+the normality assumption stops being a formality and starts doing real work.
+Wilcoxon and Kruskal-Wallis assume only independence and ordinal comparability.
+
+**What that costs:** less power when the data really are normal, and no clean way
+to include covariates. Both are accepted deliberately.
+
+**When to switch:** roughly 15+ samples per cohort. At that point the prior earns
+its keep and a mixed model can absorb repeated measures properly.
+
+## 3. Percentages are compositional
+
+Population percentages within a sample sum to 100. They cannot move
+independently: a granulocyte expansion mechanically depresses every lymphocyte
+percentage, and those depressions test significant with no lymphocyte having
+changed.
+
+`clr_frequencies()` applies the centred log-ratio, expressing each population
+relative to the geometric mean of that sample's composition.
+
+```{r clr}
+freq <- data.frame(
+  sample_id = rep(sprintf("S%02d", 1:6), each = 3),
+  population = rep(c("Granulocytes", "CD4 T cells", "B cells"), 6),
+  pct_of_cd45_pos = as.vector(replicate(6, {v <- c(60, 25, 15) * exp(rnorm(3, 0, .1)); 100*v/sum(v)})),
+  is_control = FALSE, qc_status = "pass")
+head(clr_frequencies(freq)[, c("sample_id", "population", "pct_of_cd45_pos", "clr")], 3)
+```
+
+Both the raw and the CLR test are reported, because the **comparison between
+them** is the finding: `compositional_concordance()` labels each result
+`robust_to_composition`, `raw_only__possible_composition_artefact`, or
+`clr_only__was_masked_by_composition`.
+
+**What CLR does not fix:** it cannot recover absolute cell numbers. If every
+population doubles, the composition is unchanged and CLR sees nothing. Only
+cells/µL distinguishes "expanded" from "expanded relative to the rest", which is
+why `abundance_measure()` prefers absolute counts whenever the patient table
+supplies the white-cell count. **CLR is the right test for frequency data;
+absolute counts are better data.**
+
+## 4. Confounders are diagnosed, not adjusted away
+
+The patient table carries age and sex. It is tempting to put them in a model.
+
+At single-digit *n* per cohort, that model spends most of its residual degrees of
+freedom on nuisance terms — and if age is strongly associated with cohort, which
+in a syndrome-versus-adult-control design it usually is, the two are not separable
+at *any* sample size. The adjusted estimate is extrapolation, and it arrives
+wearing a confidence interval.
+
+So `stats_confounding()` reports the two facts that *together* make something a
+confounder: whether the covariate differs across cohorts, and whether it tracks
+the outcome. Either alone is harmless. `stats_rank_ancova()` will fit the adjusted
+model on request, labels every row `EXPLORATORY`, and writes `NOT FITTED` with a
+reason rather than a number when the residual degrees of freedom are insufficient.
+
+## 5. Batch effects are measured, not removed
+
+Harmony and CytoNorm both move cells until batch labels mix. When batch is
+confounded with the biological group — samples of one cohort acquired on one set
+of days, which is how clinical cohorts are normally collected — "removing the
+batch" and "removing the effect you are looking for" are the same operation, and
+no algorithm can tell them apart.
+
+`batch_mixing_report()` therefore returns two numbers: iLISI against a permutation
+null (is there batch structure?) and Cramér's V (can it even be separated from
+cohort?). If V is high, no correction is safe at any setting, and that is the most
+useful thing the diagnostic can say.
+
+## 6. Multiplicity
+
+Benjamini-Hochberg within each test family. Differential state adjusts *within*
+each measure rather than across both: the median and the fraction-positive are two
+views of the same cells and are strongly correlated, so pooling them would inflate
+the family with tests that are not independent questions and over-penalise every
+hit.
+
+## 7. Effect sizes
+
+Every p-value is reported next to an effect size — Cliff's delta over samples, or
+matched-pairs rank-biserial. Differences, never ratios, for arcsinh values: that
+scale runs negative, where a ratio is uninterpretable and flips sign for no
+biological reason.
+
+## Summary
+
+| Question | Function | Unit |
+|---|---|---|
+| Did a population change size? | `stats_group_comparison()` | sample |
+| …after removing the compositional constraint? | `clr_frequencies()` + `compositional_concordance()` | sample |
+| Did a marker change level inside a population? | `stats_marker_state()` | sample |
+| Is it really age or sex? | `stats_confounding()` | sample |
+| Is it really the batch? | `batch_mixing_report()` | cell (descriptive) |
+| Is it really the gate? | `stats_threshold_drift()`, `cluster_gate_agreement()` | sample / cell |
+| Which markers shift within a subcluster? | `stats_subcluster_shifts()` | cell (no p-value) |

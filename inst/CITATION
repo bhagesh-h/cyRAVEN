@@ -1,0 +1,20 @@
+citHeader("To cite cyRAVEN in publications, use:")
+
+bibentry(
+  bibtype  = "Manual",
+  title    = "cyRAVEN: Gated Multi-Sample Flow Cytometry Embedding and Differential Analysis",
+  author   = person("Bhagesh", "Hunakunti"),
+  year     = "2026",
+  note     = sprintf("R package version %s", meta$Version),
+  url      = "https://github.com/bhagesh-h/cyRAVEN"
+)
+
+citFooter(
+  "The methods this package implements are due to their original authors. ",
+  "Please cite them as well where relevant: FlowSOM (Van Gassen et al. 2015, ",
+  "Cytometry A 87:636-645) for the unsupervised clustering; diffcyt (Weber et ",
+  "al. 2019, Commun Biol 2:183) for the per-sample aggregation strategy used by ",
+  "the differential-state tests; UMAP (McInnes et al. 2018, arXiv:1802.03426) ",
+  "and its uwot implementation for the embedding; and Korsunsky et al. (2019, ",
+  "Nat Methods 16:1289-1296) for the LISI mixing metric."
+)
