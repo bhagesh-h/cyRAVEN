@@ -1,0 +1,168 @@
+# Population spec for a myeloid-lymphoid immunophenotyping panel.
+#
+# This file is DATA, not code. It is a literal transcription of the "gating
+# strategy" sheet of `gating strategy & cohort info.xlsx`; nothing here is tuned
+# to any particular file. Editing it changes the analysis without touching R.
+#
+# Each population is a map of channel -> direction, where direction is one of
+#   above         value > threshold
+#   below         value < threshold
+#   intermediate  threshold < value < upper bound (bound derived per sample)
+# and the reserved key `any_of` holds a nested map satisfied when ANY member is.
+#
+# Every requirement is ANDed with the CD45+ parent gate, which the script derives
+# from scatter and viability before this spec is evaluated. Populations are
+# labelled most-specific-first, so a cell satisfying both `CD3 pos CD4 pos` and
+# the deeper Vd-negative definition receives the deeper label.
+#
+# NOTE on the source document: it defines the T-cell subsets as Vd1- Vd2- to
+# separate conventional alpha-beta T cells from the gamma-delta subsets. That
+# negative requirement is transcribed literally — dropping it would merge
+# gamma-delta cells into the CD4/CD8 gates.
+
+populations:
+  # ---- myeloid -------------------------------------------------------------
+  # Granulocytes are defined by SIDE SCATTER, not by a lineage antibody: dense
+  # cytoplasmic granules scatter light strongly. SSC-A is thresholded on a log10
+  # scale by the same mode-finding machinery used for fluorescence.
+  Granulocytes:
+    CD45: above
+    CD3: below
+    CD14: below
+    CD19: below
+    CD16: above
+    SSC-A: above
+
+  Classical monocytes:
+    CD3: below
+    CD14: above
+    CD16: below
+
+  Intermediate monocytes:
+    CD3: below
+    CD14: above
+    CD16: above
+
+  Non-classical monocytes:
+    CD3: below
+    CD14: below
+    CD16: above
+
+  Dendritic cells:
+    CD3: below
+    CD14: below
+    CD16: below
+    CD19: below
+    HLA-DR: above
+
+  # ---- T cells -------------------------------------------------------------
+  CD4 T cells:
+    CD3: above
+    CD4: above
+    CD8: below
+    Vd1: below
+    Vd2: below
+
+  CD8 T cells:
+    CD3: above
+    CD4: below
+    CD8: above
+    Vd1: below
+    Vd2: below
+
+  Vd1 T cells:
+    CD3: above
+    CD4: below
+    CD8: below
+    Vd1: above
+    Vd2: below
+
+  Vd2 T cells:
+    CD3: above
+    CD4: below
+    CD8: below
+    Vd1: below
+    Vd2: above
+
+  NKT cells:
+    CD3: above
+    CD4: below
+    CD8: below
+    Vd1: below
+    Vd2: below
+    CD56: above
+
+  # ---- B and NK ------------------------------------------------------------
+  B cells:
+    CD3: below
+    CD19: above
+
+  # "CD16+ or CD56+" in the source document. The two receptors mark overlapping
+  # but non-identical NK subsets and the population is their union, so this is a
+  # genuine disjunction rather than two populations.
+  NK cells:
+    CD3: below
+    CD19: below
+    any_of:
+      CD16: above
+      CD56: above
+
+# Functional-marker summaries. This panel carries no activation, exhaustion, or
+# homing markers, so the only meaningful block is the myeloid HLA-DR/CD11c pair;
+# blocks whose markers are absent are reported as unavailable rather than faked.
+functional_blocks:
+  myeloid:
+    markers: [HLA-DR, CD11c]
+    populations:
+      - Classical monocytes
+      - Intermediate monocytes
+      - Non-classical monocytes
+      - Dendritic cells
+      - Granulocytes
+
+# Derived abundance ratios: standard immunology summary numbers computed from
+# the frequencies above, not independently gated. `numerator`/`denominator`
+# must be population names declared under `populations:` above. Written to
+# population_ratios.csv and plotted in population_ratios.png (see README §8).
+ratios:
+  CD4_CD8:
+    label: "CD4:CD8 ratio"
+    numerator: CD4 T cells
+    denominator: CD8 T cells
+
+# Every colour every figure draws with. Optional: any key left out keeps its
+# built-in default (see ?cyRAVEN::default_colors, or
+# system.file("examples", "colors_template.yaml", package = "cyRAVEN")
+# for the full annotated list). Values
+# below are the current built-ins, restated here so this file is the one
+# place to edit going forward — change any hex/name below to re-theme every
+# figure with no other change.
+colors:
+  population_palette:
+    - "#E8112D"
+    - "#FF7A00"
+    - "#FFC800"
+    - "#8FD400"
+    - "#00B34A"
+    - "#00C2D1"
+    - "#0072F0"
+    - "#FF3D9E"
+    - "#00E0A0"
+  other_grey: "#7A5C00"
+  reference_fill: "white"
+  na_fill: "grey85"
+  gate_highlight: "#D62728"
+  threshold_ok: "grey20"
+  threshold_review: "firebrick"
+  bar_outline: "grey20"
+  bracket: "black"
+  tile_border: "white"
+  grid_major: "grey90"
+  axis_ticks: "grey30"
+  subtitle_text: "grey35"
+  caption_text: "grey30"
+  label_text: "grey25"
+  empty_panel_text: "grey40"
+  density_viridis: "mako"
+  intensity_viridis: "magma"
+  count_viridis: "D"

@@ -1,0 +1,126 @@
+url: https://bhagesh-h.github.io/cyRAVEN
+
+template:
+  bootstrap: 5
+  light-switch: true
+
+reference:
+- title: Run the pipeline
+  desc: >
+    One call does everything. The stage functions below are the same code, split
+    so a step can be run, inspected or replaced on its own.
+  contents:
+  - run_cyraven
+
+- title: Reading and transformation
+  desc: Getting FCS files into a matrix on a sensible scale.
+  contents:
+  - read_fcs_resolved
+  - fingerprint_panels
+  - maybe_compensate
+  - derive_cofactor
+  - derive_cofactor_pooled
+
+- title: Gating
+  desc: >
+    Thresholds derived from each sample's own density rather than transferred
+    from fixed coordinates.
+  contents:
+  - density_valley
+  - resolve_threshold
+  - apply_gate_hierarchy
+  - staining_verdict
+
+- title: Populations
+  desc: Scoring a declarative population specification.
+  contents:
+  - score_populations
+  - default_population_spec
+  - default_functional_blocks
+  - expected_positive_markers
+  - compute_population_ratios
+
+- title: Embedding
+  desc: One shared UMAP per marker panel, plus model persistence for later batches.
+  contents:
+  - select_umap_features
+  - plan_subsample
+  - run_umap
+  - save_umap_model
+  - load_umap_model
+  - project_umap
+
+- title: Clustering
+  desc: >
+    Unsupervised clustering as a cross-check on the gate specification, and
+    reference-defined subclustering.
+  contents:
+  - run_unsupervised_clusters
+  - cluster_gate_agreement
+  - subcluster_by_reference
+  - choose_subcluster_k
+
+- title: Learned gates
+  desc: >
+    The inverse of the gating stage: given a set of labelled cells, learn a
+    two-marker gating strategy that selects them. This is what turns "this
+    cluster matches no described population" into a gate someone can draw.
+    Descriptive throughout -- it proposes gates and never changes a scored one.
+  contents:
+  - learn_convex_gate
+  - explain_cluster
+  - explain_unmatched_clusters
+  - rank_gate_markers
+  - fig_gate_strategy
+
+- title: Statistics
+  desc: >
+    Every test below uses per-sample values, so the replicates are donors rather
+    than cells.
+  contents:
+  - abundance_measure
+  - stats_group_comparison
+  - stats_marker_state
+  - stats_subcluster_shifts
+  - clr_frequencies
+  - compositional_concordance
+  - stats_confounding
+  - stats_rank_ancova
+  - stats_paired_comparison
+
+- title: Diagnostics
+  desc: >
+    Questions about the data and the gating that the analysis itself cannot
+    answer.
+  contents:
+  - lisi_score
+  - batch_mixing_report
+  - stats_threshold_drift
+  - write_run_manifest
+
+- title: Figures
+  contents:
+  - starts_with("fig_")
+  - theme_cyto
+
+- title: Metadata and export
+  contents:
+  - load_patient_table
+  - load_sample_map
+  - load_absolute_counts
+  - export_flowjo_fcs
+
+- title: Appearance and session state
+  contents:
+  - default_colors
+  - fcs_colors
+  - set_fcs_colors
+  - reference_group
+  - set_reference_group
+
+articles:
+- title: Get started
+  navbar: ~
+  contents:
+  - cyRAVEN
+  - statistics
