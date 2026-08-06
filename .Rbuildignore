@@ -12,6 +12,12 @@
 # image nothing in the package reads. The 250 px man/figures/logo.png is the
 # copy that ships, and is what the README and the pkgdown site use.
 ^inst/assets$
+# The full GPL-3 text. GitHub detects the licence from a file named LICENSE, so
+# it stays at that name in the repository -- but DESCRIPTION declares
+# "License: GPL (>= 3)" without "+ file LICENSE", and a LICENSE file inside the
+# tarball is then read as a licence stub that does not parse. Kept in the repo,
+# out of the build.
+^LICENSE$
 ^LICENSE\.md$
 ^\.Rhistory$
 ^cran-comments\.md$
@@ -19,3 +25,5 @@
 ^codecov\.yml$
 ^\.lintr$
 ^benchmark$
+^logo$
+^PUBLISHING\.md$

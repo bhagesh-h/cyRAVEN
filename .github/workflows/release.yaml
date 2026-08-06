@@ -1,0 +1,98 @@
+# Distribution.
+#
+# Three routes, in the order they become available to this package:
+#
+#   1. r-universe  -- live now, no gatekeeper. Every push is built and checked
+#                     as binaries for Windows, macOS and Linux, and users get
+#                     install.packages() without needing remotes or a compiler.
+#                     Set up once by adding the repo to a packages.json in a
+#                     <user>.r-universe.dev repository; nothing in this workflow
+#                     is required for it, which is why it is only documented in
+#                     PUBLISHING.md rather than automated here.
+#
+#   2. GitHub release -- what this workflow does. On a version tag it builds the
+#                     source tarball, checks it as CRAN would, and attaches the
+#                     tarball to the release so a specific version can be
+#                     installed by URL and archived alongside a paper.
+#
+#   3. CRAN or Bioconductor -- both are human-reviewed submissions that cannot be
+#                     automated. This workflow produces the artefact each wants
+#                     and runs the checks each gates on, so a submission is a
+#                     matter of uploading what it built. See PUBLISHING.md for
+#                     which of the two fits and what is still missing.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+name: release
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      _R_CHECK_FORCE_SUGGESTS_: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - name: Add Bioconductor repositories
+        run: |
+          install.packages("BiocManager")
+          cat('options(repos = BiocManager::repositories())\n',
+              file = "~/.Rprofile", append = TRUE)
+        shell: Rscript {0}
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+
+      # The tag and the DESCRIPTION must agree. They drift the moment someone
+      # tags without bumping Version, and the result is a release whose tarball
+      # installs as a different version than its name -- which is unfixable
+      # afterwards, because the tag is what a citation points at.
+      - name: Check tag matches DESCRIPTION Version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          desc <- read.dcf("DESCRIPTION")[1, "Version"]
+          tag  <- sub("^refs/tags/v", "", Sys.getenv("GITHUB_REF"))
+          if (!identical(desc, tag))
+            stop(sprintf("tag v%s does not match DESCRIPTION Version %s", tag, desc))
+          cat("version", desc, "matches tag\n")
+        shell: Rscript {0}
+
+      - name: Build source tarball
+        run: R CMD build .
+
+      - name: Check as CRAN
+        run: |
+          tarball <- list.files(pattern = "[.]tar[.]gz$")[1]
+          res <- rcmdcheck::rcmdcheck(tarball, args = c("--no-manual", "--as-cran"),
+                                      error_on = "warning")
+          print(res)
+        shell: Rscript {0}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-tarball
+          path: '*.tar.gz'
+          retention-days: 30
+
+      - name: Attach tarball to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: '*.tar.gz'
+          generate_release_notes: true
