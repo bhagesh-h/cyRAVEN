@@ -4,8 +4,11 @@
 
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/bhagesh-h/cyRAVEN/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/bhagesh-h/cyRAVEN/actions/workflows/R-CMD-check.yaml)
+[![pkgdown](https://github.com/bhagesh-h/cyRAVEN/actions/workflows/pkgdown.yaml/badge.svg)](https://github.com/bhagesh-h/cyRAVEN/actions/workflows/pkgdown.yaml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 <!-- badges: end -->
+
+**Documentation: <https://bhagesh-h.github.io/cyRAVEN/>**
 
 > Gate flow cytometry from a written specification, embed it, test it with
 > donors as the replicates, then check whether the gates held.
@@ -116,6 +119,66 @@ changes an existing number is **off by default** or has an escape hatch:
   --auto-subcluster-k       # data-driven subcluster count
   --save-umap-model results/umap.model
 ```
+
+### The population specification
+
+**This is the one input you have to write yourself, and most of the output
+depends on it.** The `populations:` block of the `--config` YAML names each
+population and the marker directions that define it. Directions are `above`,
+`below` or `intermediate`, and every population is evaluated against that
+sample's own thresholds inside the CD45+ parent:
+
+```yaml
+populations:
+  CD4 T cells:
+    CD3: above
+    CD4: above
+    CD8: below
+  Central memory CD4:
+    CD3: above
+    CD4: above
+    CD8: below
+    CCR7: above
+    CD45RA: below
+```
+
+The spec is the hypothesis, written before the data is seen. Almost the whole
+output inventory hangs off it: `population_frequencies.csv`,
+`population_marker_mfi.csv`, `population_marker_heatmap.png`, one row per
+population in every differential abundance test, and
+`cluster_gate_agreement_*.csv`, which is what lets the unsupervised clustering
+contradict the labels.
+
+**Writing one, in four steps.**
+
+1. List the markers in your panel. `thresholds_used.csv` from any run has them,
+   as does the `$PnS` field of any file in the batch.
+2. Write a `populations:` block naming only markers from that list. Start with
+   the top-level lineages and add subsets once those score sensibly. Copy
+   `system.file("config", "config_cohorts.yaml", package = "cyRAVEN")` for the
+   file's overall shape, then replace its populations with yours.
+3. Pass it with `--config my_panel.yaml`. The same file can also carry threshold
+   overrides, colours and metadata translations, all optional.
+4. Read the run log. Every population whose markers are not all in the panel is
+   reported `UNAVAILABLE` and scored as nothing, so an empty frequency table is
+   almost always a name mismatch between the spec and `$PnS` rather than an
+   absent population.
+
+**If you skip `--config`,** the run falls back to a built-in spec describing a
+myeloid-lymphoid panel: CD14, CD16, CD19, CD56/NKG2D, CD127/CD25, TCR-Vd1/Vd2.
+On any other panel most populations report UNAVAILABLE. A T-cell panel of CD3,
+CD4, CD8, CD38, HLA-DR, CCR7 and CD45RA, for example, intersects it in three of
+fifteen populations. Supply a spec matching your panel; the built-in one is a
+worked example, not a default that fits.
+
+**The spec is deliberately not derived from the data.** A specification fitted
+to the samples it is then tested against cannot be contradicted by them, which
+would remove the point of the threshold-drift, phenotype-heatmap and
+gate-versus-cluster checks. What the data may do is *propose*: `--explain-clusters`
+learns a two-marker gating strategy for any cluster the spec does not describe
+and writes it to `cluster_gate_proposals.csv` with held-out metrics. Deciding
+which of those proposals becomes a named population is yours, and the next run's
+spec is a file you edited.
 
 ### Choosing the transform
 
@@ -349,15 +412,14 @@ that quietly halves n is exactly the failure this exists to prevent.
 
 **Output:** `paired_comparison_stats.csv`
 
-### 3.6 Batch effect: diagnosed, deliberately not corrected
+### 3.6 Batch effect: diagnosed first, corrected only when the diagnosis allows
 
 **The gap.** The comparable toolboxes ship batch *correctors*, Harmony and
-CytoNorm. cyRAVEN ships neither and, more to the point, had no way to tell
-whether it needed one: an
-island on the UMAP that is an acquisition batch is drawn identically to an island
-that is a phenotype.
+CytoNorm, and run them on request. What none of them had was a way to tell
+whether correction was safe here: an island on the UMAP that is an acquisition
+batch is drawn identically to an island that is a phenotype.
 
-**Why this implements the diagnostic and not the correction.** Correction is
+**Why the diagnostic gates the correction.** Correction is
 neither free nor neutral. Harmony moves cells so batch labels mix; when batch is
 confounded with the biological group, samples of one cohort acquired on one set
 of days, which is the normal way a clinical cohort is collected, *"removing the
@@ -366,10 +428,12 @@ and the algorithm cannot tell them apart. Running a corrector under that
 confounding produces a clean-looking UMAP with the finding deleted.
 
 So: measure the batch effect, measure the **confounding between batch and
-cohort**, report both. If they are separable and mixing is poor, correction is
-worth considering and the numbers say so. If they are confounded, no correction
-is safe at any setting, and that is the single most important thing this
-diagnostic can tell you.
+cohort**, report both, and let that decide. If they are separable and mixing is
+poor, `--correct-batch` aligns each marker across batches by monotone quantile
+mapping. If they are confounded, no correction is safe at any setting, and
+`correct_batch()` refuses rather than obliging; that refusal is the single most
+important thing this diagnostic can tell you. See §2 for the flags and for what
+correction does and does not reach.
 
 **The metric** is iLISI (Korsunsky et al. 2019, the metric Harmony itself is
 evaluated with), against a **permutation null**: the achievable score depends on
@@ -662,84 +726,30 @@ subject 2 = purple; male = green, female = red. The new diverging heatmap scale
 is deliberately **not** drawn from `study_palette`, a colour that means "subject
 1" in one figure must not mean "above average" in another.
 
-## 5. Verification
+## 5. Not implemented, and why
 
-Four levels.
+### 5.1 Harmony and CytoNorm specifically
+Batch correction itself is implemented, see §2 and §3.6: `--correct-batch` does
+monotone quantile alignment and refuses under batch-cohort confounding. What is
+not wrapped is Harmony or CytoNorm. Both are heavier dependencies, and neither
+declines to run when correction and deleting the finding are the same operation,
+which is the behaviour this package treats as the point rather than an obstacle.
 
-**1. `R CMD check`.** Clean on the package's own container image.
-
-**2. Unit, planted-truth fixtures.** `testthat`, run the usual way:
-
-```r
-devtools::test()          # or: R CMD check
-```
-
-The synthetic data carries known structure (a +1.5 asinh CD4 shift in one cohort
-only, a genuinely depressed CD4 frequency, a CD4 threshold that drifts by cohort,
-batch perfectly confounded with cohort) and the assertions check that each
-function *finds that specific thing*, not merely that it returns a data frame.
-Also checked: n is donors and not cells; controls and QC failures are excluded;
-CLR sums to zero within sample; rank-biserial is bounded; RNG streams are
-restored by every function that consumes them; figures actually write. Three
-further tests guard the optimisations in §3.11 and the clustering and LISI inner
-loops, asserting bit-identical agreement with the straightforward code they
-replaced.
-
-**3. End-to-end** on 25 real FCS files with `--cluster --rank-ancova`: completes,
-producing all 18 new outputs plus every pre-existing output.
-
-**4. Equivalence against the pre-refactor implementation, the important one.**
-Run with `--cofactor-from-first-sample` against the same inputs:
-
-> **25 of 26 outputs byte-for-byte identical.** The single difference is
-> `population_marker_mfi.csv`, and on its original 7 columns it is also
-> byte-identical, the diff is exactly the two documented added columns. Same
-> cofactor (75.3), same QC verdicts, same figures.
-
-So every behavioural difference in normal operation is attributable to the
-pooled cofactor (§3.11) and nothing else.
-
-### One bug this verification caught
-
-The end-to-end run initially failed with all 25 samples reporting *"no separable
-CD45+ mode"* and every threshold `Inf`. Cause: `$` on an R list partial-matches,
-and optparse **omits options whose default is `NULL`** from the list it returns.
-The existing `opt$cofactor` (default `NULL`, therefore absent) silently
-partial-matched the newly added `cofactor_from_first_sample` and returned
-`FALSE`. `FALSE` is not `NULL`, so the pipeline accepted it as a user-supplied
-cofactor of 0, making every marker `asinh(x/0) = Inf`.
-
-The failure was total, silent, and blamed the data. Fixed three ways: the dest no
-longer begins with `cofactor`; the call site uses `opt[["cofactor", exact =
-TRUE]]`; and a non-positive cofactor now stops the run naming the value. The
-code had met this trap once before, see `opt[["umap_markers", exact =
-TRUE]]` comment, and an audit of every option name against every `opt$` access
-found no other instance.
-
-Unit tests could not have caught this: it lives entirely in the CLI wiring.
-
-## 6. Not implemented, and why
-
-### 6.1 Batch *correction* (Harmony / CytoNorm)
-Deliberate, not deferred, see §3.6. Under batch–cohort confounding, correction
-and deleting the finding are the same operation. The diagnostic tells you which
-situation you are in; that is the honest deliverable at this cohort design.
-
-### 6.2 Phenograph clustering
+### 5.2 Phenograph clustering
 FlowSOM covers the same need and is faster at these cell counts. Phenograph
 (Louvain on a k-NN graph) picks its own cluster count, which is genuinely useful,
 but requires `Rphenograph`/`Rphenoannoy`, both GitHub-only, neither on CRAN or
 Bioconductor, which would break the container's reproducibility guarantee.
 **Add if:** the cluster count itself becomes a question rather than a setting.
 
-### 6.3 diffcyt (limma / LMM differential testing)
+### 5.3 diffcyt (limma / LMM differential testing)
 The rank tests in §3.1 and §3.3 answer the same questions without the
 distributional assumptions, which is the right trade at single-digit n, see
 §3.1. **Add if:** cohorts reach ~15+ samples each, where the empirical-Bayes
 prior starts paying for itself and mixed models can absorb repeated measures
 properly.
 
-### 6.4 Per-marker cofactors
+### 5.4 Per-marker cofactors
 `derive_cofactor()` now *returns* per-marker candidates (`attr(cf,
 "per_marker")`), but applying them is not wired up. Doing so changes the arcsinh
 scale per channel, which shifts every threshold, every marker median and every
@@ -748,34 +758,34 @@ re-running and re-reading every gating QC figure. The data to make the decision
 is now collected. **Add if:** the gating QC shows channels whose backgrounds
 genuinely differ in scale.
 
-### 6.5 Pseudotime / trajectory analysis
+### 5.5 Pseudotime / trajectory analysis
 The comparable toolboxes wrap diffusion maps and Slingshot. Trajectories
 assume a continuous
 developmental process; this panel measures terminally-differentiated peripheral
 blood populations, where a fitted trajectory would be an artefact of the fitting.
 **Add if:** the panel gains a developmental axis.
 
-### 6.6 Supervised cell-type classifiers (Astir, CytoDx, random forest)
+### 5.6 Supervised cell-type classifiers (Astir, CytoDx, random forest)
 Label-transfer models are a standard offering elsewhere. Here the labels come
 from a written gate spec, so a classifier trained on them can only reproduce the
 spec, including its errors. §3.8 is the better cross-check because it is
 independent of the labels. **Add if:** an external reference-annotated dataset
 becomes available to train against.
 
-### 6.7 FlowJo `.wsp` workspace ingestion
+### 5.7 FlowJo `.wsp` workspace ingestion
 Reading gates back out of a FlowJo workspace is the inverse of what cyRAVEN
 does (`--flowjo-export`). Parsing `.wsp` needs `CytoML` +
 `flowWorkspace`, a heavy dependency pair. **Add if:** manual FlowJo gates need to
 be the input rather than the output.
 
-### 6.8 Cell-level differential expression
+### 5.8 Cell-level differential expression
 Deliberately absent, for exactly the pseudoreplication reason in §3.1, which
 is why the tools that do provide a cell-level Wilcoxon ship it with a warning
 against using it. The cell-level view
 is already available descriptively in `subcluster_marker_shifts.csv`, which
 carries effect sizes and **no p-values**, that is the correct treatment.
 
-## 7. Statistical conventions
+## 6. Statistical conventions
 
 Applied consistently across every test the package runs:
 
@@ -793,7 +803,7 @@ Applied consistently across every test the package runs:
 - **Differences, not ratios, for arcsinh values.** The scale runs negative, where
   a ratio is uninterpretable and changes sign for no biological reason.
 
-## 8. Citing cyRAVEN
+## 7. Citing cyRAVEN
 
 ```r
 citation("cyRAVEN")
@@ -802,7 +812,7 @@ citation("cyRAVEN")
 The methods the package implements belong to their original authors; please cite
 them as well where relevant. `citation()` lists them.
 
-## 9. Licence
+## 8. Licence
 
 GPL-3.0-or-later. The full text is in [LICENSE](LICENSE).
 

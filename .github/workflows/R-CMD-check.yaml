@@ -34,7 +34,7 @@ jobs:
       # dependency the package is explicitly designed to run without.
       _R_CHECK_FORCE_SUGGESTS_: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: r-lib/actions/setup-pandoc@v2
 

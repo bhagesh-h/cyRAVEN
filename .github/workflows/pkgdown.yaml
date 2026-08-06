@@ -16,7 +16,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: r-lib/actions/setup-pandoc@v2
       - uses: r-lib/actions/setup-r@v2
         with: {use-public-rspm: true}
@@ -33,5 +33,34 @@ jobs:
       - name: Build site
         run: pkgdown::build_site_github_pages(new_process = FALSE, install = FALSE)
         shell: Rscript {0}
-      - uses: JamesIves/github-pages-deploy-action@v4.5.0
+      # v4.8.0 is the first release on the Node 24 runtime; 4.5.0 ran on Node 20,
+      # which the runners now force onto 24 and warn about.
+      - uses: JamesIves/github-pages-deploy-action@v4.8.0
         with: {clean: false, branch: gh-pages, folder: docs}
+
+      # Point the repository "About" box at the site the step above publishes.
+      #
+      # WHY THIS NEEDS ITS OWN TOKEN. Writing the `homepage` field is an
+      # Administration:write operation, and `administration` is not one of the
+      # scopes a workflow `permissions:` block can grant, so the built-in
+      # GITHUB_TOKEN cannot do it however the permissions are set. A personal
+      # access token with repository administration rights, stored as the
+      # REPO_ADMIN_TOKEN secret, is the only way to automate it.
+      #
+      # Without that secret this step prints why it did nothing and succeeds,
+      # because a documentation deploy should not fail over a cosmetic field.
+      # The manual equivalent is the gear icon beside "About" on the repository
+      # front page, and it only has to be done once.
+      - name: Point the repository About box at the published site
+        env:
+          GH_TOKEN: ${{ secrets.REPO_ADMIN_TOKEN }}
+          SITE_URL: https://bhagesh-h.github.io/cyRAVEN/
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "REPO_ADMIN_TOKEN is not set, so the About box is left alone."
+            echo "Set it to a PAT with repository administration rights, or edit"
+            echo "the About box once by hand: $SITE_URL"
+            exit 0
+          fi
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY" -f homepage="$SITE_URL" >/dev/null
+          echo "About box now points at $SITE_URL"

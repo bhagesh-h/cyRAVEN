@@ -19,7 +19,7 @@ Description: An end-to-end workflow for batches of flow cytometry standard (FCS)
     contradict the gate specification.
 License: GPL (>= 3)
 Encoding: UTF-8
-URL: https://github.com/bhagesh-h/cyRAVEN
+URL: https://bhagesh-h.github.io/cyRAVEN/, https://github.com/bhagesh-h/cyRAVEN
 BugReports: https://github.com/bhagesh-h/cyRAVEN/issues
 Depends:
     R (>= 4.1)
