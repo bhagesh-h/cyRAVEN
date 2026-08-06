@@ -439,7 +439,7 @@ fig_unsupervised_clusters <- function(cells, cluster, outfile, agreement = NULL,
   } else NULL
 
   cap <- paste0(
-    "Clusters are computed on the marker matrix, not on these coordinates \u2014 UMAP is ",
+    "Clusters are computed on the marker matrix, not on these coordinates, UMAP is ",
     "the display, not the input.\nA cluster with no matching gate label is a population ",
     "the config does not describe; a gate label scattered across clusters is a label ",
     "covering several phenotypes.")
@@ -452,14 +452,14 @@ fig_unsupervised_clusters <- function(cells, cluster, outfile, agreement = NULL,
       cap <- paste0(cap, "\nUndescribed cluster(s): ", paste(sus, collapse = ", "), ".")
     if (length(bad))
       cap <- paste0(cap, "\nPossible threshold problem for: ", paste(bad, collapse = ", "),
-                    " \u2014 see cluster_gate_agreement_populations.csv.")
+                    ", see cluster_gate_agreement_populations.csv.")
   }
 
   plots <- if (is.null(p2)) list(p1) else list(p1, p2)
   fig <- patchwork::wrap_plots(plots, ncol = length(plots)) +
     patchwork::plot_annotation(
       title = paste0("Unsupervised clustering vs. the gate spec",
-                     if (nzchar(panel_label)) paste0(" \u2014 ", panel_label) else ""),
+                     if (nzchar(panel_label)) paste0(", ", panel_label) else ""),
       caption = cap,
       theme = ggplot2::theme(
         plot.title = element_text(size = 11, face = "bold"),
@@ -633,7 +633,7 @@ save_umap_model <- function(model, path, scale_params, features, meta = list()) 
   }
   if (!ok) {
     saveRDS(model, paste0(path, ".rds"))
-    log_msg("  NOTE uwot::save_uwot() unavailable \u2014 model written with saveRDS to ",
+    log_msg("  NOTE uwot::save_uwot() unavailable, model written with saveRDS to ",
             basename(paste0(path, ".rds")), ". It may not reload on another ",
             "machine or uwot version; retrain rather than trusting a failed load.")
   }
@@ -658,7 +658,7 @@ load_umap_model <- function(path) {
   if ((is.null(m) || inherits(m, "try-error")) && file.exists(paste0(path, ".rds")))
     m <- try(readRDS(paste0(path, ".rds")), silent = TRUE)
   if (is.null(m) || inherits(m, "try-error")) {
-    log_msg("  NOTE UMAP model at ", path, " could not be loaded \u2014 embedding fresh")
+    log_msg("  NOTE UMAP model at ", path, " could not be loaded, embedding fresh")
     return(NULL)
   }
   list(model = m, scale_params = meta$scale_params, features = meta$features,
@@ -690,7 +690,7 @@ project_umap <- function(saved, mat, n_threads = 1L) {
   emb <- try(uwot::umap_transform(X, saved$model, n_threads = n_threads), silent = TRUE)
   if (inherits(emb, "try-error")) {
     log_msg("  NOTE umap_transform() failed (", conditionMessage(attr(emb, "condition")),
-            ") \u2014 embedding fresh")
+            "), embedding fresh")
     return(NULL)
   }
   colnames(emb) <- c("umap_1", "umap_2")

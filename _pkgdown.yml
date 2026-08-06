@@ -136,4 +136,17 @@ articles:
   navbar: ~
   contents:
   - cyRAVEN
+  - gating
+
+- title: Reading a run
+  navbar: Reading a run
+  contents:
+  - diagnostics
+  - outputs
   - statistics
+
+- title: Going further
+  navbar: Going further
+  contents:
+  - with-cycondor
+  - scope

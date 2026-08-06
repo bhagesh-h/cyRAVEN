@@ -192,7 +192,7 @@ run_cyraven <- function(opt) {
       grepl("included anyway", v$verdict %||% "", fixed = TRUE), logical(1)))
     if (n_forced)
       log_msg("NOTE --include-qc-failed forced ", n_forced, " sample(s) that would ",
-              "otherwise have failed staining QC into gating/UMAP/frequencies \u2014 see ",
+              "otherwise have failed staining QC into gating/UMAP/frequencies, see ",
               "staining_qc.csv for which, and treat their numbers as unreliable")
   }
   for (s in names(verdicts)) {
@@ -368,7 +368,7 @@ run_cyraven <- function(opt) {
   for (p in fpr$panels) {
     inc <- p$samples[vapply(p$samples, function(s) isTRUE(verdicts[[s]]$include), TRUE)]
     if (!length(inc)) {
-      log_msg(p$name, ": no sample passed staining QC \u2014 embedding skipped")
+      log_msg(p$name, ": no sample passed staining QC, embedding skipped")
       next
     }
     log_msg(p$name, ": embedding ", length(inc), " sample(s)")
@@ -538,7 +538,7 @@ run_cyraven <- function(opt) {
         log_msg("  WARNING: no patient-table row for patient_id: ",
                 paste(utils::head(unmatched, 5), collapse = ", "),
                 if (length(unmatched) > 5) sprintf(" (+%d more)", length(unmatched) - 5) else "",
-                " \u2014 covariates will be NA for these samples")
+                ", covariates will be NA for these samples")
       cells$patient_id[!is.na(canon)] <- canon[!is.na(canon)]
       cells <- merge(cells, patients, by = "patient_id", all.x = TRUE, sort = FALSE)
     }
@@ -571,7 +571,7 @@ run_cyraven <- function(opt) {
       if (any(.keep) && !all(.keep)) {
         log_msg("  hiding '", paste(unique(.ec$population_label[!.keep]), collapse = "', '"),
                 "' from the UMAP figures (", sum(!.keep), " of ", nrow(.ec),
-                " cells) \u2014 pass --other to draw it; tables are unaffected")
+                " cells), pass --other to draw it; tables are unaffected")
         embeddings[[p$name]]$cells <- .ec[.keep, , drop = FALSE]
       }
     }
@@ -731,7 +731,7 @@ run_cyraven <- function(opt) {
     if (n_out) {
       bad <- thr_all[which(thr_all$scale_outlier), ]
       log_msg("WARNING ", n_out, " threshold(s) inconsistent with the same marker ",
-              "in other samples of the same panel \u2014 per-sample frequencies for the ",
+              "in other samples of the same panel, per-sample frequencies for the ",
               "affected populations are NOT comparable. See scale_outlier in ",
               "thresholds_used.csv:")
       for (i in seq_len(min(nrow(bad), 12L)))
@@ -1039,7 +1039,7 @@ run_cyraven <- function(opt) {
                   " tests; ", nsig, " with raw p<0.05, ", nbh,
                   " surviving BH correction)")
           if (nsig > 0 && nbh == 0)
-            log_msg("NOTE no comparison survives multiple-testing correction \u2014 treat ",
+            log_msg("NOTE no comparison survives multiple-testing correction, treat ",
                     "the raw-p hits as hypotheses to confirm, not findings.")
         }
         fig_group_comparison(
@@ -1152,7 +1152,7 @@ run_cyraven <- function(opt) {
           value_col = "cells_per_ul", value_label = "cells / \u00b5L",
           value_caveat = paste(
             "directly measured (--absolute-counts), independent of this pipeline's",
-            "own gating \u2014 see absolute_counts_qc.png first."),
+            "own gating, see absolute_counts_qc.png first."),
           title_noun = "Absolute cell count (external)")
       }
     }
@@ -1170,7 +1170,7 @@ run_cyraven <- function(opt) {
   .ext_ok <- function(label, expr) {
     tryCatch(expr, error = function(e)
       log_msg("  WARNING ", label, " failed: ", conditionMessage(e),
-              " \u2014 every other output is unaffected"))
+              ", every other output is unaffected"))
   }
 
   .cells_all <- if (length(all_cells))
@@ -1189,7 +1189,7 @@ run_cyraven <- function(opt) {
                 sum(ms$significant_BH, na.rm = TRUE), " surviving BH)")
         log_msg("  NOTE these are SAMPLE-level tests (n = donors). ",
                 "subcluster_marker_shifts.csv ranks the same kind of shift over ",
-                "POOLED CELLS and carries no p-value \u2014 the two answer different ",
+                "POOLED CELLS and carries no p-value, the two answer different ",
                 "questions and should not be read as one.")
       }
       fig_marker_state(mfi, file.path(opt$outdir, "marker_state.png"),
@@ -1329,7 +1329,7 @@ run_cyraven <- function(opt) {
                   max(ps$n_pairs), " complete pairs; ",
                   sum(ps$n_incomplete_pairs_dropped), " incomplete pair-slots dropped)")
         } else {
-          log_msg("  NOTE paired test produced nothing \u2014 check that every pairing ",
+          log_msg("  NOTE paired test produced nothing, check that every pairing ",
                   "unit has at least two conditions and at least 3 complete pairs exist")
         }
       }
@@ -1406,7 +1406,7 @@ run_cyraven <- function(opt) {
             write.csv(br$confounding,
                       file.path(opt$outdir, "batch_group_confounding.csv"),
                       row.names = FALSE)
-          log_msg("wrote batch_mixing_stats.csv \u2014 ", br$summary$verdict)
+          log_msg("wrote batch_mixing_stats.csv, ", br$summary$verdict)
           if (!is.null(br$confounding) && br$confounding$cramers_v >= 0.5)
             log_msg("  NOTE batch and ", gcol, " overlap strongly (Cramer's V = ",
                     br$confounding$cramers_v, "). No batch correction can ",

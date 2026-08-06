@@ -27,7 +27,7 @@ derive_scatter_gate <- function(ex, sc, fsc_hi_q = 0.999,
   if (!is.finite(v)) {
     v <- as.numeric(quantile(lf, 0.60, na.rm = TRUE))
     warning("no FSC-A density valley found; using the 60th percentile (",
-            round(v, 2), ") \u2014 CHECK THE QC FIGURE")
+            round(v, 2), "), CHECK THE QC FIGURE")
   }
   fsc_hi <- as.numeric(quantile(lf, fsc_hi_q, na.rm = TRUE))
   inw <- lf > v & lf < fsc_hi
@@ -52,7 +52,7 @@ derive_scatter_gate <- function(ex, sc, fsc_hi_q = 0.999,
 #' @keywords internal
 derive_singlet_band <- function(ex, sc, parent_mask, k = 3) {
   if (!all(c("FSC-H", "FSC-A") %in% names(sc))) {
-    log_msg("  FSC-H absent \u2014 singlet gate skipped (all parent events retained)")
+    log_msg("  FSC-H absent, singlet gate skipped (all parent events retained)")
     return(list(lo = NA_real_, hi = NA_real_, ratio = NULL,
                 mask = parent_mask, skipped = TRUE))
   }
@@ -138,7 +138,7 @@ apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,
     live <- sb$mask & vx < v_thr        # dead cells are the BRIGHT tail
     log_msg("  viability '", vmk, "' threshold ", round(v_thr, 2), " (", v_src, ")")
   } else {
-    log_msg("  no viability dye detected \u2014 live gate skipped")
+    log_msg("  no viability dye detected, live gate skipped")
   }
 
   # --- CD45 gate -------------------------------------------------------------
@@ -151,7 +151,7 @@ apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,
     cd45 <- live & cd45_x > c_thr
     log_msg("  CD45 threshold ", round(c_thr, 2), " (", c_src, ")")
   } else {
-    warning("CD45 absent from this panel \u2014 all live cells treated as the parent")
+    warning("CD45 absent from this panel, all live cells treated as the parent")
   }
 
   masks <- list(all_events = rep(TRUE, nrow(ex)), leukocytes = sg$mask,

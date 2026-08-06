@@ -212,7 +212,7 @@ load_patient_table <- function(path, column_map = default_column_map(),
       j <- which(tolower(names(df)) == tolower(cd))
       if (length(j)) { hit <- j[1]; break }
     }
-    if (is.na(hit)) { warning("column for '", eng, "' not found \u2014 skipped"); next }
+    if (is.na(hit)) { warning("column for '", eng, "' not found, skipped"); next }
     out[[eng]] <- df[[hit]]
   }
   if (!ncol(out)) stop("none of the requested columns were found in the patient table")
@@ -381,7 +381,7 @@ write_sample_map_template <- function(fcs_files, path, sample_ids = NULL) {
     stringsAsFactors = FALSE)
   write.csv(tmpl, path, row.names = FALSE, na = "")
   log_msg("wrote sample map template: ", path,
-          " \u2014 fill in patient_id/timepoint/is_control and re-run with --sample-map")
+          ", fill in patient_id/timepoint/is_control and re-run with --sample-map")
   invisible(tmpl)
 }
 

@@ -140,7 +140,7 @@ derive_cofactor_pooled <- function(reads, sids, max_samples = 8L,
     log_msg("  NOTE per-sample cofactors span ", round(rng[1], 1), "-",
             round(rng[2], 1), " (ratio ", round(rng[2] / rng[1], 1),
             "x) across ", length(vals), " samples. One shared cofactor is a ",
-            "compromise here \u2014 check for a gain change mid-batch, and see the ",
+            "compromise here, check for a gain change mid-batch, and see the ",
             "batch diagnostic.")
   structure(cf, n_samples = length(vals), per_sample = vals,
             source = "pooled_median")
@@ -156,12 +156,12 @@ derive_cofactor_pooled <- function(reads, sids, max_samples = 8L,
 maybe_compensate <- function(ff_exprs, keywords) {
   key <- intersect(c("$SPILLOVER", "SPILL", "$SPILL", "spillover"), names(keywords))
   if (!length(key)) {
-    log_msg("  no spillover matrix in keywords \u2014 data is already compensated/unmixed")
+    log_msg("  no spillover matrix in keywords, data is already compensated/unmixed")
     return(ff_exprs)
   }
   sp <- keywords[[key[1]]]
   if (!is.matrix(sp) || nrow(sp) == 0) {
-    log_msg("  spillover keyword present but unusable \u2014 skipping compensation")
+    log_msg("  spillover keyword present but unusable, skipping compensation")
     return(ff_exprs)
   }
   # Index the matrix POSITIONALLY via its column names.
@@ -173,13 +173,13 @@ maybe_compensate <- function(ff_exprs, keywords) {
   # works whether or not rownames were written.
   cn <- intersect(colnames(sp), colnames(ff_exprs))
   if (length(cn) < 2) {
-    log_msg("  spillover channels do not match data columns \u2014 skipping compensation")
+    log_msg("  spillover channels do not match data columns, skipping compensation")
     return(ff_exprs)
   }
   j <- match(cn, colnames(sp))
   m <- sp[j, j, drop = FALSE]
   if (nrow(m) != ncol(m)) {
-    log_msg("  spillover matrix is not square \u2014 skipping compensation")
+    log_msg("  spillover matrix is not square, skipping compensation")
     return(ff_exprs)
   }
   inv <- try(solve(m), silent = TRUE)
@@ -187,7 +187,7 @@ maybe_compensate <- function(ff_exprs, keywords) {
   # unusable; inverting it would amplify noise without bound. Report and proceed
   # uncompensated rather than emit numbers nobody can interpret.
   if (inherits(inv, "try-error")) {
-    log_msg("  spillover matrix is singular \u2014 skipping compensation")
+    log_msg("  spillover matrix is singular, skipping compensation")
     return(ff_exprs)
   }
   log_msg("  applying spillover matrix (", length(cn), " channels)")

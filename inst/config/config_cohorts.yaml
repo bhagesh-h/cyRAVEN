@@ -17,7 +17,7 @@
 #
 # NOTE on the source document: it defines the T-cell subsets as Vd1- Vd2- to
 # separate conventional alpha-beta T cells from the gamma-delta subsets. That
-# negative requirement is transcribed literally — dropping it would merge
+# negative requirement is transcribed literally, since dropping it would merge
 # gamma-delta cells into the CD4/CD8 gates.
 
 populations:
@@ -135,7 +135,7 @@ ratios:
 # system.file("examples", "colors_template.yaml", package = "cyRAVEN")
 # for the full annotated list). Values
 # below are the current built-ins, restated here so this file is the one
-# place to edit going forward — change any hex/name below to re-theme every
+# place to edit going forward: change any hex/name below to re-theme every
 # figure with no other change.
 colors:
   population_palette:

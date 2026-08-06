@@ -44,7 +44,7 @@ fig_absolute_counts_qc <- function(ac, outfile, group_of = NULL, dpi = 200, colo
     geom_tile(colour = colors$tile_border, linewidth = 0.3) +
     scale_fill_viridis_c(name = "log10(cells/\u00b5L)", na.value = colors$na_fill,
                          option = colors$count_viridis) +
-    labs(title = "Absolute cell count QC \u2014 every matched sample x population",
+    labs(title = "Absolute cell count QC, every matched sample x population",
          subtitle = paste("blank = no value for that sample in the source file;",
                           "[control]/[QC-failed] rows are shown, not excluded, for review"),
          x = NULL, y = NULL) +

@@ -8,76 +8,139 @@
 
 **Documentation: <https://bhagesh-h.github.io/cyRAVEN/>**
 
-> Gate flow cytometry from a written specification, embed it, test it with
-> donors as the replicates, then check whether the gates held.
+An R package for counting immune cell types in blood samples and comparing those
+counts between groups of people.
 
-cyRAVEN takes a directory of `.fcs` files, a map from sample to study group, and
-a gating strategy written as YAML. It returns population frequencies and median
-intensities for every sample, one shared UMAP per marker panel, differential
-abundance and differential state statistics, and a set of diagnostics that tell
-you how far to trust them.
+### The problem it solves
 
-What the pipeline does, in order:
+A flow cytometer measures several proteins on each of a few million individual
+cells and writes the result to a file. To turn that into "this patient has 18%
+CD4 T cells", somebody has to decide, for every protein, which cells count as
+positive and which do not. That decision is called gating, and it is normally
+made by a person dragging shapes on a screen.
 
-1. **Read**: resolve `$PnN`/`$PnS` to marker symbols, apply the spillover matrix.
-2. **Transform**: arcsinh with the cofactor derived from the data, not assumed.
-3. **Gate**: scatter → singlets → live → CD45+, then one threshold per marker
-   **per sample**, placed at that sample's own density valley.
-4. **Score**: populations as Boolean conjunctions of those thresholds, read from
-   the YAML spec.
-5. **Embed**: one UMAP per marker panel; files with different panels are never
-   embedded together.
-6. **Test**: Wilcoxon / Kruskal-Wallis on per-sample values, so **donors are the
-   replicates, never cells**.
-7. **Diagnose**: batch effect, threshold drift, confounding, gate-vs-cluster
-   agreement.
+That step is where most of the error comes from. Two experts gating the same
+files can differ by a third in the population size they report, because staining
+brightness varies between samples and everyone draws the line somewhere slightly
+different.
 
-Every stage is an exported function. Run the whole thing with `run_cyraven()`, or
-call any single step, inspect what it returned, and replace one rule without
-forking the package.
+cyRAVEN does the gating from rules you write down in advance, places each cut
+using the sample's own data, and then spends most of its effort trying to show
+you where those rules failed.
 
-## 1. Why gating first
+### What you give it
 
-Most cytometry toolboxes cluster first and name the clusters afterwards. cyRAVEN
-gates first, against a specification written before the data is seen, then spends
-its effort on whether those gates held.
+- A folder of `.fcs` files, one per sample, straight off the cytometer.
+- A spreadsheet saying which file is which sample and which study group it
+  belongs to.
+- A short text file naming the cell types you expect and the proteins that define
+  them, for example a CD4 T cell is `CD3: above`, `CD4: above`, `CD8: below`.
+- Optionally a table of patient age, sex and other clinical details.
 
-That ordering has one real weakness and several checks that answer it:
+### What it does with it
 
-- **A per-sample threshold is not the same predicate in every sample.**
-  `stats_threshold_drift()` tests whether a marker's cut moves with cohort, which
-  would make part of any abundance difference definitional rather than biological.
-- **A label assigned in advance can be wrong.** The phenotype heatmap plots
-  measured intensity per population, so a column labelled "CD4 T cells" that is
-  not CD4-bright contradicts its own label on sight.
-- **A spec cannot find what it does not describe.** An unsupervised SOM clustering
-  runs as an independent cross-check and is allowed to disagree; where it does,
-  `--explain-clusters` learns a two-marker gate for the cells the spec missed.
+1. Reads each file and corrects for the optical bleed between colour channels.
+2. Removes debris, clumped cells and dead cells using the standard scatter,
+   singlet and viability steps.
+3. For every protein in every sample, finds the dip between the dim and bright
+   populations and puts the cut-off there. This is the step normally done by
+   hand.
+4. Labels each cell by checking it against your list of cell types.
+5. Draws a UMAP, a two-dimensional map where cells with similar protein levels
+   sit near each other, using the same number of cells from every sample so no
+   one sample dominates the picture.
+6. Compares your groups using one number per person rather than one per cell,
+   with Wilcoxon and Kruskal-Wallis tests and correction for multiple testing.
+7. Runs a series of checks designed to catch its own mistakes.
 
-Alongside those sit the things a small-cohort study needs: differential state on
-per-sample summaries, compositional (CLR) frequency testing, confounding
-diagnosed rather than adjusted away, and batch structure measured against a
-permutation null instead of silently corrected.
+### What you get back
 
-## 2. Installing and running
+About 20 tables and 20 figures. The ones most people use:
 
-### Installation
+| File | Contents |
+|---|---|
+| `population_frequencies.csv` | The percentage each cell type makes up, per sample |
+| `population_marker_mfi.csv` | How brightly each protein is expressed in each cell type, per sample |
+| `group_comparison_stats.csv` | One test per cell type, with effect size and a corrected p-value |
+| `thresholds_used.csv` | Every cut-off it chose, and whether it found a clean dip or had to guess |
+| `umap_overview.png` | The map, coloured by cell type and by sample |
+| `run_manifest.txt` | Software versions and settings, so the run can be repeated |
+
+Optional settings add a second, independent clustering that can disagree with
+your gates, suggested gates for cell populations you did not list, batch
+correction, and files you can open in FlowJo.
+
+## What is different about it
+
+Most cytometry software groups the cells first and works out afterwards what each
+group was. cyRAVEN goes the other way: you say what you expect to find, and the
+software tries to prove you wrong. Four consequences follow.
+
+### Each sample gets its own cut-off
+
+Staining brightness varies between samples. Reagents age, cells sit for different
+lengths of time, and one patient's sample simply glows less than another's. A
+cut-off copied from one sample to the next will therefore misclassify cells in
+both directions.
+
+cyRAVEN looks at each protein in each sample separately, finds the dip between
+the dim and bright groups of cells, and cuts there. A sample that stained weakly
+gets a lower cut-off and keeps its positive cells.
+
+When no clean dip exists, it says so rather than pretending. The `source` column
+of `thresholds_used.csv` reads `valley` when a real dip was found and
+`quantile_fallback` when there was none, which tells you which numbers to trust.
+
+### People are counted, not cells
+
+A cytometer keeps running until someone stops it, so one file might hold 200,000
+cells and the next 4 million. If you do statistics on individual cells, your
+sample size is really a measure of how long the machine ran, and a single
+patient whose sample was recorded for longer can produce an apparently
+overwhelming result on their own.
+
+cyRAVEN reduces every sample to one number per cell type before any test runs, so
+the sample size is the number of people in the study. Where a number genuinely
+cannot be reduced that way, it is reported with an effect size and no p-value.
+
+### A second opinion that can disagree
+
+With one extra setting, cyRAVEN also groups the cells by similarity without
+looking at your definitions at all, then compares the two answers.
+
+This catches a specific and common failure. Suppose your CD4 T cell gate reports
+0.3%, which looks like these patients have almost no CD4 T cells. If the
+independent grouping finds a large cluster of CD4-bright cells sitting under the
+label "other", the cells are clearly there and your cut-off is in the wrong
+place. The frequency table alone could never tell you that, and software that
+only groups cells has no prior claim to contradict.
+
+### It refuses to correct a batch effect that is really your result
+
+Samples processed on different days can differ for purely technical reasons, and
+there are standard methods to remove that. The catch is that patients are often
+run on different days from controls, so "the batch" and "the difference you are
+studying" become the same thing. Correcting then quietly deletes the finding and
+leaves a clean-looking picture.
+
+cyRAVEN measures how far the two overlap before touching anything. Past a
+threshold it stops and tells you why, rather than returning a result that looks
+better than the data supports.
+
+## Installing
 
 ```r
-# flowCore comes from Bioconductor, so put it on the search path first
+# flowCore comes from Bioconductor, so add that repository first
 install.packages("BiocManager")
 BiocManager::install("flowCore")
 
-# then the package
 remotes::install_github("bhagesh-h/cyRAVEN")
 ```
 
-`FlowSOM` is suggested rather than required: without it the SOM clustering falls
-back to the package's own implementation, and everything else is unaffected.
+`FlowSOM` is optional. Without it the clustering step falls back to the
+implementation built into the package and nothing else changes.
 
-### Running
-
-One call does everything:
+## A first run
 
 ```r
 library(cyRAVEN)
@@ -87,736 +150,63 @@ run_cyraven(list(
   outdir          = "results/",
   recursive       = TRUE,
   sample_map      = "data/sample_map.csv",
-  patient_table   = "data/patient_table.csv",
-  config          = system.file("config", "config_cohorts.yaml", package = "cyRAVEN"),
+  config          = "data/my_panel.yaml",
   group_column    = "cohort",
   reference_group = "Healthy controls"
 ))
 ```
 
-The same thing from a shell, via the command-line front end the package installs:
+The same thing from a shell:
 
 ```bash
 Rscript "$(Rscript -e 'cat(system.file("scripts","cyraven.R",package="cyRAVEN"))')" \
   --dir data/ --outdir results/ --recursive \
   --sample-map data/sample_map.csv \
-  --patient-table data/patient_table.csv \
+  --config data/my_panel.yaml \
   --group-column cohort --reference-group "Healthy controls"
 ```
 
-Every analysis that only *adds* output is **on by default**; anything that
-changes an existing number is **off by default** or has an escape hatch:
+Anything that only adds a file is on by default. Anything that changes a number
+you already had is off by default:
 
 ```bash
   --transform logicle       # flow-standard transform instead of arcsinh
-  --cluster                 # unsupervised clustering + gate cross-check
+  --cluster                 # unsupervised clustering and the gate cross-check
   --explain-clusters        # learn a gating strategy for undescribed clusters
-  --batch-column run_date   # batch-mixing diagnostic
-  --correct-batch           # align markers across batches (guarded, see below)
-  --rank-ancova             # exploratory covariate-adjusted tests
-  --auto-subcluster-k       # data-driven subcluster count
-  --save-umap-model results/umap.model
+  --batch-column run_date   # measure the batch effect
+  --correct-batch           # and correct it, if the measurement allows
+  --auto-subcluster-k       # pick the subcluster count from the data
+  --save-umap-model         # so the next batch lands on the same axes
 ```
 
-### The population specification
+Read `recon_diagnostics.png` and `gating_qc.png` before you read any number the
+run produced. They show you the gates it drew.
 
-**This is the one input you have to write yourself, and most of the output
-depends on it.** The `populations:` block of the `--config` YAML names each
-population and the marker directions that define it. Directions are `above`,
-`below` or `intermediate`, and every population is evaluated against that
-sample's own thresholds inside the CD45+ parent:
+## Where to read more
 
-```yaml
-populations:
-  CD4 T cells:
-    CD3: above
-    CD4: above
-    CD8: below
-  Central memory CD4:
-    CD3: above
-    CD4: above
-    CD8: below
-    CCR7: above
-    CD45RA: below
-```
+The detail moved out of this file and into the articles, so that this page stays
+short enough to finish.
 
-The spec is the hypothesis, written before the data is seen. Almost the whole
-output inventory hangs off it: `population_frequencies.csv`,
-`population_marker_mfi.csv`, `population_marker_heatmap.png`, one row per
-population in every differential abundance test, and
-`cluster_gate_agreement_*.csv`, which is what lets the unsupervised clustering
-contradict the labels.
-
-**Writing one, in four steps.**
-
-1. List the markers in your panel. `thresholds_used.csv` from any run has them,
-   as does the `$PnS` field of any file in the batch.
-2. Write a `populations:` block naming only markers from that list. Start with
-   the top-level lineages and add subsets once those score sensibly. Copy
-   `system.file("config", "config_cohorts.yaml", package = "cyRAVEN")` for the
-   file's overall shape, then replace its populations with yours.
-3. Pass it with `--config my_panel.yaml`. The same file can also carry threshold
-   overrides, colours and metadata translations, all optional.
-4. Read the run log. Every population whose markers are not all in the panel is
-   reported `UNAVAILABLE` and scored as nothing, so an empty frequency table is
-   almost always a name mismatch between the spec and `$PnS` rather than an
-   absent population.
-
-**If you skip `--config`,** the run falls back to a built-in spec describing a
-myeloid-lymphoid panel: CD14, CD16, CD19, CD56/NKG2D, CD127/CD25, TCR-Vd1/Vd2.
-On any other panel most populations report UNAVAILABLE. A T-cell panel of CD3,
-CD4, CD8, CD38, HLA-DR, CCR7 and CD45RA, for example, intersects it in three of
-fifteen populations. Supply a spec matching your panel; the built-in one is a
-worked example, not a default that fits.
-
-**The spec is deliberately not derived from the data.** A specification fitted
-to the samples it is then tested against cannot be contradicted by them, which
-would remove the point of the threshold-drift, phenotype-heatmap and
-gate-versus-cluster checks. What the data may do is *propose*: `--explain-clusters`
-learns a two-marker gating strategy for any cluster the spec does not describe
-and writes it to `cluster_gate_proposals.csv` with held-out metrics. Deciding
-which of those proposals becomes a named population is yours, and the next run's
-spec is a file you edited.
-
-### Choosing the transform
-
-`--transform arcsinh` (default) derives its cofactor from the data.
-`--transform logicle` uses the automatic-logicle rule, which is the convention
-in flow cytometry: it is linear near zero, so compensated **negative** values
-stay on scale instead of piling against an axis limit. Parameters are pooled per
-panel rather than fitted per file, so every sample stays on one ruler and
-cross-sample medians remain comparable.
-
-**The choice is not cosmetic.** On the benchmark panel the top-level populations
-agree to 0.1% between the two, but the CCR7/CD45RA memory subsets move by tens
-of percent. The cause is visible in `thresholds_used.csv`: under arcsinh the
-CCR7 cut resolves to a density valley in some samples and to a quantile fallback
-in others, a 2.5-unit swing on one scale, while under logicle it finds a
-valley in every sample. For dim, continuous markers the transform decides
-whether a stable gate exists at all, so check the `source` column before
-trusting a subset frequency.
-
-### Batch correction
-
-`--correct-batch` aligns each marker's distribution across batches by monotone
-quantile mapping, applied after gating and before embedding. Monotone matters:
-it cannot reorder cells within a batch, so it corrects location and spread
-without inventing populations.
-
-It **refuses** when Cramér's V between batch and group exceeds
-`--batch-max-cramers-v` (default 0.6). At that overlap the two are nearly the
-same variable and any correction removes the effect being looked for.
-`--force-batch-correction` proceeds anyway and records the decision in the run
-manifest.
-
-**Scope.** Correction reaches the shared space: the UMAP, the unsupervised
-clustering, the gate-vs-cluster agreement, and anything read from
-`cells_umap.csv`. It does not reach the per-sample MFI table, the population
-frequencies, or the differential tests, because those come from each sample's
-own thresholds, which are derived per sample and are already batch-local. What a
-batch effect actually distorts is the one embedding built from every sample at
-once, and that is what gets corrected.
-
-### Verbosity
-
-Progress goes through `message()`, so `suppressMessages()` works, and the level
-is an option rather than an argument threaded through every call:
-
-```r
-options(cyRAVEN.verbose = "none")     # or "inform" (default), or "debug"
-```
-
-### Memory
-
-The main operational constraint: `--memory` must be sized against
-`--max-events-per-file`, because gating holds a transformed matrix per sample. At
-25 files with **no** events cap, 10 GB is killed at STEP 4 by the OOM reaper,
-which reports exit 137 and no message. A production run of that size wants
-`--max-events-per-file 300000` with `--memory 14g`.
-
-`--cluster` adds to the peak, but far less than gating does: it clusters the
-already-subsampled embedding matrix, not the full event set.
-
-### Docker
-
-```bash
-docker build -f inst/scripts/Dockerfile -t cyraven:0.1.0 .
-docker run --rm -v "$PWD:/data:ro" -v "$PWD/results:/results" cyraven:0.1.0 \
-  --dir /data --recursive --outdir /results
-```
-
-The image pins R, CRAN and Bioconductor, and installs exactly the dependencies
-`DESCRIPTION` declares, there is no second list to drift out of step. Set
-`-e CYRAVEN_SOURCE=/src` with your checkout mounted at `/src` to run a live source
-tree without rebuilding.
-
-### Package layout
-
-| Path | Role |
+| Article | Contents |
 |---|---|
-| `R/` | the package: 24 thematic source files, every stage an exported function |
-| `inst/scripts/cyraven.R` | command-line front end, a thin wrapper over `run_cyraven()` |
-| `inst/scripts/Dockerfile` | pinned, reproducible environment |
-| `inst/config/` | the worked-example population specification |
-| `inst/examples/` | template `--sample-map` / `--patient-table` / `--absolute-counts` files |
-| `tests/testthat/` | planted-truth fixtures plus guards on each optimisation |
-| `vignettes/` | getting started, and the statistical rationale |
-
-## 3. Implemented
-
-### 3.1 Differential state: testing marker intensity, correctly
-
-**The gap.** Abundance testing tells you a population changed *size*
-(`group_comparison.png`, Wilcoxon on per-sample abundance, proper sample-level
-statistics). It could *show* you a marker shifted inside a population
-(`umap_multigraph_overlay.png`) and *rank* those shifts
-(`subcluster_marker_shifts.csv`). It could not **test** one, because the ranking
-is computed over pooled cells: n is the number of cells, so one donor
-contributing 4,000 cells can produce a large Cliff's delta alone. That is
-pseudoreplication. It is common enough that the cell-level Wilcoxon helpers
-in this field ship with a warning telling you not to interpret their p-values.
-
-**What was done.** The established fix, from diffcyt's differential-state
-pathway (Weber et al. 2019): aggregate each marker to one value per sample per
-population *first*, then test those. This pipeline already computed that table,
-`population_marker_mfi.csv` is exactly per-sample × population × marker medians,
-so only the testing was missing.
-
-Two measures are tested, because they detect different things:
-
-| measure | moves when |
-|---|---|
-| `median_asinh` | the whole population shifts brighter or dimmer |
-| `pct_positive` | a *subset* of the population turns positive |
-
-A bimodal shift (30% of cells go bright, 70% unchanged) moves `pct_positive`
-sharply and the median barely at all. Reporting one measure makes the other kind
-of change invisible, so the measure is a column, not an assumption.
-
-**Why Wilcoxon and not limma/LMM as diffcyt uses.** limma's moderated *t*
-borrows variance across markers via an empirical-Bayes prior, a good trade at
-mass-cytometry marker counts (30–40) and designed-experiment sample counts. At a
-dozen markers and single-digit donors per cohort, the prior is estimated from too
-few markers to help and the normality assumption is doing real work rather than
-being a formality. The abundance side of the package settled this question
-already and chose Wilcoxon + Kruskal-Wallis. Using the same tests here means an abundance
-result and a state result are directly comparable, and a reader learns one set of
-caveats rather than two.
-
-**Outputs:** `marker_state_stats.csv`, `marker_state.png`
-(drawn by the package's own `fig_group_comparison()`, so the layout is
-identical to the abundance figure by construction).
-
-### 3.2 Phenotype heatmap: does the gate label match the phenotype?
-
-**The gap.** A marker-by-population heatmap, markers in rows, populations in
-columns, z-scored, is the standard annotation figure in this field. The gating
-stage already produced the data; what was missing was the figure.
-
-**Why it matters more here than in a clustering-first workflow.** There,
-populations come from
-unsupervised clustering and the heatmap's job is to *name* them. Here they come
-from Boolean threshold gates written down in advance, so the heatmap's job is to
-*check* them: if the column labelled "CD4 T cells" does not show high CD4 and low
-CD8, the gate is wrong, and that is visible in one glance instead of being
-inferred from a frequency that looks surprising. A pipeline that assigns labels
-from thresholds needs a figure that can contradict the labels.
-
-The heatmap **outlines** the cells each population's spec requires to be
-positive, reading the same `populations:` block the scoring uses, so the audit
-cannot drift from the definitions it audits.
-
-Alongside it, a cohort-composition heatmap
-normalises every cohort to the same notional cell count before taking each
-population's split, so unequal sample numbers and acquisition depth cannot drive
-the pattern.
-
-**Outputs:** `population_marker_heatmap.png`, `cohort_composition_heatmap.png`
-
-### 3.3 Compositional frequencies: percentages that must sum to 100
-
-**The gap.** `abundance_measure()` states the problem exactly
-right, *"frequencies are compositional: a fall in one population may reflect
-expansion of another, not its own loss"*, and then nothing acts on it. Every
-population's percentage was tested as if it could move independently, and it
-cannot: a granulocyte expansion mechanically depresses every lymphocyte
-percentage, and those depressions test significant with no lymphocyte having
-changed.
-
-**What was done.** The centred log-ratio (Aitchison 1986), with multiplicative
-zero replacement (Martín-Fernández et al. 2003) so genuinely-absent rare
-populations are not dropped, those being exactly the populations most likely to
-differ.
-
-**Both tests are reported, and the comparison is the finding.** A population
-significant on raw percentage but not on CLR is a candidate artefact of the
-constraint; one significant on both is robust to it. Swapping the test silently
-would hide that distinction.
-
-**What CLR does not fix**, stated plainly because a transform that looks like a
-solution invites over-reading: it does not recover absolute cell numbers. If
-every population doubles, the composition is unchanged and CLR sees nothing. Only
-cells/µL separates "expanded" from "expanded relative to the rest", which is why
-`abundance_measure()` already prefers `cells_per_ul` when the patient table
-supplies `wbc_per_ul`. **CLR is the right test for frequency data; absolute
-counts remain the better data.**
-
-**Outputs:** `compositional_clr_stats.csv`, `compositional_concordance.csv`
-(verdict per population: `robust_to_composition`,
-`raw_only__possible_composition_artefact`, `clr_only__was_masked_by_composition`,
-`not_significant_either`)
-
-### 3.4 Confounding: is a cohort difference really an age difference?
-
-**The gap.** The patient table carries age and sex; nothing used them for
-colouring and never for inference.
-
-**Why the deliverable is a diagnostic rather than an adjustment.** At single-digit
-n per cohort, covariate *adjustment* is close to unusable: a model with
-`group + age + sex` spends most of its residual degrees of freedom on nuisance
-terms, and if age is strongly associated with cohort, which in a
-syndrome-vs-adult-control design it very often is, the two are not separable at
-*any* n. The adjusted estimate is extrapolation, and it arrives wearing a
-confidence interval.
-
-So the order is deliberate:
-
-1. **Always**: report whether each covariate differs between cohorts (Fisher /
-   Kruskal-Wallis) *and* whether it tracks the outcome (Spearman /
-   Kruskal-Wallis). Those two facts **together** are what makes something a
-   confounder, and both are estimable at small n. Either alone is harmless, and
-   flagging either alone would cry wolf on every study with unequal ages.
-2. **On request** (`--rank-ancova`), and only where residual df permit, a
-   rank-based ANCOVA, labelled `EXPLORATORY` in the output rows themselves. Where
-   df are insufficient it writes `NOT FITTED` with the reason rather than a
-   number that looks comparable to the others in the folder.
-
-**Outputs:** `confounding_diagnostics.csv` (with a `confounder_risk` verdict),
-`covariate_adjusted_stats.csv` (opt-in)
-
-### 3.5 Paired and repeated-measures designs
-
-**Why it must be declared and cannot be inferred.** Nothing in an FCS file or a
-filename says two tubes came from the same donor at two timepoints. Treating
-paired samples as independent, which an unpaired analysis necessarily does, having no
-notion of pairing, discards the pairing's variance reduction *and* violates the
-independence assumption the rank test rests on.
-
-Runs only under `--paired-column` + `--condition-column`. Wilcoxon signed-rank,
-Friedman for 3+ conditions, the conventional choice at this scale.
-Replicate tubes of the same donor-timepoint are averaged before reshaping, and
-incomplete pairs are **counted in the output**, not silently dropped, a pairing
-that quietly halves n is exactly the failure this exists to prevent.
-
-**Output:** `paired_comparison_stats.csv`
-
-### 3.6 Batch effect: diagnosed first, corrected only when the diagnosis allows
-
-**The gap.** The comparable toolboxes ship batch *correctors*, Harmony and
-CytoNorm, and run them on request. What none of them had was a way to tell
-whether correction was safe here: an island on the UMAP that is an acquisition
-batch is drawn identically to an island that is a phenotype.
-
-**Why the diagnostic gates the correction.** Correction is
-neither free nor neutral. Harmony moves cells so batch labels mix; when batch is
-confounded with the biological group, samples of one cohort acquired on one set
-of days, which is the normal way a clinical cohort is collected, *"removing the
-batch"* and *"removing the effect you are looking for"* are the same operation,
-and the algorithm cannot tell them apart. Running a corrector under that
-confounding produces a clean-looking UMAP with the finding deleted.
-
-So: measure the batch effect, measure the **confounding between batch and
-cohort**, report both, and let that decide. If they are separable and mixing is
-poor, `--correct-batch` aligns each marker across batches by monotone quantile
-mapping. If they are confounded, no correction is safe at any setting, and
-`correct_batch()` refuses rather than obliging; that refusal is the single most
-important thing this diagnostic can tell you. See section 2 for the flags and for what
-correction does and does not reach.
-
-**The metric** is iLISI (Korsunsky et al. 2019, the metric Harmony itself is
-evaluated with), against a **permutation null**: the achievable score depends on
-how many batches there are and how unevenly sized they are, so "1.7" means
-nothing on its own. Shuffling batch labels and recomputing gives the score this
-dataset would produce with no batch structure at all. Confounding is reported as
-Cramér's V with a plain-language verdict.
-
-Falls back to the FCS `$DATE` keyword when `--batch-column` is not supplied,
-a free batch variable, used only when it actually varies.
-
-**Outputs:** `batch_mixing_stats.csv`, `batch_group_confounding.csv`,
-`batch_diagnostic.png`
-
-### 3.7 Threshold drift: does the *gate* move with cohort?
-
-**Specific to this package; a clustering-first workflow has no equivalent**
-because it never gates. One model is fitted to pooled data there, so every cell
-is judged by the same rule. cyRAVEN derives a threshold **per sample** from that
-sample's own density valley, which is what a human gater does, adapts correctly
-to staining variation, and is the right default.
-
-It also means "CD4-positive" is not literally the same predicate in every sample.
-If the derived CD4 threshold sits systematically higher in one cohort, that
-cohort shows fewer CD4 T cells **for that reason alone**, and the abundance test
-reports it as biology with a small p-value. Nothing downstream can detect it,
-because by then the thresholds have been applied and discarded.
-
-The check is cheap and the data was already being written. A marker is flagged
-only when the between-cohort gap is both statistically detectable *and* larger
-than the within-cohort scatter, a gap of 0.3 asinh units is nothing if samples
-within a cohort already vary by 0.5, and decisive if they vary by 0.02. Each
-flagged marker names **which populations use it**.
-
-**Outputs:** `threshold_drift_stats.csv`, `threshold_drift.png`
-
-### 3.8 Unsupervised clustering: finding what the config does not describe
-
-**The largest gap.** Every gated population is a Boolean conjunction of
-thresholds written down in advance. That has real advantages, named,
-reproducible, meaning exactly what the gating document says, and one decisive
-weakness: **it cannot find anything the spec does not describe.** Cells matching
-no definition become "Other CD45+", excluded from the UMAPs by default, so
-unexpected biology is not merely unlabelled, it is not drawn.
-
-It also has no way to be wrong out loud. A mis-set CD4 cut and a genuine absence
-of CD4 T cells produce identical output. Unsupervised clustering breaks the tie:
-a CD4 T-cell cluster appears at its true size whether or not the CD4 threshold
-was set well, and the **disagreement** between cluster and gate is the diagnosis.
-
-**Algorithm:** FlowSOM's two-stage design (Van Gassen et al. 2015, winner of the
-Weber & Robinson 2016 benchmark on accuracy and runtime): a self-organising map
-quantises the marker space into ~100 micro-clusters, then those 100 prototypes are
-metaclustered down to the requested count. The expensive step touches each cell
-once per epoch; the clustering step operates on 100 vectors, not 10⁶.
-
-Uses the **FlowSOM package when installed**; otherwise runs an equivalent
-built-in batch SOM + Ward.D2 metaclustering, so no mandatory dependency is added.
-The two are algorithmically equivalent and *not* numerically identical, which
-one ran is recorded in the output, because a cluster number from one is not a
-cluster number from the other.
-
-**Clusters the marker matrix, not the UMAP coordinates.** UMAP is a
-visualisation: its distances are not metric, it does not preserve density, and
-the gaps between islands are partly an artefact of `min_dist`. Clustering it
-would give clusters of the *picture*. FlowSOM and Phenograph both cluster the
-high-dimensional space and use the embedding only to display.
-
-**How to read the cross-check:**
-
-| pattern | meaning |
-|---|---|
-| cluster >80% one gate label | gate and data agree |
-| cluster mostly "Other CD45+" | **a real population the spec does not describe** |
-| gate label split across clusters | the label is a union of distinct phenotypes |
-| gate label holds few cells of a cluster it dominates | **the threshold is wrong**: the cells are there and cluster together; the Boolean rule is rejecting them |
-
-That last row is the concrete motivation: if CD4 T cells score 0.29% of cells
-while a ~20% cluster is CD4-bright and labelled "Other CD45+", the population is
-not absent, the cut is misplaced, and the two numbers side by side say so
-immediately.
-
-**Outputs:** `unsupervised_clusters.csv`, `cluster_gate_agreement_clusters.csv`,
-`cluster_gate_agreement_populations.csv`, `unsupervised_clusters.png`
-(cluster panel beside gate-label panel, the comparison is the whole value)
-
-#### 3.8.1 Learning a gate back out of a cluster: `--explain-clusters`
-
-**The gap section 3.8 opens and cannot close.** The agreement table can tell you that
-cluster 7 matches no described population. It cannot tell you **what cluster 7
-is**. The finding arrives as a cluster number and a cell count, nothing a
-cytometrist can act on, because there is no way to go back to the instrument, or
-to a FlowJo workspace, and select those cells.
-
-`--explain-clusters` closes the loop in the other direction: for every cluster
-the spec fails to describe, it **learns** a short sequence of two-marker gates
-that selects it, and reports how well each one does.
-
-**Why a convex polygon and not more thresholds.** Every gated population is a
-conjunction of one-dimensional cuts, which makes each gate an axis-aligned
-rectangle. Real boundaries are frequently diagonal, CD4/CD8, CD14/CD16,
-FSC-A/FSC-H, and a rectangle placed over a diagonal boundary must either admit
-contaminants or reject real cells. There is no third option. The package already
-concedes this once: `derive_singlet_band()` is a hand-written diagonal band,
-bolted on because a rectangle could not express it. A convex polygon is the
-general form of that special case, and it is still a gate a human can draw.
-
-**Algorithm.** A gate is the intersection of *k* half-planes; membership is
-relaxed to `∏ σ(s·(wⱼ·x + bⱼ))` so it can be differentiated, and fitted by
-class-weighted cross-entropy plus a tightness penalty whose strength is searched
-against held-out F1 rather than fixed. Four of the eight normals are pinned to
-±PC1/±PC2 of the target cloud, without that the feasible region need not be
-**bounded**, and an optimiser will happily return a wedge running off to
-infinity that scores well and is not a gate. Their offsets stay free, so the box
-can still move and resize; the other four planes cut corners off it. Then the
-next marker pair is chosen among the surviving cells and the whole thing repeats.
-
-**No new dependencies, and no automatic differentiation.** The objective's
-gradient is derived in closed form, four lines of matrix algebra, and the
-problem is 24 parameters, which `stats::optim`'s L-BFGS-B solves directly. A
-minibatch first-order method is the right tool when the parameter count is large
-and the data does not fit in memory; here neither is true. `stats::prcomp`
-initialises, `grDevices::chull` tightens, both already imported.
-
-**Every metric is computed on held-out cells.** Eight free half-planes fitted to
-a few thousand cells can memorise them, and a convex hull drawn around the
-survivors memorises them completely. Fitting and scoring on the same cells
-reports a number that is optimistic by construction, so cells are split before
-the fit and the in-sample value is printed **beside** the held-out one, the gap
-between them is information, and hiding it would be the whole problem.
-
-> **This is descriptive.** A learned gate says where a group of cells sits in
-> marker space. It is not evidence that the group is real, and it carries no
-> p-value. Nothing it produces re-enters the analysis: the scored populations,
-> the frequencies and every tested result are byte-identical whether this runs
-> or not. The output is a proposal for a human to accept or reject.
-
-Recall is measured against the **original** population size at every level, so a
-strategy that discards half the cells at each step cannot report 100% recall
-three times. The search stops as soon as another gate fails to earn its place.
-
-**Outputs:** `cluster_gate_proposals.csv` (marker pair, held-out
-precision/recall/F1, in-sample F1, cumulative metrics per level),
-`cluster_gate_polygons.csv` (vertices in arcsinh units, ready to draw),
-`cluster_gate_strategy_<k>.png` (one panel per gate, polygon over the cells it
-was fitted to)
-
-### 3.9 Data-driven subcluster count
-
-`subcluster_by_reference()` fixed k = 3 for every population. Nothing checked
-whether three compartments is what the data contains, and every subcluster label
-in the multigraph overlay and every row of `subcluster_marker_shifts.csv` rests on
-that number.
-
-`--auto-subcluster-k` chooses k per population by mean silhouette on the
-reference group's cells. **Stated limit**, because a chosen k reads as more
-authoritative than a fixed one: silhouette favours small, compact, roughly
-spherical clusters, and so does k-means, so the criterion and the algorithm
-share a bias. It is a better default than a hardcoded 3. The full score curve is
-written out so the choice is inspectable.
-
-**Opt-in**, because it changes the subcluster lettering, and published overlays
-are indexed by that lettering.
-
-**Output:** `subcluster_k_selection.csv`
-
-### 3.10 UMAP model persistence
-
-`run_umap()` discards uwot's model by default, so adding one sample re-embeds everything
-and every coordinate moved. Cluster 4 in this run was not cluster 4 in the next,
-and two results folders from the same study could not be laid side by side. The
-README documents adding batches over time, which makes this a live problem.
-
-`--save-umap-model` / `--umap-model` implement the established pattern: train
-once with uwot's `ret_model`, then project later data into the same space.
-
-**What projection is and is not:** projected cells are placed by the existing
-model and do not move the manifold. That is the point, coordinates stay
-comparable, and also the limitation: a population present only in the new samples
-has no region of its own and will be placed among whatever it is nearest.
-**Project when the cohort grows; retrain when the biology or the panel changes.**
-
-The scaling constants travel *with* the model. Re-deriving median/MAD from a new
-batch would scale it against itself and land it in a subtly different space, a
-silent arithmetic error that looks exactly like a batch effect.
-
-Uses `uwot::save_uwot()` rather than `saveRDS()`: a uwot model holds an external
-pointer to its nearest-neighbour index, which `saveRDS` serialises as a null
-pointer that fails on load, usually at transform time, well after the file looked
-fine.
-
-> **`--save-umap-model` changes the embedding, measured, not assumed.**
-> Asking uwot to retain the model puts it on a different internal path that
-> consumes the RNG stream differently. On 3,000 × 6 synthetic cells at a fixed
-> seed, `ret_model = TRUE` and `ret_model = FALSE` are each perfectly
-> reproducible with themselves but differ from each other: max coordinate
-> difference 3.7, per-axis correlation 0.96. The embedding is equally valid, not
-> degraded, but it is **not the same picture**, so clusters may be renumbered
-> and islands may move. **Decide to persist the model at the start of a study,
-> not after the figures have been circulated.** Without the flag, the default
-> path is unchanged.
-
-
-
-### 3.11 Pooled cofactor derivation
-
-**Behaviour change, the one place a default number moves.**
-
-The cofactor used to be derived from `reads[[sids[1]]]`, one sample
-sets the transform for the whole panel, and therefore the scale on which every
-threshold, marker median and UMAP distance is computed. If that file happens to
-be weakly stained, an unstained control, or simply an outlier, the transform is
-wrong for everyone else and nothing downstream can detect it. The choice of
-"first" is alphabetical, so it is not even a considered sample, it is a filename.
-
-Now: the **median** of up to 8 per-sample derivations, spaced evenly across the
-sample order so a batch acquired in cohort order does not take its transform from
-one cohort. Median, not mean, because the failure being guarded against is
-precisely one aberrant sample.
-
-If per-sample cofactors span more than 2×, that is logged: the panel does not
-have one shared background, and a single cofactor is a compromise rather than a
-description, usually a gain change mid-batch.
-
-`--cofactor-from-first-sample` restores the previous behaviour exactly.
-
-### 3.12 Run manifest
-
-`sessionInfo()` used to be captured only inside `save_session()`, so a default
-run left no record of the R version, package versions, command line, or input
-files. A methods section needs all four.
-
-`run_manifest.txt` is written **before** the expensive steps and rewritten on the
-way out via `on.exit`, so it fires on error and interrupt too. A run that crashes
-leaves `status: failed`; a manifest still reading `status: running` is itself the
-diagnosis. Records R version, platform, every installed package version, the git
-commit **and whether the checkout was dirty**, the full command line, every
-option, every input file with size and mtime, and the derived cofactors.
-
-## 4. Deliverables
-
-### New files in `results/`
-
-| File | Section |
-|---|---|
-| `marker_state_stats.csv` | 3.1 |
-| `marker_state.png` | 3.1 |
-| `population_marker_heatmap.png` | 3.2 |
-| `cohort_composition_heatmap.png` | 3.2 |
-| `compositional_clr_stats.csv` | 3.3 |
-| `compositional_concordance.csv` | 3.3 |
-| `confounding_diagnostics.csv` | 3.4 |
-| `covariate_adjusted_stats.csv` | 3.4 (`--rank-ancova`) |
-| `paired_comparison_stats.csv` | 3.5 (`--paired-column`) |
-| `batch_mixing_stats.csv` | 3.6 |
-| `batch_group_confounding.csv` | 3.6 |
-| `batch_diagnostic.png` | 3.6 |
-| `threshold_drift_stats.csv` | 3.7 |
-| `threshold_drift.png` | 3.7 |
-| `unsupervised_clusters.csv` | 3.8 (`--cluster`) |
-| `cluster_gate_agreement_clusters.csv` | 3.8 (`--cluster`) |
-| `cluster_gate_agreement_populations.csv` | 3.8 (`--cluster`) |
-| `unsupervised_clusters.png` | 3.8 (`--cluster`) |
-| `cluster_gate_proposals.csv` | 3.8.1 (`--explain-clusters`) |
-| `cluster_gate_polygons.csv` | 3.8.1 (`--explain-clusters`) |
-| `cluster_gate_strategy_<k>.png` | 3.8.1 (`--explain-clusters`) |
-| `subcluster_k_selection.csv` | 3.9 (`--auto-subcluster-k`) |
-| `umap.model` + `umap.model.meta.rds` | section 3.10 (`--save-umap-model`) |
-| `run_manifest.txt` | 3.12 |
-
-Every one of these is produced under `tryCatch`, after all primary outputs are
-already on disk. A failure in any of them logs a warning naming the analysis and
-leaves everything else untouched, the same contract the FlowJo export runs
-under, and for the same reason: an addition that can destroy the thing it was
-added to is not an addition.
-
-### Changed deliverables
-
-| File | Change | Breaking? |
-|---|---|---|
-| `population_marker_mfi.csv` | **+2 columns** `is_control`, `qc_status` | No, appended. Without them `qc_pass_rows()` passes the table through unchanged, so an unstained control's marker medians would enter the DS tests and the phenotype heatmap silently. Brings it in line with `functional_markers.csv`, which already carried both. |
-| every derived number | cofactor now pooled across samples (section 3.11) | Values may shift where samples disagree. `--cofactor-from-first-sample` reverts. |
-| `config_cohorts.yaml` | **+3 keys** `heatmap_low/mid/high` | No, optional, defaults apply if absent. |
-
-### Unchanged
-
-Every pre-existing figure keeps its layout, colours, panel order, facet arrangement
-and filename. Semantic colours still hold: healthy = green, subject 1 = red,
-subject 2 = purple; male = green, female = red. The new diverging heatmap scale
-is deliberately **not** drawn from `study_palette`, a colour that means "subject
-1" in one figure must not mean "above average" in another.
-
-## 5. Not implemented, and why
-
-### 5.1 Harmony and CytoNorm specifically
-Batch correction itself is implemented, see section 2 and section 3.6: `--correct-batch` does
-monotone quantile alignment and refuses under batch-cohort confounding. What is
-not wrapped is Harmony or CytoNorm. Both are heavier dependencies, and neither
-declines to run when correction and deleting the finding are the same operation,
-which is the behaviour this package treats as the point rather than an obstacle.
-
-### 5.2 Phenograph clustering
-FlowSOM covers the same need and is faster at these cell counts. Phenograph
-(Louvain on a k-NN graph) picks its own cluster count, which is genuinely useful,
-but requires `Rphenograph`/`Rphenoannoy`, both GitHub-only, neither on CRAN or
-Bioconductor, which would break the container's reproducibility guarantee.
-**Add if:** the cluster count itself becomes a question rather than a setting.
-
-### 5.3 diffcyt (limma / LMM differential testing)
-The rank tests in section 3.1 and section 3.3 answer the same questions without the
-distributional assumptions, which is the right trade at single-digit n, see
-section 3.1 for the argument. **Add if:** cohorts reach ~15+ samples each, where the empirical-Bayes
-prior starts paying for itself and mixed models can absorb repeated measures
-properly.
-
-### 5.4 Per-marker cofactors
-`derive_cofactor()` now *returns* per-marker candidates (`attr(cf,
-"per_marker")`), but applying them is not wired up. Doing so changes the arcsinh
-scale per channel, which shifts every threshold, every marker median and every
-UMAP distance, a large methodological change that cannot be validated without
-re-running and re-reading every gating QC figure. The data to make the decision
-is now collected. **Add if:** the gating QC shows channels whose backgrounds
-genuinely differ in scale.
-
-### 5.5 Pseudotime / trajectory analysis
-The comparable toolboxes wrap diffusion maps and Slingshot. Trajectories
-assume a continuous
-developmental process; this panel measures terminally-differentiated peripheral
-blood populations, where a fitted trajectory would be an artefact of the fitting.
-**Add if:** the panel gains a developmental axis.
-
-### 5.6 Supervised cell-type classifiers (Astir, CytoDx, random forest)
-Label-transfer models are a standard offering elsewhere. Here the labels come
-from a written gate spec, so a classifier trained on them can only reproduce the
-spec, including its errors. Section 3.8 is the better cross-check because it is
-independent of the labels. **Add if:** an external reference-annotated dataset
-becomes available to train against.
-
-### 5.7 FlowJo `.wsp` workspace ingestion
-Reading gates back out of a FlowJo workspace is the inverse of what cyRAVEN
-does (`--flowjo-export`). Parsing `.wsp` needs `CytoML` +
-`flowWorkspace`, a heavy dependency pair. **Add if:** manual FlowJo gates need to
-be the input rather than the output.
-
-### 5.8 Cell-level differential expression
-Deliberately absent, for exactly the pseudoreplication reason in section 3.1, which
-is why the tools that do provide a cell-level Wilcoxon ship it with a warning
-against using it. The cell-level view
-is already available descriptively in `subcluster_marker_shifts.csv`, which
-carries effect sizes and **no p-values**, that is the correct treatment.
-
-## 6. Statistical conventions
-
-Applied consistently across every test the package runs:
-
-- **Replicates are samples, never cells.** Anything computed over pooled cells is
-  labelled descriptive and carries no p-value.
-- **Rank tests throughout.** Wilcoxon rank-sum, Kruskal-Wallis, Spearman, and
-  their paired counterparts. No normality assumption at these n.
-- **Benjamini-Hochberg within each test family.** Differential state adjusts
-  within each measure rather than across both, because `median_asinh` and
-  `pct_positive` are two correlated views of the same cells and pooling them
-  would fill the family with non-independent tests and over-penalise every hit.
-- **Effect sizes beside every p-value.** Cliff's delta over samples,
-  rank-biserial for paired designs.
-- **Controls and QC failures are excluded before testing.** See `qc_pass_rows()`.
-- **Differences, not ratios, for arcsinh values.** The scale runs negative, where
-  a ratio is uninterpretable and changes sign for no biological reason.
-
-## 7. Citing cyRAVEN
+| [Getting started](https://bhagesh-h.github.io/cyRAVEN/articles/cyRAVEN.html) | The nine stages one by one: read and compensate, derive the cofactor, gate, score populations, embed, test, diagnose, explain clusters, write the manifest. Each with the function that does it and runnable examples of `derive_cofactor()`, `density_valley()` and `stats_group_comparison()`. |
+| [Gating and populations](https://bhagesh-h.github.io/cyRAVEN/articles/gating.html) | The four-step gate hierarchy and what happens when CD45 or a viability dye is missing. Why thresholds are per sample and how to read the `source` column. Writing a `populations:` block, with the YAML, the meaning of `above`, `below` and `intermediate`, and a four-step recipe. arcsinh against logicle, and the CCR7 example where the choice moves memory subsets by tens of percent. |
+| [Checking the result](https://bhagesh-h.github.io/cyRAVEN/articles/diagnostics.html) | Nine checks in reading order: the two gate figures, staining QC, the phenotype heatmap, threshold drift by group, the four gate against cluster patterns and what each means, learned gates for undescribed clusters, confounding, iLISI batch mixing with the Cramér's V refusal rule, and the run manifest. |
+| [What lands in results/](https://bhagesh-h.github.io/cyRAVEN/articles/outputs.html) | Every file the pipeline can write, grouped as read-first, populations and intensity, embedding, statistics, diagnostics, clustering and learned gates. Says what each column means, which flag produces it, and why `count` is an event count and not a cell number. |
+| [Statistics](https://bhagesh-h.github.io/cyRAVEN/articles/statistics.html) | Why n is donors and not cells, with a worked example. Rank tests instead of limma and when to switch at about 15 samples per group. The compositional problem and what CLR does and does not fix. Confounders diagnosed rather than adjusted. Benjamini-Hochberg within families, and why differences not ratios on arcsinh. |
+| [Using cyRAVEN with cyCONDOR](https://bhagesh-h.github.io/cyRAVEN/articles/with-cycondor.html) | A table of which tool answers which question. Three worked questions: is my frequency drop real, what is that unexpected cluster, how do I hold up across sites. Code to drive both from one sample map, the four reasons their UMAPs differ, and why FlowSOM returns 8 clusters where Phenograph returns 24 on the same cells. |
+| [What it does not do](https://bhagesh-h.github.io/cyRAVEN/articles/scope.html) | Nine deliberate omissions with the reason and the trigger for reconsidering each: Harmony and CytoNorm, Phenograph, diffcyt, per-marker cofactors, pseudotime, label-transfer classifiers, reading `.wsp` workspaces, cell-level differential expression, and building a compensation matrix. |
+
+## Citing
 
 ```r
 citation("cyRAVEN")
 ```
 
-The methods the package implements belong to their original authors; please cite
-them as well where relevant. `citation()` lists them.
+If you use the unsupervised clustering, cite FlowSOM as well. If you use the
+per-sample aggregation for differential state, cite diffcyt. Both are named in
+the citation output.
 
-## 8. Licence
+## Licence
 
-GPL-3.0-or-later. The full text is in [LICENSE](LICENSE).
-
-This is a deliberate choice rather than a default. cyRAVEN links against `uwot`,
-which is GPL-3; a permissive licence on top of that would misdescribe what a user
-of the *installed* package may actually do. Copyleft also matches what the code
-is for, a result you cannot reproduce is not a result, and requiring that
-modifications stay open keeps a published figure traceable to source that is
-still available to whoever tries to check it.
+GPL-3. See [LICENSE](LICENSE).
