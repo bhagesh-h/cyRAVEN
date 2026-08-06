@@ -1,3 +1,85 @@
+# cyRAVEN 0.2.0
+
+Three additions. All three are additive in the strict sense: every file the
+previous version wrote is still written, with the same name, the same columns in
+the same order, and the same values. Verified by running both versions on the
+same cohort and comparing byte for byte, which is also how the RNG hazard below
+was ruled out.
+
+## Gate placement uncertainty
+
+* Every reported frequency now carries a standard uncertainty saying how far it
+  moves when the thresholds behind it move. Two components, combined in
+  quadrature per the GUM convention: resampling the parent-gate events, and
+  sweeping the settings `density_valley()` itself takes. The second is the
+  honest form of the claim that automation removed analyst discretion. It did
+  not, it fixed it, and this is how much was fixed.
+* The parent gate is a term in every population's budget, because displacing the
+  CD45 cut moves cells into and out of the denominator all of them are expressed
+  against. On the development cohort it is the largest median contributor, which
+  is what the operator-variability literature reports for manually gated data as
+  well.
+* `group_comparison_stats.csv` gains `difference_over_gate_u`. Below 1, the
+  groups differ by less than the distance the cut itself moves. A p-value does
+  not disclose that.
+* New: `threshold_uncertainty.csv`, `uncertainty_budget.csv`,
+  `frequency_uncertainty.png`, `uncertainty_budget.png`. On by default;
+  `--no-uncertainty` restores the previous output exactly.
+* The reported threshold is never touched. Perturbation runs on copies, so the
+  numbers are identical with the analysis on or off.
+* The RNG is borrowed and returned. `run_cyraven()` seeds once and STEP 6's UMAP
+  cell selection draws from that one stream, so a new step consuming draws would
+  have changed which cells are embedded and silently redrawn every UMAP in the
+  run. Every entry point saves and restores `.Random.seed`; the embedding is
+  bit-identical either way, and a test asserts it.
+* `bootstrap_valley_rate` records how often a resample finds the cut at all. A
+  threshold that comes and goes is not imprecise, it is unresolved, and it looks
+  identical to a solid one in `thresholds_used.csv`.
+
+## Conformance against a baseline
+
+* New `--write-baseline` and `--baseline`. The existing peer check in
+  `thresholds_used.csv` compares each sample against the others in its own run,
+  which catches one bad tube. It cannot catch a cohort that moved as a whole,
+  because the leave-one-out peer median moves with it. A baseline written from an
+  accepted run is the fixed reference that can.
+* `threshold_scale_qc.csv` keeps its within-run meaning. Repointing it at a
+  baseline would have kept the filename and the column names while changing what
+  the numbers mean, so the baseline comparison goes to
+  `specification_conformance.csv` instead.
+* A changed transform is reported once as "not comparable" rather than as every
+  marker having drifted, and a redefined population is reported as a different
+  measurement rather than a moving one.
+* `--fail-on-drift` turns the verdict into an exit code for scheduled runs. It
+  raises after the run is marked completed, because every output was still
+  produced.
+
+## Labels from another tool
+
+* New `--external-labels`, which takes a CSV of cell labels this package did not
+  produce -- a cyCONDOR clustering, for instance -- and learns a gating strategy
+  for each one. `learn_convex_gate()` already accepted an arbitrary label; what
+  was missing was a way to supply one, a way to find out whether the result
+  transfers, and a file the instrument can read.
+* The join is on sample and event index, never position. Tools subsample
+  independently, so row *i* of one table is not row *i* of another and a
+  positional join mislabels every cell without erroring.
+* New `gate_transferability()` refits the whole strategy with one donor withheld
+  and scores it on that donor, once per donor. The existing held-out metric
+  reserves CELLS, which come from the same donors acquired in the same tubes, so
+  it can look excellent on a gate that fails on the next patient. Report the
+  minimum across donors, not the mean.
+* New `--export-gates` writes ISAC Gating-ML 2.0 plus a plain table of vertices,
+  both in the linear units the FCS file stores. A gate that stays in R cannot be
+  sorted on.
+* Polygon edges are subdivided before inversion. An edge that is straight on the
+  analysis scale is a curve in linear units, so inverse-transforming only the
+  corners would emit a different region from the one that was fitted and
+  validated.
+* No new dependencies. The XML is written directly rather than through a
+  `GatingSet`, which keeps the export available in the container this package
+  tests in.
+
 # cyRAVEN 0.1.0
 
 First packaged release. Previously a set of command-line R scripts; the analysis

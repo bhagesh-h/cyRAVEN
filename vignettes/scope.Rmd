@@ -85,9 +85,15 @@ training.
 
 ## 7. FlowJo ingestion
 
-cyRAVEN exports FCS with embedding coordinates as additional parameters. It does
-not read gates from a `.wsp` workspace, which requires `CytoML` and
-`flowWorkspace` for the inverse of the package's function.
+Gates travel outward. `--export-gates` writes learned strategies as ISAC
+Gating-ML 2.0, and `--flowjo-export` writes FCS with embedding coordinates as
+additional parameters, so a result can be opened in FlowJo, Cytobank or
+FlowRepository.
+
+The inverse is absent: cyRAVEN does not read gates from a `.wsp` workspace, which
+requires `CytoML` and `flowWorkspace`. The export needs neither, because a
+Gating-ML document is written directly, whereas parsing a proprietary workspace
+is not something to reimplement.
 
 **Revisit when** manual FlowJo gates are required as input rather than output.
 

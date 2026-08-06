@@ -83,6 +83,45 @@ resolving in that panel, and no gating strategy will recover it.
 across samples and the robust *z* of each deviation from it. Thresholds flagged
 here are the first candidates for manual review.
 
+### 2.4 Precision
+
+`source` is a three-valued summary of how a threshold was obtained. It does not
+say how well determined the value is, and two cuts both recorded as `valley` can
+differ by an order of magnitude in that respect: one sitting in a wide, empty gap
+between well-separated modes, the other on a shallow dip that a slightly
+different histogram would not have found.
+
+`threshold_uncertainty.csv` supplies the missing quantity. Each cut is re-derived
+from resamples of the events it was computed on, giving the component that comes
+from having counted a finite number of cells, and again across the settings
+`density_valley()` takes, giving the component that comes from the choices this
+package makes on the analyst's behalf. The two combine in quadrature.
+
+`bootstrap_valley_rate` is the more direct reading of the two. A cut recovered in
+every resample marks a real boundary; one recovered in half of them was found by
+histogram noise that happened to clear the relative-depth rule, and a wide
+interval understates how little is there.
+
+`uncertainty_budget.csv` carries the consequence through to the populations.
+Each marker a population reads contributes a term, as does the CD45 parent
+threshold, which enters every population because it fixes the denominator.
+The [diagnostics article](diagnostics.html) covers how to read the result.
+
+None of this alters a threshold. The value in `thresholds_used.csv` is
+`density_valley()` at its defaults on the real events, with or without the
+analysis; the perturbation runs on copies.
+
+### 2.5 Stability across runs
+
+The comparison in `threshold_scale_qc.csv` is against the other samples of the
+same run, which identifies one deviant tube among many sound ones. It is blind to
+a cohort that moved together, because the peer median moves with it.
+
+`--write-baseline` records where an accepted run placed each threshold and how
+variable it was; `--baseline` measures a later run against that record. This is
+the check that survives a laser service, a reagent lot change or a year between
+acquisitions.
+
 ## 3. Specification
 
 ### 3.1 Syntax

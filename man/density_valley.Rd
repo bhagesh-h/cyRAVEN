@@ -12,7 +12,8 @@ density_valley(
   min_gap_frac = 0.06,
   range_q = c(0.001, 0.999),
   min_rel_depth = 0.3,
-  min_upper_frac = 0.002
+  min_upper_frac = 0.002,
+  details = FALSE
 )
 }
 \arguments{
@@ -35,6 +36,13 @@ populations findable -- see the note on scoring below.}
 \item{min_upper_frac}{the upper mode must hold at least this fraction of events,
 so a cut cannot be placed out in the extreme tail where a handful of events
 form a bump.}
+
+\item{details}{when TRUE return a list carrying the cut plus the relative
+depth of the valley and why no cut was found, instead of the bare cut.
+The default returns exactly what it always has: one number or \code{NA_real_}.
+\code{\link[=threshold_uncertainty]{threshold_uncertainty()}} uses the list form, because how deep a valley is
+determines how far the cut can move under resampling, and recomputing the
+smoothed histogram elsewhere would let the two drift apart.}
 }
 \description{
 WHAT: smooths a histogram, locates peaks above \code{peak_frac} of the maximum,

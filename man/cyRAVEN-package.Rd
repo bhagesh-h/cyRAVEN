@@ -64,17 +64,18 @@ dimension (default 30000), below the graphics device limit.}
 \seealso{
 Useful links:
 \itemize{
+  \item \url{https://bhagesh-h.github.io/cyRAVEN/}
   \item \url{https://github.com/bhagesh-h/cyRAVEN}
   \item Report bugs at \url{https://github.com/bhagesh-h/cyRAVEN/issues}
 }
 
 }
 \author{
-\strong{Maintainer}: Bhagesh Hunakunti \email{bhunakun@uni-bonn.de} [copyright holder]
+\strong{Maintainer}: Bhagesh Hunakunti \email{bhunakun@uni-bonn.de} (\href{https://orcid.org/0000-0002-5957-8005}{ORCID}) [copyright holder]
 
 Authors:
 \itemize{
-  \item Bhagesh Hunakunti \email{bhunakun@uni-bonn.de} [copyright holder]
+  \item Bhagesh Hunakunti \email{bhunakun@uni-bonn.de} (\href{https://orcid.org/0000-0002-5957-8005}{ORCID}) [copyright holder]
 }
 
 }

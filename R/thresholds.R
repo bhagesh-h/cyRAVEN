@@ -21,14 +21,24 @@
 #' @param peak_frac The peak frac. Default `0.02`.
 #' @param min_gap_frac The min gap frac. Default `0.06`.
 #' @param range_q The range q. Default `c(0.001, 0.999)`.
+#' @param details when TRUE return a list carrying the cut plus the relative
+#'   depth of the valley and why no cut was found, instead of the bare cut.
+#'   The default returns exactly what it always has: one number or `NA_real_`.
+#'   [threshold_uncertainty()] uses the list form, because how deep a valley is
+#'   determines how far the cut can move under resampling, and recomputing the
+#'   smoothed histogram elsewhere would let the two drift apart.
 #' @export
 density_valley <- function(x, bins = 220L, smooth = 4, peak_frac = 0.02,
                            min_gap_frac = 0.06, range_q = c(0.001, 0.999),
-                           min_rel_depth = 0.30, min_upper_frac = 0.002) {
+                           min_rel_depth = 0.30, min_upper_frac = 0.002,
+                           details = FALSE) {
+  none <- function(reason)
+    if (details) list(cut = NA_real_, rel_depth = NA_real_, n_peaks = NA_integer_,
+                      reason = reason) else NA_real_
   x <- x[is.finite(x)]
-  if (length(x) < 500L) return(NA_real_)
+  if (length(x) < 500L) return(none("fewer than 500 finite values"))
   rg <- quantile(x, range_q, na.rm = TRUE)
-  if (!all(is.finite(rg)) || diff(rg) <= 0) return(NA_real_)
+  if (!all(is.finite(rg)) || diff(rg) <= 0) return(none("degenerate range"))
   h <- graphics::hist(x[x >= rg[1] & x <= rg[2]], breaks = seq(rg[1], rg[2], length.out = bins + 1L),
             plot = FALSE)
   y <- h$counts
@@ -40,7 +50,7 @@ density_valley <- function(x, bins = 220L, smooth = 4, peak_frac = 0.02,
   mx <- max(ys)
   pk <- which(c(FALSE, ys[-1] >= ys[-length(ys)]) &
               c(ys[-length(ys)] >= ys[-1], FALSE) & ys > peak_frac * mx)
-  if (length(pk) < 2L) return(NA_real_)
+  if (length(pk) < 2L) return(none("unimodal: fewer than two peaks"))
   min_gap <- min_gap_frac * diff(range(ctr))
   tot <- sum(ys[is.finite(ys)])
   best <- NULL
@@ -68,9 +78,12 @@ density_valley <- function(x, bins = 220L, smooth = 4, peak_frac = 0.02,
     # Among candidates that genuinely separate, prefer the deepest separation and
     # break ties toward the wider peak spacing (a better-resolved pair).
     score <- rel + 0.05 * (ctr[b] - ctr[a]) / diff(range(ctr))
-    if (is.null(best) || score > best$score) best <- list(score = score, cut = ctr[vi])
+    if (is.null(best) || score > best$score)
+      best <- list(score = score, cut = ctr[vi], rel_depth = rel)
   }
-  if (is.null(best)) NA_real_ else best$cut
+  if (is.null(best)) return(none("no peak pair separates enough"))
+  if (details) list(cut = best$cut, rel_depth = best$rel_depth,
+                    n_peaks = length(pk), reason = NA_character_) else best$cut
 }
 
 #' Resolve a threshold for one marker, recording where the value came from

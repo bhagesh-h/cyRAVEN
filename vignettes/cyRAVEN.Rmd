@@ -118,7 +118,23 @@ str(default_population_spec()[["CD3 pos CD4 pos"]])
 Populations are evaluated as Boolean conjunctions of marker directions read from
 YAML. Editing the specification changes the analysis without modifying R code.
 
-### 3.5 Embed
+### 3.5 Quantify the uncertainty
+
+```{r unc, eval = FALSE}
+u <- threshold_uncertainty(x_parent, source = "valley", B = 100)
+c(u$u_sampling, u$u_method, u$u_combined)
+```
+
+Each cut is re-derived from resamples of its own events, and again across the
+settings that placed it. The two spreads combine in quadrature and propagate to
+every population reading that marker, alongside the CD45 parent term, which
+enters all of them because it fixes the denominator.
+
+The reported threshold is unchanged: the perturbation runs on copies. Every entry
+point saves and restores `.Random.seed`, so the cell selection in the next stage
+draws from the same stream position whether this runs or not.
+
+### 3.6 Embed
 
 ```{r umap, eval = FALSE}
 emb <- run_umap(mat, n_neighbors = 30, min_dist = 0.3, seed = 42)
@@ -134,7 +150,7 @@ the manifold.
 `project_umap()`, which holds coordinates fixed between runs. Model retention
 alters the embedding; see `?run_umap`.
 
-### 3.6 Test
+### 3.7 Test
 
 ```{r stats}
 freq <- data.frame(
@@ -152,9 +168,9 @@ res[, c("population", "comparison_group", "n_reference", "cliffs_delta", "p_valu
 population, testing median intensity and percent positive separately because a
 shift confined to a subset moves one and not the other.
 
-### 3.7 Diagnose
+### 3.8 Diagnose
 
-Four outputs constrain interpretation of the preceding stages. The
+Five outputs constrain interpretation of the preceding stages. The
 [diagnostics article](diagnostics.html) covers each in full.
 
 `batch_mixing_report()` quantifies batch structure in the embedding against a
@@ -172,7 +188,11 @@ associates with the outcome, the two conditions jointly defining a confounder.
 clusters and is the only output capable of identifying a population absent from
 the specification, or a threshold rejecting events that belong to its population.
 
-### 3.8 Explain
+`run_gate_uncertainty()` reports how far each threshold moves under resampling and
+propagates that to every population reading it, so a difference smaller than its
+own gate's movement is identifiable as such.
+
+### 3.9 Explain
 
 `cluster_gate_agreement()` identifies a cluster matching no declared population
 but cannot characterise it, leaving a cluster index and a cell count.
@@ -198,7 +218,14 @@ since eight free half-planes can memorise a few thousand events. The stage is
 descriptive: it carries no p-value and scored frequencies are identical whether
 it runs or not.
 
-### 3.9 Report
+`--external-labels` supplies the labels from elsewhere, a cyCONDOR clustering for
+instance, and `gate_transferability()` then refits the strategy with one donor
+withheld and scores it on that donor. Held-out events come from the same donors
+and overstate how well a gate travels; the per-donor minimum does not.
+`--export-gates` writes the result as Gating-ML 2.0 in the units the FCS file
+stores.
+
+### 3.10 Report
 
 Figures, tables, and `write_run_manifest()`, which records R version, package
 versions, git commit and working-tree state, the full invocation, and every input

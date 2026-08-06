@@ -21,7 +21,7 @@ authors:
     family-names: "Hunakunti"
     email: "bhunakun@uni-bonn.de"
     orcid: "https://orcid.org/0000-0002-5957-8005"
-version: 0.1.0
+version: 0.2.0
 date-released: "2026-08-06"
 license: GPL-3.0-or-later
 repository-code: "https://github.com/bhagesh-h/cyRAVEN"
