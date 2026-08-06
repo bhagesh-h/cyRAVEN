@@ -13,13 +13,18 @@ reference:
   - run_cyraven
 
 - title: Reading and transformation
-  desc: Getting FCS files into a matrix on a sensible scale.
+  desc: >
+    Getting FCS files into a matrix on a sensible scale. The transform is
+    selectable, and its parameters are derived once per panel so every sample
+    stays on one ruler.
   contents:
   - read_fcs_resolved
   - fingerprint_panels
   - maybe_compensate
+  - make_transform
   - derive_cofactor
   - derive_cofactor_pooled
+  - derive_logicle_pooled
 
 - title: Gating
   desc: >
@@ -88,13 +93,21 @@ reference:
   - stats_rank_ancova
   - stats_paired_comparison
 
+- title: Batch structure
+  desc: >
+    Measure the batch effect first, then decide. Correction is opt-in and is
+    refused when batch and study group overlap far enough that removing one
+    removes the other.
+  contents:
+  - lisi_score
+  - batch_mixing_report
+  - correct_batch
+
 - title: Diagnostics
   desc: >
     Questions about the data and the gating that the analysis itself cannot
     answer.
   contents:
-  - lisi_score
-  - batch_mixing_report
   - stats_threshold_drift
   - write_run_manifest
 

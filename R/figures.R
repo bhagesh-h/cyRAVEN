@@ -701,6 +701,15 @@ fig_density_by_sample <- function(cells, outfile, panel_label = "",
 fig_recon_diagnostics <- function(recon, outfile, max_points = 40000L,
                                   dpi = 300, dens_markers = NULL, colors = fcs_colors()) {
   if (!length(recon)) { warning("[fig] no recon records"); return(invisible(NULL)) }
+  # Fixed seed so the thinning below picks the same cells on a re-run, and the
+  # stream put back afterwards so drawing a figure cannot change which cells the
+  # embedding samples. Same guard, and the same reason, as fig_gating_qc().
+  had <- exists(".Random.seed", .GlobalEnv)
+  old <- if (had) get(".Random.seed", .GlobalEnv) else NULL
+  on.exit({
+    if (had) assign(".Random.seed", old, .GlobalEnv)
+    else if (exists(".Random.seed", .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv)
+  }, add = TRUE)
   set.seed(1L)
   thin <- function(x, n = max_points)
     if (length(x) > n) x[sort(sample.int(length(x), n))] else x
