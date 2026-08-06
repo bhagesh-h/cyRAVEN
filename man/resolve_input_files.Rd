@@ -18,3 +18,4 @@ output looks complete and nothing in it reveals the missing cohort. So any
 file whose name CONTAINS ".fcs" but did not match the pattern is listed as a
 warning with the exact flag needed to include it.
 }
+\keyword{internal}

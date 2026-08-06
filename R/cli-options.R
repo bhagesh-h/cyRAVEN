@@ -307,6 +307,7 @@ script_dir <- function() {
 #' file whose name CONTAINS ".fcs" but did not match the pattern is listed as a
 #' warning with the exact flag needed to include it.
 #' @param opt Named list of options. See build_option_list() for the full set.
+#' @keywords internal
 resolve_input_files <- function(opt) {
   pat <- opt$pattern %||% "[.]fcs$"
   fs <- character(0)

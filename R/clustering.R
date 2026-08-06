@@ -195,6 +195,29 @@ run_unsupervised_clusters <- function(cells, markers, n_clusters = 12L,
   method <- NA_character_
   codes <- NULL
 
+  # Seed and stream guard for BOTH branches.
+  #
+  # WHY IT IS HERE AND NOT ONLY IN som_train(). The guard used to sit inside
+  # som_train(), which covers the built-in path and nothing else. FlowSOM's
+  # metaClustering_consensus() takes a seed, but BuildSOM() does not: it draws
+  # its node initialisation from the global stream. So with the FlowSOM package
+  # installed, this function was neither reproducible (two calls with the same
+  # `seed` argument saw different stream states and built different maps) nor
+  # stream-safe (it left the stream advanced, which silently changes which cells
+  # every later stage subsamples). Neither showed up while FlowSOM was absent
+  # from the test environment, and both are exactly what a Suggests-dependent
+  # code path can hide.
+  #
+  # Setting the seed here makes the two branches behave the same way, which is
+  # the contract the `seed` argument already advertised.
+  had <- exists(".Random.seed", .GlobalEnv)
+  old <- if (had) get(".Random.seed", .GlobalEnv) else NULL
+  on.exit({
+    if (had) assign(".Random.seed", old, .GlobalEnv)
+    else if (exists(".Random.seed", .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv)
+  }, add = TRUE)
+  set.seed(seed)
+
   if (requireNamespace("FlowSOM", quietly = TRUE)) {
     res <- try({
       fs <- FlowSOM::ReadInput(Xs, transform = FALSE, scale = FALSE)
