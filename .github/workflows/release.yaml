@@ -66,10 +66,19 @@ jobs:
       - name: Check tag matches DESCRIPTION Version
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          desc <- read.dcf("DESCRIPTION")[1, "Version"]
+          # as.character() strips the names attribute. read.dcf() returns a
+          # matrix whose columns are the field names, and indexing one cell by
+          # column name KEEPS that name, so the value is c(Version = "0.1.0")
+          # rather than "0.1.0". identical() compares attributes, so it returned
+          # FALSE for two strings with the same bytes, while sprintf() dropped the
+          # name and reported "tag v0.1.0 does not match DESCRIPTION Version
+          # 0.1.0". The check could not pass for any tag.
+          desc <- as.character(read.dcf("DESCRIPTION")[1, "Version"])
           tag  <- sub("^refs/tags/v", "", Sys.getenv("GITHUB_REF"))
           if (!identical(desc, tag))
-            stop(sprintf("tag v%s does not match DESCRIPTION Version %s", tag, desc))
+            stop(sprintf("tag v%s does not match DESCRIPTION Version %s\n(tag %s, Version %s)",
+                         tag, desc, paste(charToRaw(tag), collapse = " "),
+                         paste(charToRaw(desc), collapse = " ")))
           cat("version", desc, "matches tag\n")
         shell: Rscript {0}
 
