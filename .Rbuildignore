@@ -27,3 +27,8 @@
 ^benchmark$
 ^logo$
 ^PUBLISHING\.md$
+# GitHub reads CITATION.cff from the REPOSITORY to render the "Cite this
+# repository" box, never from the tarball, so shipping it gains nothing and
+# R CMD check lists any unrecognised top-level file as a non-standard one.
+# inst/CITATION is the copy that ships and is what citation("cyRAVEN") reads.
+^CITATION\.cff$

@@ -1,0 +1,41 @@
+cff-version: 1.2.0
+message: "If you use cyRAVEN, please cite it as below."
+type: software
+title: "cyRAVEN: Gated Multi-Sample Flow Cytometry Embedding and Differential Analysis"
+abstract: >
+  An end-to-end workflow for batches of flow cytometry standard (FCS) files.
+  Gating thresholds are derived from each sample's own marker density rather than
+  transferred from fixed coordinates, populations are scored from a declarative
+  specification held in YAML, and one shared UMAP embedding is built per marker
+  panel. Differential abundance and differential state are tested on per-sample
+  summaries so that donors, not cells, are the replicates. Compositional
+  constraints on population percentages are handled with the centred log-ratio,
+  batch structure is quantified against a permutation null before any correction
+  is applied, and an unsupervised self-organising map clustering provides a
+  cross-check that can contradict the gate specification.
+authors:
+  # CFF requires the ORCID as a full URL, not the bare digits. DESCRIPTION holds
+  # the same identifier in the form R expects, which is digits only.
+  # `affiliation:` is still unset; add it here if you want it in the citation.
+  - given-names: "Bhagesh"
+    family-names: "Hunakunti"
+    email: "bhunakun@uni-bonn.de"
+    orcid: "https://orcid.org/0000-0002-5957-8005"
+version: 0.1.0
+date-released: "2026-08-06"
+license: GPL-3.0-or-later
+repository-code: "https://github.com/bhagesh-h/cyRAVEN"
+url: "https://bhagesh-h.github.io/cyRAVEN/"
+keywords:
+  - flow cytometry
+  - immunophenotyping
+  - gating
+  - UMAP
+  - differential abundance
+  - R
+# The methods cyRAVEN implements are due to their original authors. They are not
+# duplicated here because a CFF `references:` block requires a complete author
+# list per entry, and an incomplete one in a machine-readable file is worse than
+# none. inst/CITATION carries them: FlowSOM (Van Gassen et al. 2015), diffcyt
+# (Weber et al. 2019), UMAP (McInnes et al. 2018) and LISI (Korsunsky et al.
+# 2019). Run citation("cyRAVEN") to see them.

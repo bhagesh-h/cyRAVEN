@@ -3,7 +3,8 @@ citHeader("To cite cyRAVEN in publications, use:")
 bibentry(
   bibtype  = "Manual",
   title    = "cyRAVEN: Gated Multi-Sample Flow Cytometry Embedding and Differential Analysis",
-  author   = person("Bhagesh", "Hunakunti"),
+  author   = person("Bhagesh", "Hunakunti",
+                    comment = c(ORCID = "0000-0002-5957-8005")),
   year     = "2026",
   note     = sprintf("R package version %s", meta$Version),
   url      = "https://github.com/bhagesh-h/cyRAVEN"
