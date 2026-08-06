@@ -73,7 +73,7 @@ save_session <- function(path, state, keep_exprs = FALSE) {
   log_msg("saved session state: ", path, " (",
           round(file.size(path) / 1e6, 1), " MB",
           if (keep_exprs) ", includes raw expression matrices" else
-            ", derived state only \u2014 FCS re-read needed for raw events", ")")
+            ", derived state only, FCS re-read needed for raw events", ")")
   invisible(path)
 }
 

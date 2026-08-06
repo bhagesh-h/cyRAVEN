@@ -1,0 +1,206 @@
+---
+title: "Checking the result"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Checking the result}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+cyRAVEN labels cells using rules you wrote before you looked at the data. Those
+rules are a prediction, and predictions can be wrong. Every check on this page
+exists to find out whether yours was.
+
+Work through them in this order. The first two catch most problems.
+
+If you only have five minutes: open the two gate figures, check `staining_qc.csv`
+for excluded samples, and look at the `source` column of `thresholds_used.csv`.
+Anything that survives those three is probably worth believing.
+
+## Look at the gates before the numbers
+
+`recon_diagnostics.png` and `gating_qc.png` are drawn on every run and are the
+only two figures you should read before anything else. They show, per sample,
+where the scatter gate landed, where the singlet band sat, and where each marker
+threshold ended up on the density it was derived from.
+
+If a threshold sits on a shoulder instead of in a valley, you can see it here in
+a second. No table will tell you as quickly.
+
+## Did any sample fail staining?
+
+`staining_qc.csv` gives a verdict per sample. A sample with no separable CD45
+positive mode has nothing usable in it, and cyRAVEN excludes it and says so
+rather than letting an unstained tube contribute a frequency of zero to your
+group mean. Controls are recognised through the `is_control` column of the sample
+map and are excluded from testing without being called failures.
+
+`--include-qc-failed` overrides the exclusion when you want to look at what
+happened.
+
+## Does the phenotype match the label?
+
+`population_marker_heatmap.png` puts markers in rows and your populations in
+columns, z-scored across the run.
+
+In a clustering-first workflow this figure names the clusters. Here it does the
+opposite job: your populations already have names, so the figure is there to
+contradict them. If the column labelled "CD4 T cells" does not show high CD4 and
+low CD8, the gate is wrong, and you see it at a glance instead of inferring it
+from a frequency that looked odd.
+
+The figure outlines the cells your specification requires to be positive, reading
+the same `populations:` block the scoring used, so the check cannot drift away
+from the definitions it is checking.
+
+`cohort_composition_heatmap.png` sits next to it and normalises every group to
+the same notional cell count before splitting by population, so unequal sample
+numbers and acquisition depth cannot produce the pattern on their own.
+
+## Did the definition itself shift between groups?
+
+This is the check most worth understanding, and no clustering-based tool has an
+equivalent.
+
+Because each sample gets its own cut-off, there is a trap. Suppose the patient
+samples consistently need a lower CD4 cut-off than the controls. Then when you
+compare "CD4 T cells" between the two groups, you are not comparing the same
+thing in both. Part of any difference you find is a difference in where the line
+was drawn, not in how many cells the patients have.
+
+`threshold_drift_stats.csv` tests, for each protein, whether its cut-offs differ
+systematically between your groups, and flags the ones that do. If a protein is
+flagged, treat every cell type defined with it carefully: the gate is not
+constant across the comparison.
+
+## Does an independent grouping agree with you?
+
+Switch this on with `--cluster`. cyRAVEN groups the cells purely by how similar
+their protein levels are, never consulting your definitions, then compares the
+two answers. Four patterns come out of it.
+
+**A cluster that is mostly one of your labels.** Your definition and the data
+agree. This is the outcome you want.
+
+**A cluster whose cells are mostly labelled "other".** A real population exists
+that your list does not describe. Rules alone can never find this, because you
+cannot write a rule for something you have not thought of.
+
+**One of your labels spread across several clusters.** Your definition is coarser
+than the biology. The cells you are calling one type are at least two, and if
+those subtypes move in opposite directions between groups, the overall frequency
+will show nothing.
+
+**A label with far fewer cells than the cluster it sits in.** Your cut-off is in
+the wrong place. Say CD4 T cells come out at 0.3%, which would be almost none,
+while a cluster holding 20% of all cells is clearly CD4 bright and labelled
+"other". The cells are plainly there and the rule is rejecting them. Nothing in a
+frequency table could tell you this.
+
+Both readings are written to `cluster_gate_agreement_clusters.csv` and
+`cluster_gate_agreement_populations.csv`.
+
+## What was that undescribed cluster?
+
+Being told that cluster 7 matches nothing you named is not much use on its own.
+You cannot go back to the cytometer with a cluster number.
+
+`--explain-clusters` closes that gap. For each unrecognised cluster, cyRAVEN
+works out a short sequence of two-protein plots that would select those cells,
+which is exactly the form a person would use to draw the gate by hand. You could
+take the result to the instrument and reproduce it.
+
+The gates it proposes are polygons rather than rectangles, and that matters
+biologically. Real boundaries are often diagonal: CD4 against CD8 separates two T
+cell lineages along a slanted line, not a square corner. Forcing a rectangle onto
+a diagonal boundary either lets in cells that do not belong or throws away cells
+that do.
+
+Every score is measured on cells the fitting never saw, with the fitted score
+printed next to it. A flexible shape can memorise a few thousand cells, so a
+score measured on the same cells used to draw it will always look good. The gap
+between the two numbers tells you whether it is real.
+
+One caution. These are suggestions, not findings. A proposed gate says where some
+cells sit, not that they are a meaningful cell type, and it comes with no
+p-value. Nothing it produces feeds back into your frequencies or tests, which are
+identical whether you run it or not.
+
+Outputs: `cluster_gate_proposals.csv`, `cluster_gate_polygons.csv`, and one
+`cluster_gate_strategy_<k>.png` per cluster.
+
+## Is the difference really about age or sex?
+
+If your patients are children and your controls are adults, any immune difference
+you find could be a difference in age.
+
+Two things have to be true at once before a variable is a genuine problem: it has
+to differ between your groups, and it has to be related to the thing you are
+measuring. Age differing between groups is harmless if age has no bearing on the
+population you care about. So `confounding_diagnostics.csv` reports both facts
+and gives a plain verdict in a `confounder_risk` column.
+
+Statistically adjusting for age is a separate, opt-in step, and deliberately so.
+With eight patients and eight controls, a model that also has to estimate age and
+sex effects has very little information left for the comparison you actually
+want. Worse, if nearly all your patients are young and nearly all your controls
+are old, no amount of data can separate the two, because you have no young
+controls to learn from. The adjusted number that comes out is a guess dressed up
+with a confidence interval.
+
+`--rank-ancova` will fit the adjusted model where there is enough data, and
+labels every row `EXPLORATORY`. Where there is not, it writes `NOT FITTED` and
+the reason, rather than a number that would sit in the folder looking as solid as
+the others.
+
+## Is there a batch effect, and is it safe to remove?
+
+Samples processed on different days can differ for reasons that have nothing to
+do with the people they came from. Point cyRAVEN at the column identifying the
+processing day or run with `--batch-column`. If you do not, it uses the
+acquisition date stored in the files, when that varies.
+
+Two numbers come back, and you need both.
+
+**Is there a batch effect at all?** `batch_mixing_stats.csv` asks whether cells
+sit next to cells from their own batch more than they should. The raw score is
+meaningless on its own, because how mixed cells can possibly get depends on how
+many batches there are and how big each one is. So cyRAVEN shuffles the batch
+labels at random and recomputes, which gives the score this dataset would produce
+with no batch effect whatsoever. Your real score is compared against that.
+
+**Would removing it also remove your finding?** `batch_group_confounding.csv`
+measures how far batch membership and study group are the same thing. If every
+patient was run on Tuesday and every control on Thursday, they are the same
+thing, and there is no way to remove one without the other.
+
+What happens next follows from those two. If the batches are separable from your
+groups and the mixing is poor, `--correct-batch` lines up each protein's
+distribution across batches. It does this in a way that cannot reorder cells
+within a batch, so it can shift and stretch the values without inventing
+structure that was not there.
+
+If the two are too tangled, correction is refused and the run says why.
+`--force-batch-correction` overrides it, and that decision is recorded in the run
+manifest so anyone reading the results later can see it was made.
+
+One thing worth knowing about what correction does and does not touch. It affects
+the UMAP, the clustering, and the comparison between clusters and your gates. It
+does not affect your population frequencies, the brightness measurements, or the
+statistical tests, because those come from each sample's own cut-offs and are
+already immune to batch. What a batch effect really distorts is the single map
+built from all samples at once, and that is what gets fixed.
+
+## Could someone else reproduce this run?
+
+`run_manifest.txt` records the R version, the operating system, the version of
+every software package actually loaded, which version of the code was used and
+whether it had uncommitted edits, the exact command, and every setting in force.
+
+As long as the results folder and its manifest stay together, you can always say
+what produced the numbers, which is what a reviewer or a colleague picking the
+project up in two years will ask.

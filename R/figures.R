@@ -398,7 +398,7 @@ fig_umap_overview <- function(cells, outfile, panel_label = "",
   if (!length(plots)) { warning("[fig] nothing to plot"); return(invisible(NULL)) }
   fig <- patchwork::wrap_plots(plots, ncol = min(2L, length(plots))) +
     patchwork::plot_annotation(
-      title = paste0("Shared CD45+ UMAP", if (nzchar(panel_label)) paste0(" \u2014 ", panel_label) else ""),
+      title = paste0("Shared CD45+ UMAP", if (nzchar(panel_label)) paste0(", ", panel_label) else ""),
       theme = theme(plot.title = element_text(face = "bold", size = 14)))
   safe_ggsave(outfile, plot = fig, width = width, height = height, dpi = dpi,
              limitsize = FALSE)
@@ -536,10 +536,10 @@ fig_umap_overview_by_group <- function(cells, outfile, group_col,
   fig <- patchwork::wrap_plots(row_plots, ncol = 1) +
     patchwork::plot_annotation(
       title = paste0("Shared CD45+ UMAP: combined vs per-group",
-                     if (nzchar(panel_label)) paste0(" \u2014 ", panel_label) else ""),
+                     if (nzchar(panel_label)) paste0(", ", panel_label) else ""),
       subtitle = paste(
         "First facet in every row pools all groups; the rest are the SAME",
-        "shared embedding restricted to one group's cells \u2014 a cluster's",
+        "shared embedding restricted to one group's cells, a cluster's",
         "position is directly comparable across every facet."),
       caption = paste0("n = ", paste(sprintf("%s: %s", names(n_by_group),
                        format(as.integer(n_by_group), big.mark = ",")),
@@ -609,10 +609,10 @@ fig_marker_grid <- function(cells, markers, outfile, panel_label = "",
   fig <- patchwork::wrap_plots(plots, ncol = ncol) +
     patchwork::plot_annotation(
       title = paste0("Marker expression on the shared embedding",
-                     if (nzchar(panel_label)) paste0(" \u2014 ", panel_label) else ""),
+                     if (nzchar(panel_label)) paste0(", ", panel_label) else ""),
       subtitle = paste("asinh-transformed intensity; each panel has its OWN",
                        "colour scale, clipped to its 1st-99th percentile.",
-                       "\nBar labels give that marker's low/high value \u2014",
+                       "\nBar labels give that marker's low/high value,",
                        "colours are NOT comparable between panels."),
       theme = theme(plot.title = element_text(face = "bold", size = 13),
                     plot.subtitle = element_text(size = 9)))
@@ -663,7 +663,7 @@ fig_density_by_sample <- function(cells, outfile, panel_label = "",
                          labels = scales::label_number(accuracy = 1)) +
     facet_wrap(vars(.data[[facet_by]]), ncol = ncol) +
     labs(title = paste0("Cell density per ", pretty_label(facet_by),
-                        if (nzchar(panel_label)) paste0(" \u2014 ", panel_label) else ""),
+                        if (nzchar(panel_label)) paste0(", ", panel_label) else ""),
          subtitle = "shared embedding, log-scaled counts",
          x = "UMAP 1", y = "UMAP 2") +
     coord_equal() + theme_cyto(colors = colors)
@@ -825,7 +825,7 @@ fig_recon_diagnostics <- function(recon, outfile, max_points = 40000L,
   fig <- patchwork::wrap_plots(panels_ordered, ncol = ncol_grid, nrow = 3 * n_bands,
                                byrow = TRUE) +
     patchwork::plot_annotation(
-      title = "Initial QC diagnostics \u2014 inspect before trusting any downstream result",
+      title = "Initial QC diagnostics, inspect before trusting any downstream result",
       subtitle = paste("Row 1: scatter occupancy with the derived leukocyte gate (outlined).",
                        "Row 2: CD45 vs SSC-A with the derived cutoff (dashed).",
                        "Row 3: lineage-marker densities within CD45+.",
@@ -919,7 +919,7 @@ fig_gating_qc <- function(recon, outfile, dpi = 200, colors = fcs_colors()) {
         stringsAsFactors = FALSE)
     }
   }
-  if (!length(curves)) { log_msg("[fig] no gate QC data \u2014 skipped"); return(invisible(NULL)) }
+  if (!length(curves)) { log_msg("[fig] no gate QC data, skipped"); return(invisible(NULL)) }
   d <- do.call(rbind, curves)
   lab <- do.call(rbind, labs)
   lab$tag <- ifelse(lab$needs_review, paste0(lab$source, " (REVIEW)"), lab$source)
@@ -932,7 +932,7 @@ fig_gating_qc <- function(recon, outfile, dpi = 200, colors = fcs_colors()) {
     scale_colour_manual(values = c(`FALSE` = colors$threshold_ok, `TRUE` = colors$threshold_review)) +
     scale_fill_manual(values = pop_palette(length(unique(d$sample_id)), colors = colors), name = NULL) +
     facet_grid(sample_id ~ marker, scales = "free") +
-    labs(title = "Gating QC \u2014 every applied threshold on its own distribution",
+    labs(title = "Gating QC, every applied threshold on its own distribution",
          subtitle = paste("dashed line = applied cut, labelled with its source;",
                           "highlighted colour = needs review (quantile fallback)"),
          x = "asinh-transformed intensity", y = "density") +
@@ -1172,13 +1172,13 @@ fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort"
   markers <- intersect(markers, names(cells))
   markers <- markers[vapply(cells[markers], is.numeric, logical(1))]
   if (!length(markers)) {
-    log_msg("[fig] multigraph overlay: no numeric markers \u2014 skipped"); return(invisible(NULL)) }
+    log_msg("[fig] multigraph overlay: no numeric markers, skipped"); return(invisible(NULL)) }
 
   grp  <- as.character(cells[[group_col]])
   ok   <- !is.na(grp) & nzchar(trimws(grp))
   groups <- sort(unique(grp[ok]))
   if (length(groups) < 2L) {
-    log_msg("[fig] multigraph overlay: needs 2+ groups \u2014 skipped"); return(invisible(NULL)) }
+    log_msg("[fig] multigraph overlay: needs 2+ groups, skipped"); return(invisible(NULL)) }
 
   sub_of  <- if (is.null(subcluster)) rep(1L, nrow(cells)) else as.integer(subcluster)
   pop_all <- sort(unique(as.character(cells$population_label)))
@@ -1212,7 +1212,7 @@ fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort"
   }
   if (!length(curves)) {
     log_msg("[fig] multigraph overlay: no population had ", min_cells,
-            "+ cells in 2 groups \u2014 skipped"); return(invisible(NULL)) }
+            "+ cells in 2 groups, skipped"); return(invisible(NULL)) }
   d <- do.call(rbind, curves)
 
   # Cluster NUMBERS over the sorted population names. Deliberately the SAME
@@ -1308,7 +1308,7 @@ fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort"
     scale_colour_manual(values = pal_pop, labels = keylab, name = "Cluster",
       guide = guide_legend(override.aes = list(size = 2.5, alpha = 1), ncol = 1)) +
     facet_wrap(~ .panel, nrow = 1) +
-    labs(title = "Shared CD45+ embedding \u2014 pooled, then one panel per study",
+    labs(title = "Shared CD45+ embedding, pooled, then one panel per study",
          subtitle = paste("labels are cluster+subcluster (4a, 4b, ...) and key the peak panels",
                           "below; they sit at the same position in every panel, nudged apart",
                           "only where they would overprint"),
@@ -1367,10 +1367,10 @@ fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort"
     geom_line(linewidth = 0.5) +
     facet_wrap(~ lab, ncol = nmk, scales = "free_x") +
     scale_colour_manual(values = pal, name = "Study") +
-    labs(title = "Multigraph overlay \u2014 one peak per study, for every cluster x marker",
+    labs(title = "Multigraph overlay, one peak per study, for every cluster x marker",
          subtitle = paste("each curve is one study's distribution of that marker inside that",
                           "cluster, scaled to its own mode (FlowJo \"Count (%)\");",
-                          "read peak POSITION and SHAPE, not height \u2014 abundance is in",
+                          "read peak POSITION and SHAPE, not height, abundance is in",
                           "group_comparison.png"),
          x = "asinh-transformed intensity", y = "% of mode") +
     theme_cyto(9, colors = colors) +
@@ -1393,7 +1393,7 @@ fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort"
   # device directly.
   dpi_use <- max(36L, min(as.integer(dpi), floor(getOption("cyRAVEN.max_raster_px", 30000L) / max(W, H))))
   ttl <- paste0("Clusters and their marker profiles",
-                if (nzchar(panel_label)) paste0(" \u2014 ", panel_label) else "")
+                if (nzchar(panel_label)) paste0(", ", panel_label) else "")
   cap <- paste0("panels are cluster-subcluster-marker; subclusters are lettered and were fitted on the ",
                 "reference group only, then every study's cells assigned to the nearest reference centroid. ",
                 "Cluster numbers match population_codes.csv and the Population channel of the FlowJo export. ",

@@ -73,7 +73,7 @@
 #' @param mfi Per-sample x population x marker summary table.
 #' @keywords internal
 mfi_panel_key <- function(mfi) {
-  mfi$population <- paste0(mfi$population, " \u2014 ", mfi$marker)
+  mfi$population <- paste0(mfi$population, ", ", mfi$marker)
   mfi
 }
 
@@ -283,7 +283,7 @@ fig_marker_state <- function(mfi, outfile, group_of = NULL, stats = NULL,
   st <- NULL
   if (!is.null(stats)) {
     st <- stats[stats$measure == "pct_positive", , drop = FALSE]
-    if (nrow(st)) st$population <- paste0(st$population, " \u2014 ", st$marker)
+    if (nrow(st)) st$population <- paste0(st$population, ", ", st$marker)
     else st <- NULL
   }
   if (is.null(group_of)) {
@@ -439,7 +439,7 @@ fig_population_marker_heatmap <- function(mfi, outfile, scale_by = c("marker", "
          is.finite(d$median_asinh), , drop = FALSE]
   if (!nrow(d)) {
     log_msg("[fig] no QC-passing population x marker cell with ", min_cells,
-            "+ cells \u2014 phenotype heatmap skipped")
+            "+ cells, phenotype heatmap skipped")
     return(invisible(NULL))
   }
 
@@ -509,7 +509,7 @@ fig_population_marker_heatmap <- function(mfi, outfile, scale_by = c("marker", "
                          name = legend_lab) +
     labs(x = NULL, y = NULL,
          title = paste0("Population phenotype",
-                        if (nzchar(panel_label)) paste0(" \u2014 ", panel_label) else ""),
+                        if (nzchar(panel_label)) paste0(", ", panel_label) else ""),
          subtitle = wrap_plot_text(paste0(
            "Median of per-sample median arcsinh intensity",
            if (scale_by == "marker")
@@ -522,7 +522,7 @@ fig_population_marker_heatmap <- function(mfi, outfile, scale_by = c("marker", "
            "Aggregated across QC-passing samples only; a population x marker cell needs ",
            min_cells, "+ cells in a sample for that sample to contribute.\n",
            "GATE AUDIT: a population whose defining markers are not bright here has a ",
-           "threshold problem, not a biological one \u2014 check thresholds_used.csv."),
+           "threshold problem, not a biological one, check thresholds_used.csv."),
            w, pt = 7)) +
     theme_cyto(colors = colors) +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
@@ -580,7 +580,7 @@ fig_cohort_confusion <- function(cells, outfile, group_col = "cohort",
   if (!any(ok)) return(invisible(NULL))
   tb <- table(p[ok], g[ok])
   if (nrow(tb) < 1L || ncol(tb) < 2L) {
-    log_msg("[fig] fewer than 2 cohorts with labelled cells \u2014 confusion heatmap skipped")
+    log_msg("[fig] fewer than 2 cohorts with labelled cells, confusion heatmap skipped")
     return(invisible(NULL))
   }
   # Equalise cohorts, then read each population as a composition over cohorts.
@@ -625,7 +625,7 @@ fig_cohort_confusion <- function(cells, outfile, group_col = "cohort",
                          name = "% of\npopulation") +
     labs(x = NULL, y = NULL,
          title = paste0("Cohort composition of each population",
-                        if (nzchar(panel_label)) paste0(" \u2014 ", panel_label) else ""),
+                        if (nzchar(panel_label)) paste0(", ", panel_label) else ""),
          subtitle = wrap_plot_text(
            paste0("Each cohort normalised to ", norm_to,
                   " cells before the split is taken, so unequal sample ",

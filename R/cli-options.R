@@ -78,7 +78,7 @@ build_option_list <- function() list(
               help = paste("include declared samples (not controls) that fail staining",
                            "QC (no separable CD45+ mode, or below --min-cd45-pct) instead",
                            "of excluding them. Their pct_of_cd45_pos carries no real",
-                           "evidence \u2014 see staining_qc.csv's verdict for which samples",
+                           "evidence, see staining_qc.csv's verdict for which samples",
                            "were forced in, and treat their numbers with caution")),
   optparse::make_option("--viability-marker", type = "character", default = NULL,
               dest = "viability_marker", help = "viability dye name (default: auto-detect)"),
@@ -112,7 +112,7 @@ build_option_list <- function() list(
                            "inspection in the FlowJo GUI. Every default output is",
                            "still produced; this adds to them. FlowJo's command line",
                            "cannot compute a UMAP (it is a plugin), so the embedding",
-                           "is carried in as extra FCS parameters \u2014 see",
+                           "is carried in as extra FCS parameters, see",
                            "docs/flowjo_interactive.md")),
   optparse::make_option("--flowjo-outdir", type = "character", default = NULL,
               dest = "flowjo_outdir",
@@ -169,7 +169,7 @@ build_option_list <- function() list(
               dest = "rank_ancova",
               help = paste("additionally fit an EXPLORATORY covariate-adjusted",
                            "rank ANCOVA. Off by default: at single-digit n per",
-                           "cohort the adjustment is usually extrapolation \u2014",
+                           "cohort the adjustment is usually extrapolation,",
                            "read confounding_diagnostics.csv first")),
   optparse::make_option("--paired-column", type = "character", default = NULL,
               dest = "paired_column",
@@ -185,9 +185,9 @@ build_option_list <- function() list(
               dest = "batch_column",
               help = paste("column identifying the acquisition batch (run date,",
                            "operator, instrument). Enables the batch-mixing",
-                           "diagnostic. NOTE: this pipeline diagnoses batch",
-                           "effects and deliberately does not correct them \u2014",
-                           "see the README for why")),
+                           "diagnostic. Measuring the effect is separate from",
+                           "removing it: add --correct-batch to correct, which",
+                           "is refused when batch and group overlap too far")),
   optparse::make_option("--no-threshold-drift", action = "store_true", default = FALSE,
               dest = "no_threshold_drift",
               help = paste("skip the check for gating thresholds that differ",
@@ -264,7 +264,7 @@ build_option_list <- function() list(
               help = paste("project this run's cells into a previously saved",
                            "model instead of embedding fresh. Right for adding",
                            "more of the same kind of sample; wrong for a new",
-                           "panel or a new cell type \u2014 retrain instead")),
+                           "panel or a new cell type, retrain instead")),
   # DEST DELIBERATELY DOES NOT START WITH "cofactor".
   #
   # `$` on a list partial-matches, and optparse OMITS options whose default is
@@ -332,7 +332,7 @@ resolve_input_files <- function(opt) {
     }
     if (!rec && !length(fs) && length(list.dirs(opt$dir, recursive = FALSE)))
       log_msg("NOTE: no files matched at the top level of --dir, but it contains ",
-              "subdirectories \u2014 pass --recursive to search them")
+              "subdirectories, pass --recursive to search them")
   }
   fs <- unique(fs[file.exists(fs)])
 
@@ -357,6 +357,6 @@ resolve_input_files <- function(opt) {
       fs <- fs[!drop]
     }
   }
-  if (!length(fs)) stop("no FCS files found \u2014 pass --files or --dir")
+  if (!length(fs)) stop("no FCS files found, pass --files or --dir")
   fs
 }

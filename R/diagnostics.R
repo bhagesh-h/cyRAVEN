@@ -121,7 +121,7 @@ batch_mixing_report <- function(cells, batch_col, group_col = "cohort",
         is.finite(cells$umap_1) & is.finite(cells$umap_2)
   if (sum(ok) < 100L) return(NULL)
   if (length(unique(b[ok])) < 2L) {
-    log_msg("  batch diagnostic: only one level of '", batch_col, "' \u2014 skipped")
+    log_msg("  batch diagnostic: only one level of '", batch_col, "', skipped")
     return(NULL)
   }
 
@@ -252,7 +252,7 @@ fig_batch_diagnostic <- function(cells, report, outfile, batch_col,
     s$verdict, ".")
   if (!is.null(report$confounding))
     cap <- paste0(cap, "\nBatch vs group confounding: Cramer's V = ",
-                  report$confounding$cramers_v, " \u2014 ", report$confounding$verdict, ".")
+                  report$confounding$cramers_v, ", ", report$confounding$verdict, ".")
   cap <- paste0(cap,
     "\nDIAGNOSTIC ONLY: no batch correction is applied by this pipeline. ",
     "Computed on the 2-D embedding, so it measures batch structure as PLOTTED.")
@@ -260,7 +260,7 @@ fig_batch_diagnostic <- function(cells, report, outfile, batch_col,
   fig <- patchwork::wrap_plots(list(p1, p2), ncol = 2, widths = c(1.35, 1)) +
     patchwork::plot_annotation(
       title = paste0("Batch-effect diagnostic",
-                     if (nzchar(panel_label)) paste0(" \u2014 ", panel_label) else ""),
+                     if (nzchar(panel_label)) paste0(", ", panel_label) else ""),
       caption = cap,
       theme = ggplot2::theme(
         plot.title = element_text(size = 11, face = "bold"),
@@ -413,7 +413,7 @@ fig_threshold_drift <- function(thr, outfile, group_of, stats = NULL,
     facet_wrap(~ facet, scales = "free_y") +
     labs(x = NULL, y = "derived threshold (arcsinh units)",
          title = paste0("Gating-threshold drift across cohorts",
-                        if (nzchar(panel_label)) paste0(" \u2014 ", panel_label) else ""),
+                        if (nzchar(panel_label)) paste0(", ", panel_label) else ""),
          subtitle = paste0(
            "Each point is one sample's own derived cut for that marker. ",
            "Thresholds are derived PER SAMPLE by design, so some spread is expected ",
@@ -422,7 +422,7 @@ fig_threshold_drift <- function(thr, outfile, group_of, stats = NULL,
            "A marker labelled [DRIFT] has thresholds that differ systematically by cohort ",
            "(Kruskal-Wallis, BH-adjusted p < 0.05, gap exceeding within-cohort SD).\n",
            "For such a marker, part of any abundance difference in the populations it ",
-           "defines is a difference in the DEFINITION \u2014 see threshold_drift_stats.csv ",
+           "defines is a difference in the DEFINITION, see threshold_drift_stats.csv ",
            "for which populations are affected.")) +
     theme_cyto(colors = colors) +
     theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),

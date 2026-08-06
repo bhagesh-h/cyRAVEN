@@ -1,0 +1,218 @@
+---
+title: "Using cyRAVEN with cyCONDOR"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Using cyRAVEN with cyCONDOR}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+There are two ways to find cell types in cytometry data, and they make opposite
+mistakes.
+
+cyRAVEN takes rules you wrote and applies them, then checks whether the rules
+held. cyCONDOR groups cells by similarity and works out afterwards what each group
+was.
+
+For many projects the sensible thing is to run both, because each one is blind to
+its own kind of error.
+
+**Rules can only find what you thought of.** If your blood samples contain a cell
+population nobody has written a definition for, no amount of careful gating will
+reveal it. There is no rule for it to break.
+
+**Grouping cannot tell you a rule is wrong.** It will always return groups,
+whatever you give it, and it has no expectation to contradict. It also involves
+its own judgement calls, made after seeing the data: how many groups to ask for,
+which proteins to use, how to scale them. That moves the subjectivity somewhere
+else rather than removing it.
+
+Run both and each is checked by something that does not share its assumptions.
+This is established practice, not a novelty. The DAFi method was built on exactly
+this idea, using a gating strategy to steer the clustering, and it recovers rare
+populations that neither approach finds cleanly alone
+([Lee et al., 2018](https://pubmed.ncbi.nlm.nih.gov/29665244/)).
+
+## The division of labour
+
+| You want to know | Use | Because |
+|---|---|---|
+| Does population X differ between groups | cyRAVEN | Populations are defined in advance and tested with donors as replicates |
+| Are my gates in the right place | cyRAVEN | Threshold drift, the phenotype heatmap and the gate against cluster check all exist to say no |
+| Is there something here I did not name | Both | cyRAVEN flags the undescribed cluster, cyCONDOR characterises it properly |
+| What is that cluster, in gateable terms | cyRAVEN | `--explain-clusters` turns it into two-marker gates with held-out metrics |
+| Is there a developmental trajectory | cyCONDOR | Diffusion maps and Slingshot, which cyRAVEN does not have |
+| Can I transfer labels to a new cohort | cyCONDOR | Trained classifiers and label transfer |
+| I have FlowJo gates already | cyCONDOR | It reads `.wsp` workspaces, cyRAVEN only writes FCS out |
+| How many clusters are really there | cyCONDOR | Phenograph picks its own count instead of taking it as a setting |
+| Can I correct this batch effect safely | cyRAVEN | It measures the batch and group overlap first and refuses when correction would delete the finding |
+
+## Three questions, and how to answer them with both
+
+### "My CD4 T cell frequency dropped in the patient group. Is that real?"
+
+This is the question cyRAVEN was built for, and the trap is that a frequency can
+fall for reasons that have nothing to do with CD4 T cells.
+
+Run cyRAVEN with `--cluster`. Then read four things in order.
+
+`threshold_drift_stats.csv` first. If CD4 is flagged, the per-sample cuts moved
+systematically between your groups, and part of the drop is a change in the
+definition. Stop here and look at the densities.
+
+`compositional_concordance.csv` second. Percentages are forced to sum to 100, so
+if another population expanded, CD4 falls without losing a single cell. A finding
+that is significant on raw percentages but not on centred log-ratios is telling
+you exactly that.
+
+`cluster_gate_agreement_populations.csv` third. If CD4 T cells are scattered
+across several clusters, the label is covering more than one phenotype and the
+overall frequency is an average of things that may be moving in different
+directions.
+
+`confounding_diagnostics.csv` last, for whether age or sex differs between your
+groups and tracks the outcome.
+
+cyCONDOR is not needed for this one. Bring it in only if step three showed the
+label covering several phenotypes, in which case you want to know what they are.
+
+### "There is a cluster nobody expected. What is it, and does it matter?"
+
+This needs both tools and a specific order.
+
+Start with cyRAVEN and `--cluster --explain-clusters`. The gate against cluster
+table tells you a cluster is dominated by the catch-all label, which is the
+signal that your specification does not describe it.
+`cluster_gate_proposals.csv` then gives you a short sequence of two-marker gates
+that select those cells, with performance measured on held-out cells. That is
+already enough to go back to the cytometer and draw it.
+
+Now move to cyCONDOR for characterisation. Its per-marker plots
+(`plot_marker_ridgeplot`, `plot_marker_violinplot`, `plot_marker_dotplot`) show
+the full intensity distribution of that population rather than a single median,
+and `plot_marker_group_HM` compares it across your groups. If the cells look like
+they might sit on a differentiation axis, `runDM` and `runPseudotime` will tell
+you whether there is a trajectory through them.
+
+Finally, come back to cyRAVEN. Add the population to your `populations:` block
+using the markers the proposal named, rerun, and it is now a named population
+with a per-sample frequency and a proper test. The discovery was
+data-driven, the definition is written down, and the test is done on donors.
+
+That last step matters. A population found by clustering and tested by clustering
+on the same cells has been chosen because it was separable in these samples. Once
+it is a written gate, the next cohort tests it honestly.
+
+### "I need this to hold up across sites, or across three years of acquisition."
+
+The obstacle here is people, not reagents. Expert operators gating the same files
+report population sizes that differ by around a third, and once more than one
+person is analysing, that human variation accounts for the majority of the
+technical noise in the study
+([Cadwell et al., 2021](http://journal.pda.org/content/75/1/33)). Standardising
+the antibodies alone does not fix it. EuroFlow only got between-centre variation
+below 7% once they standardised the analysis as well
+([Kalina et al., 2012](https://www.nature.com/articles/leu2012122)).
+
+Use cyRAVEN as the primary analysis, because writing the definitions down and
+placing each cut-off from the data takes the operator out of the step where that
+variation enters. Keep the config file in version control next to the results,
+and keep `run_manifest.txt`, which records the software versions and the exact
+code used.
+
+Use cyCONDOR periodically as an independent audit. Cluster the accumulated data
+without reference to the specification and check that the populations you have
+been reporting still come back as coherent clusters. If a population starts
+splitting or merging, something changed in acquisition and the specification
+needs revisiting.
+
+## Running both on one dataset
+
+The two tools read the same FCS files. cyCONDOR wants an annotation table whose
+first column names the files, which is the same information a cyRAVEN sample map
+carries, so one file can be rewritten for the other rather than maintained twice.
+
+```r
+# cyRAVEN
+run_cyraven(list(
+  dir = "data/fcs/", outdir = "results_cyraven/",
+  sample_map = "data/sample_map.csv",
+  config = "data/my_panel.yaml",
+  group_column = "cohort", reference_group = "Healthy controls",
+  unsupervised = TRUE, explain_clusters = TRUE
+))
+
+# cyCONDOR, same files
+anno <- read.csv("data/sample_map.csv")
+write.csv(anno, "results_condor/anno_table.csv", row.names = FALSE)
+
+condor <- cyCONDOR::prep_fcd(
+  data_path = "data/fcs/", max_cell = 30000, useCSV = FALSE,
+  transformation = "auto_logi", remove_param = c("Time", "InFile"),
+  anno_table = "results_condor/anno_table.csv",
+  filename_col = "file", seed = 42)
+condor <- cyCONDOR::runPCA(condor, data_slot = "orig", seed = 42)
+condor <- cyCONDOR::runUMAP(condor, input_type = "pca", data_slot = "orig", seed = 42)
+condor <- cyCONDOR::runFlowSOM(condor, input_type = "pca", data_slot = "orig",
+                               nClusters = 8, seed = 42)
+```
+
+The `benchmark/` directory in the cyRAVEN repository runs both on a small public
+dataset and writes the comparison, if you want a worked example to copy.
+
+## Do not expect the pictures to match
+
+The two UMAPs will look nothing alike, and that is not a bug in either tool. On
+the benchmark dataset the difference comes from four things, in order of size:
+
+cyCONDOR embeds every event in the files. cyRAVEN embeds only cells that passed
+scatter, singlet, viability and CD45 gating. Part of the cyCONDOR map is debris.
+
+cyCONDOR includes the scatter channels in its feature set. Scatter spans decades
+and carries far more variance than any fluorescence marker, so it dominates the
+principal components the embedding is built on. Much of the structure in that map
+is cell size and granularity. cyRAVEN uses scatter to gate and then drops it.
+
+cyCONDOR embeds principal component scores, cyRAVEN embeds the marker matrix
+directly, which changes which cells are neighbours before the graph is built.
+
+The two use different transforms by default, so the same raw intensity sits in a
+different place on each axis.
+
+Comparing the two pictures directly is the mistake. Compare the tables.
+
+## How many groups is the right number?
+
+There is no right number, and this is worth being clear-eyed about.
+
+On the benchmark data, FlowSOM asked for 8 groups returns 8. Phenograph, which
+decides for itself, returns 24 on exactly the same cells. Both are reasonable
+algorithms behaving correctly. Neither number is the number of cell populations
+that exist in blood.
+
+The practical consequence: if a finding appears at 8 groups and disappears at 24,
+it is a finding about the setting rather than about the biology. Check that it
+survives a different choice before you believe it.
+
+If you want a default, FlowSOM is a safe one. It performed at or near the top
+across every dataset in the standard comparison of clustering methods, and it is
+fast enough to be a routine cross-check rather than an afternoon's work
+([Weber and Robinson, 2016](https://onlinelibrary.wiley.com/doi/full/10.1002/cyto.a.23030)).
+
+## Further reading
+
+- [Lee et al., 2018](https://pubmed.ncbi.nlm.nih.gov/29665244/), the DAFi method,
+  which uses a gating strategy to steer clustering.
+- [Briefings in Bioinformatics, 2025](https://academic.oup.com/bib/article/26/1/bbae633/7916377),
+  a systematic comparison of manual gating, clustering and automated gating
+  across 23 tools.
+- [Weber and Robinson, 2016](https://onlinelibrary.wiley.com/doi/full/10.1002/cyto.a.23030),
+  the benchmark that made FlowSOM the default choice.
+- [Kalina et al., 2012](https://www.nature.com/articles/leu2012122), how EuroFlow
+  achieved comparable results across centres.
+- [Cadwell et al., 2021](http://journal.pda.org/content/75/1/33), how much
+  variation between operators actually contributes.

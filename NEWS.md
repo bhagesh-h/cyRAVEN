@@ -59,7 +59,7 @@ is unchanged, the delivery is not.
   `system.file("scripts", "cyraven.R", package = "cyRAVEN")` and calls the same
   `run_cyraven()` that is now exported.
 * Mutable globals (`COLORS`, `REFERENCE_GROUP`) replaced by a private package
-  environment with accessors — `fcs_colors()`/`set_fcs_colors()` and
+  environment with accessors: `fcs_colors()`/`set_fcs_colors()` and
   `reference_group()`/`set_reference_group()`. A namespace is locked after
   loading, so the previous pattern could not work in a package; assigning into
   the global environment instead is something a package must never do.
@@ -76,7 +76,7 @@ route, and are covered by tests that assert bit-identity rather than closeness.
 
 * **Cofactor derivation is roughly two orders of magnitude faster.** The
   bisection evaluated `asinh()` over the entire background vector on each of its
-  40 iterations — around 264 million transcendental calls per sample at 300,000
+  40 iterations, around 264 million transcendental calls per sample at 300,000
   events. Because `asinh(./m)` is strictly increasing it maps order statistics to
   order statistics, and R's type-7 quantile interpolates between positions that
   depend only on `n` and `p`, never on `m`. The four order statistics the
@@ -93,7 +93,7 @@ route, and are covered by tests that assert bit-identity rather than closeness.
 
 * Each sample's raw expression matrix is released as soon as its transformed
   matrix exists, rather than being held for the whole run. Both were previously
-  alive simultaneously during population scoring — which is exactly where an
+  alive simultaneously during population scoring, which is exactly where an
   uncapped run was killed by the OOM reaper. Unstained controls are held back
   until every sample that could reference them has been scored, and
   `--keep-exprs` still retains everything.

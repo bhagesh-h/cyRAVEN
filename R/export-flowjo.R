@@ -96,7 +96,7 @@ export_flowjo_fcs <- function(cells, outdir, concat = TRUE, groups = TRUE,
   if (is.character(cells) && length(cells) == 1L) {
     if (!file.exists(cells)) {
       stop("cells file not found: ", cells,
-           "\nRun the main pipeline first \u2014 this consumes its output.", call. = FALSE)
+           "\nRun the main pipeline first, this consumes its output.", call. = FALSE)
     }
     cells <- utils::read.csv(cells, check.names = FALSE, stringsAsFactors = FALSE)
   }
@@ -231,7 +231,7 @@ export_flowjo_fcs <- function(cells, outdir, concat = TRUE, groups = TRUE,
   group_paths <- character(0)
   if (isTRUE(groups)) {
     if (!group_col %in% names(cells)) {
-      log("  NOTE no '", group_col, "' column \u2014 per-group FCS files skipped")
+      log("  NOTE no '", group_col, "' column, per-group FCS files skipped")
     } else {
       gv <- as.character(cells[[group_col]])
       # An unmatched patient carries NA here. Those cells are still real and
@@ -243,7 +243,7 @@ export_flowjo_fcs <- function(cells, outdir, concat = TRUE, groups = TRUE,
       # _ALL_SAMPLES under a different name.
       if (length(lv) < 2L) {
         log("  NOTE only one '", group_col, "' level (", lv,
-            ") \u2014 per-group FCS files skipped, _ALL_SAMPLES.fcs already is it")
+            "), per-group FCS files skipped, _ALL_SAMPLES.fcs already is it")
       } else {
         for (g in lv) {
           idx <- gv == g

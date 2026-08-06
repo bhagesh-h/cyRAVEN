@@ -198,7 +198,7 @@ fig_group_comparison <- function(freq, outfile, group_of, stats = NULL,
   d <- qc_pass_rows(d)
   d$group <- unname(group_of[d$sample_id])
   d <- d[!is.na(d$group), , drop = FALSE]
-  if (!nrow(d)) { log_msg("[fig] no grouped samples \u2014 group comparison skipped"); return(invisible(NULL)) }
+  if (!nrow(d)) { log_msg("[fig] no grouped samples, group comparison skipped"); return(invisible(NULL)) }
   groups <- sort(unique(d$group))
   # A single group is a legitimate layout, not a failure: it is exactly the
   # "all samples pooled" view used for the frequency overview, where the value of
@@ -332,7 +332,7 @@ fig_group_comparison <- function(freq, outfile, group_of, stats = NULL,
       tag_levels = "A",
       title = paste0(if (length(glev) > 1L) paste0(title_noun, " by group")
                      else title_noun,
-                     if (nzchar(panel_label)) paste0(" \u2014 ", panel_label) else ""),
+                     if (nzchar(panel_label)) paste0(", ", panel_label) else ""),
       # The subtitle states the measure and what every mark means, because a bar
       # chart with points is ambiguous otherwise: bar height could be mean, median
       # or sum, and whiskers could be SD, SEM or CI (section 1.3, section 3.2).
@@ -432,7 +432,7 @@ fig_population_frequencies <- function(freq, outfile, panel_label = "", dpi = 30
 #' @param fx The fx.
 #' @keywords internal
 fx_panel_key <- function(fx) {
-  fx$population <- paste0(fx$block, ": ", fx$population, " \u2014 ", fx$marker)
+  fx$population <- paste0(fx$block, ": ", fx$population, ", ", fx$marker)
   fx
 }
 

@@ -123,7 +123,7 @@ fingerprint_panels <- function(reads, labels = NULL) {
   })
   names(panels) <- pname
   if (length(panels) > 1L) {
-    log_msg(length(panels), " distinct panels detected \u2014 each gets its own embedding")
+    log_msg(length(panels), " distinct panels detected, each gets its own embedding")
     all_m <- unique(unlist(lapply(panels, `[[`, "markers")))
     for (p in panels) {
       miss <- setdiff(all_m, p$markers)
