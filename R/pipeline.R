@@ -1,9 +1,42 @@
+#' Fill an option list from the command-line defaults
+#'
+#' WHY THIS EXISTS. `run_cyraven()` is documented -- in the README, in the
+#' vignette, in its own examples -- as taking a PARTIAL list: name the two or
+#' three options that matter and let the rest default. That only worked when the
+#' list arrived from `optparse`, which supplies every default itself. Called
+#' directly with a short list, every unnamed option was NULL, and the failures
+#' that produced were silent and remote from their cause: `singlet_mad_k`
+#' missing made the singlet band `median +/- NULL * mad`, which selects no
+#' events, so every marker threshold resolved over an empty vector to NA, and
+#' the run reported that every population's markers were "not in panel" --
+#' naming the panel for a fault in the caller's option list.
+#'
+#' Taking the defaults from `build_option_list()` rather than restating them
+#' means there is one place a default is written down, and the programmatic and
+#' command-line paths cannot drift apart.
+#'
+#' @param opt Named list, possibly partial.
+#' @return `opt` with every unset option filled from its command-line default.
+#' @keywords internal
+fill_option_defaults <- function(opt) {
+  ol <- build_option_list()
+  dest <- vapply(ol, function(o) o@dest, character(1))
+  defs <- lapply(ol, function(o) o@default)
+  names(defs) <- dest
+  defs <- defs[nzchar(dest) & !vapply(defs, is.null, logical(1))]
+  # modifyList drops NULL entries on the right-hand side, which is what we want:
+  # explicitly passing NULL should mean "unset", not "override the default".
+  utils::modifyList(defs, opt %||% list())
+}
+
 #' run_cyraven
 #'
-#' @param opt Named list of options. See build_option_list() for the full set.
+#' @param opt Named list of options; anything omitted takes its command-line
+#'   default. See build_option_list() for the full set.
 #' @keywords internal
 #' @export
 run_cyraven <- function(opt) {
+  opt <- fill_option_defaults(opt)
   set.seed(opt$seed)
   fcs <- resolve_input_files(opt)
   dir.create(opt$outdir, showWarnings = FALSE, recursive = TRUE)
@@ -82,6 +115,7 @@ run_cyraven <- function(opt) {
   # ---- gate -----------------------------------------------------------------
   log_step("STEP 2 - deriving transform and gates")
   cofactors <- list(); gates <- list(); verdicts <- list(); recon <- list()
+  transforms <- list()
   for (p in fpr$panels) {
     sids <- p$samples
     # Cofactor sources, in priority order: an explicit --cofactor, a value
@@ -105,6 +139,25 @@ run_cyraven <- function(opt) {
            ", which cannot be used: the arcsinh transform divides by it. ",
            "Pass a positive --cofactor, or omit it to derive one from the data.")
     cofactors[[p$name]] <- cf
+
+    # The transform every later step applies. Built once per panel and threaded
+    # through, so gating, scoring, embedding and the figures all use the same
+    # one and none of them has to know which it is. Logicle parameters are
+    # pooled over the panel for the reason given in transform-methods.R: a
+    # per-file fit puts every sample on its own ruler and makes the
+    # cross-sample comparisons this package exists for meaningless.
+    tmethod <- opt$transform %||% "arcsinh"
+    transforms[[p$name]] <- if (identical(tmethod, "logicle")) {
+      lp <- derive_logicle_pooled(reads, sids, m = opt$logicle_m %||% 4.5,
+                                  seed = opt$seed %||% 42L)
+      if (is.null(lp))
+        stop("panel '", p$name, "': no logicle parameters could be derived")
+      log_msg(sprintf("%s: logicle transform, %d marker(s), pooled over %d sample(s)",
+                      p$name, length(lp), attr(lp, "n_samples_pooled") %||% NA))
+      make_transform("logicle", logicle = lp)
+    } else {
+      make_transform(tmethod, cofactor = cf)
+    }
     log_msg(p$name, ": cofactor ", round(cf, 1),
             if (!is.null(.cf_opt)) " (supplied)"
             else if (isTRUE(opt$first_sample_cofactor))
@@ -118,7 +171,8 @@ run_cyraven <- function(opt) {
         isTRUE(smap$is_control[smap$file == rd$file][1]) else NA
       g <- apply_gate_hierarchy(rd, cf, cfg_thr, control_ref = NULL,
                                 singlet_k = mad_k,
-                                viability_name = opt$viability_marker)
+                                viability_name = opt$viability_marker,
+                                transform = transforms[[p$name]])
       v <- staining_verdict(g, declared, min_cd45 * 1,
                             force_include = isTRUE(opt$include_qc_failed))
       log_msg("  ", v$verdict)
@@ -157,8 +211,10 @@ run_cyraven <- function(opt) {
     g <- gates[[s]]; rd <- reads[[s]]
     lin <- intersect(c("CD3", "CD4", "CD8", "CD14", "CD19", "CD56", "HLA-DR"),
                      names(rd$marker_cols))
+    .tr <- transforms[[fpr$assignment[[s]]]] %||%
+             make_transform("arcsinh", cofactor = g$cofactor)
     dens <- lapply(lin, function(m)
-      asinh(rd$exprs[g$masks$cd45_pos, rd$marker_cols[[m]]] / g$cofactor))
+      .tr$fn(rd$exprs[g$masks$cd45_pos, rd$marker_cols[[m]]], m))
     names(dens) <- lin
     recon[[s]] <- list(sample_id = s, panel = fpr$assignment[[s]],
                        verdict = verdicts[[s]]$verdict,
@@ -207,7 +263,8 @@ run_cyraven <- function(opt) {
     needed <- unique(c(needed, unlist(lapply(blocks, `[[`, "markers"))))
     avail   <- intersect(needed, names(rd$marker_cols))
     sc_need <- intersect(needed, names(rd$scatter_cols))
-    tmat <- vapply(avail, function(m) asinh(rd$exprs[, rd$marker_cols[[m]]] / cf),
+    tr <- transforms[[pn]] %||% make_transform("arcsinh", cofactor = cf)
+    tmat <- vapply(avail, function(m) tr$fn(rd$exprs[, rd$marker_cols[[m]]], m),
                    numeric(nrow(rd$exprs)))
     colnames(tmat) <- avail
     if (length(sc_need)) {
@@ -223,8 +280,8 @@ run_cyraven <- function(opt) {
     tdet <- list(); qdens <- list()
     for (m in avail) {
       cx <- if (!is.null(ctrl_s) && ctrl_s != s && m %in% names(reads[[ctrl_s]]$marker_cols))
-        asinh(reads[[ctrl_s]]$exprs[gates[[ctrl_s]]$masks$single_cells,
-                                    reads[[ctrl_s]]$marker_cols[[m]]] / cf) else NULL
+        tr$fn(reads[[ctrl_s]]$exprs[gates[[ctrl_s]]$masks$single_cells,
+                                    reads[[ctrl_s]]$marker_cols[[m]]], m) else NULL
       rr <- resolve_threshold(m, tmat[g$masks$cd45_pos, m], cfg_thr[[m]]$threshold, cx)
       thr[[m]] <- rr$threshold; tdet[[m]] <- rr
       qdens[[m]] <- tmat[g$masks$cd45_pos, m]
@@ -356,6 +413,45 @@ run_cyraven <- function(opt) {
     cells <- data.table::rbindlist(rows, use.names = TRUE, fill = TRUE)
     fcols <- intersect(feats, colnames(cells))
     .fmat <- as.matrix(cells[, fcols, with = FALSE])
+
+    # ---- optional batch correction ------------------------------------------
+    # Applied to the assembled marker matrix, after gating and scoring and
+    # before the embedding. That position is deliberate: the gate hierarchy and
+    # every threshold are derived PER SAMPLE and are already batch-local, so
+    # correcting before them would only fight the per-sample derivation, while
+    # correcting after the embedding would fix the picture and leave the
+    # statistics untouched.
+    #
+    # correct_batch() refuses when batch and group are confounded. That refusal
+    # is the feature, not an obstacle to it -- see batch-correct.R.
+    batch_info <- NULL
+    if (isTRUE(opt$correct_batch)) {
+      bcol <- opt$batch_column
+      if (is.null(bcol)) {
+        log_msg("  --correct-batch needs --batch-column; skipping correction")
+      } else {
+        # Both vectors come from the sample map rather than from group_of(),
+        # which is not resolved until the statistics stage several hundred lines
+        # below. The confounding check only needs the labels, and taking them
+        # from the map keeps this step independent of how groups are later
+        # merged with the patient table.
+        .col <- function(nm) if (!is.null(smap) && !is.null(nm) && nm %in% names(smap))
+          smap[[nm]][match(cells$sample_id, smap$sample_id)] else NULL
+        bvec <- .col(bcol)
+        gvec <- .col(opt$group_column)
+        if (is.null(bvec) || all(is.na(bvec))) {
+          log_msg("  batch column '", bcol, "' not found in the sample map; ",
+                  "skipping correction")
+        } else {
+          bres <- correct_batch(.fmat, bvec, gvec,
+                                max_cramers_v = opt$batch_max_cramers_v %||% 0.6,
+                                force = isTRUE(opt$force_batch_correction))
+          .fmat <- bres$tmat
+          for (cc in colnames(.fmat)) data.table::set(cells, j = cc, value = .fmat[, cc])
+          batch_info <- bres
+        }
+      }
+    }
 
     # ---- project into a saved embedding, or train a new one -----------------
     # Projection keeps coordinates comparable between runs, which is the whole

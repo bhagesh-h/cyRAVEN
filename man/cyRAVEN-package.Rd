@@ -6,7 +6,7 @@
 \alias{cyRAVEN}
 \title{cyRAVEN: Gated Multi-Sample Flow Cytometry Embedding and Differential Analysis}
 \description{
-\if{html}{\figure{logo.svg}{options: style='float: right' alt='logo' width='120'}}
+\if{html}{\figure{logo.png}{options: style='float: right' alt='logo' width='120'}}
 
 An end-to-end workflow for batches of flow cytometry standard (FCS) files. Gating thresholds are derived from each sample's own marker density rather than transferred from fixed coordinates, populations are scored from a declarative specification held in YAML, and one shared 'UMAP' embedding is built per marker panel. Differential abundance and differential state are tested on per-sample summaries so that donors, not cells, are the replicates, following the aggregation strategy of Weber and others (2019) \doi{10.1038/s42003-019-0415-5}. Compositional constraints on population percentages are handled with the centred log-ratio, batch structure is quantified against a permutation null rather than silently corrected, and an unsupervised self-organising map clustering provides a cross-check that can contradict the gate specification.
 }

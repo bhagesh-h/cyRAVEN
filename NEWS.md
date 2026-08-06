@@ -3,6 +3,27 @@
 First packaged release. Previously a set of command-line R scripts; the analysis
 is unchanged, the delivery is not.
 
+## Standalone coverage
+
+* New `--transform logicle` alongside the existing arcsinh path. Logicle is the
+  flow-cytometry convention: linear near zero, so compensated negative values
+  stay on scale rather than piling against an axis limit. Parameters are pooled
+  per PANEL, not fitted per file, so every sample stays on one ruler and
+  cross-sample medians remain comparable.
+* The transform choice is not cosmetic. On a seven-colour T-cell panel the
+  top-level populations agree to 0.1% between methods while the CCR7/CD45RA
+  memory subsets move by tens of percent, because under arcsinh the CCR7
+  threshold resolves to a density valley in some samples and a quantile fallback
+  in others. Logicle finds a valley in every sample. `thresholds_used.csv`
+  records which happened.
+* New `--correct-batch`, which aligns each marker across batches by monotone
+  quantile mapping. Being monotone means it cannot reorder cells within a batch,
+  so it corrects location and spread without inventing structure.
+* Batch correction REFUSES when Cramer's V between batch and group exceeds
+  `--batch-max-cramers-v`. Where the two overlap that far, removing the batch
+  and removing the finding are the same operation.
+  `--force-batch-correction` overrides and is recorded in the run manifest.
+
 ## Learned gating strategies
 
 * New: `--explain-clusters` derives a gating strategy for any cluster the

@@ -21,7 +21,7 @@ load_patient_table(
 \item{reference_date}{The reference date. Default \code{Sys.Date()}.}
 }
 \description{
-Robustness: detects the delimiter and the encoding (German exports are often
+Detects the delimiter and the encoding (German exports are often
 latin1), trims whitespace, tolerates umlaut spelling variants, converts
 decimal commas, and PASSES THROUGH any value not in the dictionary while
 reporting it -- silently mangling an unmapped clinical value would be worse

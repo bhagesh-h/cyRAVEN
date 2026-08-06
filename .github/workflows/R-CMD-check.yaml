@@ -1,6 +1,17 @@
-# Standard r-lib check matrix. Runs on the three platforms CRAN builds for,
-# against release, devel and oldrel, because a package that only builds on the
-# author's machine is not a package.
+# Single-platform R CMD check.
+#
+# WHY ONE RUNNER AND NOT THE USUAL THREE-OS MATRIX. The matrix version ran five
+# jobs (macOS, Windows, Ubuntu devel/release/oldrel). Every one of them had to
+# build the Bioconductor flow stack -- flowCore and its dependencies -- from
+# source on runners with no matching binaries, which took a long time and failed
+# on all five. A check that never goes green tells you nothing, and a slow one
+# that never goes green costs contributors time as well.
+#
+# Ubuntu release with the Posit binary repository is the configuration where the
+# dependencies actually resolve as binaries, so it is the one kept. Cross-platform
+# coverage is not lost so much as deferred: the package is pure R with no compiled
+# code, and r-universe (see release.yaml) builds and checks it on Windows, macOS
+# and Linux on every push anyway.
 on:
   push:
     branches: [main]
@@ -13,41 +24,41 @@ permissions: read-all
 
 jobs:
   R-CMD-check:
-    runs-on: ${{ matrix.config.os }}
-    name: ${{ matrix.config.os }} (${{ matrix.config.r }})
-    strategy:
-      fail-fast: false
-      matrix:
-        config:
-          - {os: macos-latest,   r: 'release'}
-          - {os: windows-latest, r: 'release'}
-          - {os: ubuntu-latest,  r: 'devel', http-user-agent: 'release'}
-          - {os: ubuntu-latest,  r: 'release'}
-          - {os: ubuntu-latest,  r: 'oldrel-1'}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
+      # FlowSOM is a Suggests. Without it R CMD check ERRORs on a missing
+      # suggested package rather than NOTEing, which would fail the build for a
+      # dependency the package is explicitly designed to run without.
+      _R_CHECK_FORCE_SUGGESTS_: false
     steps:
       - uses: actions/checkout@v4
+
       - uses: r-lib/actions/setup-pandoc@v2
+
       - uses: r-lib/actions/setup-r@v2
         with:
-          r-version: ${{ matrix.config.r }}
-          http-user-agent: ${{ matrix.config.http-user-agent }}
+          r-version: release
           use-public-rspm: true
-      # flowCore is a Bioconductor dependency, so the Bioconductor repository has
-      # to be on the search path before dependencies are resolved.
-      - name: Add Bioconductor repository
+
+      # flowCore is a Bioconductor dependency, so the Bioconductor repositories
+      # have to be on the search path before anything is resolved.
+      - name: Add Bioconductor repositories
         run: |
           install.packages("BiocManager")
-          cat(sprintf('options(repos = BiocManager::repositories())\n'),
+          cat('options(repos = BiocManager::repositories())\n',
               file = "~/.Rprofile", append = TRUE)
         shell: Rscript {0}
+
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::rcmdcheck
           needs: check
+
       - uses: r-lib/actions/check-r-package@v2
         with:
           upload-snapshots: true
-          build_args: 'c("--no-manual","--compact-vignettes=gs+qpdf")'
+          args: 'c("--no-manual", "--as-cran")'
+          build_args: 'c("--no-manual")'

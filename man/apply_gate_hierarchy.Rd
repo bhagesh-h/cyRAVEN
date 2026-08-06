@@ -11,7 +11,8 @@ apply_gate_hierarchy(
   control_ref = NULL,
   singlet_k = 3,
   viability_name = NULL,
-  cd45_name = "CD45"
+  cd45_name = "CD45",
+  transform = NULL
 )
 }
 \arguments{
@@ -28,6 +29,10 @@ apply_gate_hierarchy(
 \item{viability_name}{The viability name.}
 
 \item{cd45_name}{The cd45 name. Default \code{"CD45"}.}
+
+\item{transform}{Intensity transform from \code{\link[=make_transform]{make_transform()}}. Defaults to
+arcsinh with \code{cofactor}, which is what every caller got before the
+transform became selectable.}
 }
 \value{
 list of masks, derived geometry, thresholds, and a tidy counts table

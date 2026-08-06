@@ -98,16 +98,24 @@ detect_viability_marker <- function(markers, explicit = NULL) {
 #' @param singlet_k The singlet k. Default `3`.
 #' @param viability_name The viability name.
 #' @param cd45_name The cd45 name. Default `"CD45"`.
+#' @param transform Intensity transform from [make_transform()]. Defaults to
+#'   arcsinh with `cofactor`, which is what every caller got before the
+#'   transform became selectable.
 #' @return list of masks, derived geometry, thresholds, and a tidy counts table
 #' @export
 apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,
                                  singlet_k = 3, viability_name = NULL,
-                                 cd45_name = "CD45") {
+                                 cd45_name = "CD45", transform = NULL) {
   ex <- rd$exprs; sc <- rd$scatter_cols; mc <- rd$marker_cols
   sg <- derive_scatter_gate(ex, sc)
   sb <- derive_singlet_band(ex, sc, sg$mask, k = singlet_k)
 
-  tf <- function(m) asinh(ex[, mc[[m]]] / cofactor)   # transform one marker
+  # Default to arcsinh with the supplied cofactor so every existing caller keeps
+  # its behaviour unchanged; a caller that wants logicle passes the object built
+  # by make_transform() instead. The gate code below never learns which is in
+  # force, which is the point of routing both through one closure.
+  tr <- transform %||% make_transform("arcsinh", cofactor = cofactor)
+  tf <- function(m) tr$fn(ex[, mc[[m]]], m)           # transform one marker
 
   # A --config thresholds: entry is {threshold, source, needs_review} (what
   # write_config() emits and what the population-marker loop below reads via
