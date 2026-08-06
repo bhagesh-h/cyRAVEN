@@ -1,8 +1,8 @@
 ---
-title: "What cyRAVEN does not do"
+title: "Scope"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{What cyRAVEN does not do}
+  %\VignetteIndexEntry{Scope}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -11,97 +11,99 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
 ```
 
-Several things you might expect are missing on purpose. Each one below says why,
-and what would change our mind. If you need one of them today, the
-[cyCONDOR article](with-cycondor.html) shows how to run both tools on the same
-dataset.
+Nine methods available in comparable toolboxes are absent from cyRAVEN. Each
+section states the omission, the reasoning, and the condition under which it
+should be revisited. Where a method is required now, the
+[interoperability article](with-cycondor.html) covers combined use with cyCONDOR.
 
-## Harmony and CytoNorm
+## 1. Harmony and CytoNorm
 
-Batch correction itself is here. `--correct-batch` does monotone quantile
-alignment and refuses when batch and group are confounded.
+Batch correction is implemented. `--correct-batch` performs monotone quantile
+alignment and refuses above a configurable Cramér's *V* between batch and group.
 
-What is missing is those two implementations specifically. Both are heavy
-dependencies, and neither declines to run when correcting the batch and deleting
-your finding are the same operation. That refusal is the behaviour cyRAVEN
-treats as the point of the feature.
+These two implementations specifically are not wrapped. Both introduce
+substantial dependency weight, and neither declines to execute when batch and
+biological effect are collinear. That refusal is the behaviour cyRAVEN treats as
+the purpose of the feature.
 
-## Phenograph
+**Revisit when** a study design requires reference-based normalisation across
+instruments rather than distributional alignment within a batch.
 
-FlowSOM covers the same need and is faster at these cell counts. Phenograph picks
-its own cluster count instead of taking it as a setting, which is genuinely
-useful, but it needs `Rphenograph` or `Rphenoannoy`, and neither is on CRAN or
-Bioconductor. Depending on a GitHub-only package would break the reproducibility
-guarantee the container is there to provide.
+## 2. Phenograph
 
-Worth adding when the number of clusters becomes a question you are asking rather
-than a parameter you are setting.
+FlowSOM addresses the same requirement at lower cost at these event counts.
+Phenograph determines cluster count from the data rather than accepting it as a
+parameter, which is informative, but requires `Rphenograph` or `Rphenoannoy`.
+Neither is distributed through CRAN or Bioconductor, and a GitHub-only dependency
+is incompatible with the reproducibility guarantee the container provides.
 
-## diffcyt, limma and mixed models
+**Revisit when** cluster count is the quantity under investigation rather than a
+setting.
 
-The rank tests cyRAVEN runs answer the same questions without the distributional
-assumptions, which is the better trade at single-digit n per group.
+## 3. diffcyt
 
-Worth adding when your groups reach fifteen or more samples each. That is roughly
-where the empirical Bayes prior starts earning its place and where a mixed model
-can absorb repeated measures properly.
+The rank tests address the same hypotheses without distributional assumptions,
+which is the correct trade at single-digit *n* per group.
 
-## Per-marker cofactors
+**Revisit at** approximately fifteen samples per group, where the empirical Bayes
+prior becomes informative and mixed models can accommodate repeated measures.
 
-`derive_cofactor()` already works out per-marker candidates and returns them in
-`attr(cf, "per_marker")`. Applying them is not wired up.
+## 4. Per-marker cofactors
 
-Doing so would change the arcsinh scale channel by channel, which moves every
-threshold, every marker median and every distance in the UMAP. That is a large
-methodological change and it cannot be validated without rerunning and rereading
-every gating QC figure. The data needed to make the decision is collected, so if
-your gating QC shows channels whose backgrounds genuinely differ in scale, the
-argument for switching can be made from your own run.
+`derive_cofactor()` computes per-marker candidates and returns them in
+`attr(cf, "per_marker")`. Application is not implemented.
 
-## Pseudotime and trajectories
+Applying them alters the arcsinh scale per channel, displacing every threshold,
+marker median and embedding distance. Validation requires re-derivation and
+re-inspection of every gating QC figure in the affected dataset.
 
-A trajectory assumes a continuous developmental process. Peripheral blood
-immunophenotyping panels mostly measure populations that have finished
-differentiating, and a trajectory fitted to those is an artefact of the fitting
-rather than a finding.
+**Revisit when** gating QC demonstrates channels whose background distributions
+differ in scale. The data required for that judgement is already collected.
 
-Worth adding when the panel gains a genuine developmental axis. cyCONDOR wraps
-diffusion maps and Slingshot if you need one now.
+## 5. Trajectory inference
 
-## Supervised cell-type classifiers
+Pseudotime methods assume a continuous differentiation process sampled across its
+extent. Peripheral blood immunophenotyping panels predominantly measure
+terminally differentiated populations, where a fitted trajectory reflects the
+fitting procedure rather than a developmental process.
 
-Label transfer models are standard elsewhere. Here the labels come from a gating
-specification you wrote, so a classifier trained on them can only learn to
-reproduce that specification, errors included.
+**Revisit when** the panel resolves a developmental axis, for example thymic
+emigrants or plasmablast maturation. cyCONDOR provides diffusion maps and
+Slingshot.
 
-The unsupervised clustering cross-check is the better tool for the same job,
-because it does not consult your labels at all.
+## 6. Label transfer
 
-Worth adding when an externally annotated reference dataset exists to train
-against.
+Classifier-based cell type assignment is standard elsewhere. Here the training
+labels originate from a gating specification, so a classifier trained on them
+reproduces that specification including its errors.
 
-## Reading FlowJo workspaces
+Unsupervised cluster concordance is the stronger check for the same purpose,
+since it does not consult the labels.
 
-cyRAVEN writes FlowJo files, it does not read them. Parsing a `.wsp` workspace
-needs `CytoML` and `flowWorkspace`, a heavy pair of dependencies, for the inverse
-of what the package is for.
+**Revisit when** an externally annotated reference dataset is available for
+training.
 
-Worth adding when manual FlowJo gates need to be the input rather than the
-output.
+## 7. FlowJo ingestion
 
-## Cell-level differential expression
+cyRAVEN exports FCS with embedding coordinates as additional parameters. It does
+not read gates from a `.wsp` workspace, which requires `CytoML` and
+`flowWorkspace` for the inverse of the package's function.
 
-Absent on purpose, for the reason the whole package is built around: an FCS file
-holds as many cells as somebody chose to acquire, so a test over pooled cells has
-a sample size set by acquisition time. The tools that do offer a cell-level
-Wilcoxon ship it with a warning against using it.
+**Revisit when** manual FlowJo gates are required as input rather than output.
 
-The cell-level view is available descriptively in `subcluster_marker_shifts.csv`,
-which carries effect sizes and no p-values. That is the honest form for this kind
-of number.
+## 8. Cell-level testing
 
-## Building a compensation matrix
+Absent for the reason in section 1 of the [statistics
+article](statistics.html): event counts are set by acquisition duration, so a
+test over pooled events derives its degrees of freedom from instrument time.
+Toolboxes providing a cell-level Wilcoxon distribute it with a warning against
+its use.
 
-cyRAVEN applies a spillover matrix when a file carries one. It will not build one
-from single-stain controls. That belongs in acquisition software where you can
-see what you are adjusting.
+The cell-level view is available descriptively in
+`subcluster_marker_shifts.csv`, which reports effect sizes without p-values.
+
+## 9. Compensation matrices
+
+cyRAVEN applies the spillover matrix stored in the FCS keyword block and reports
+its absence. It does not compute one from single-stain controls, which belongs in
+acquisition software where the controls can be inspected.

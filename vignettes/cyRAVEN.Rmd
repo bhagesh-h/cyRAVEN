@@ -1,8 +1,8 @@
 ---
-title: "Getting started with cyRAVEN"
+title: "Workflow"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Getting started with cyRAVEN}
+  %\VignetteIndexEntry{Workflow}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -16,28 +16,24 @@ set.seed(1)
 library(cyRAVEN)
 ```
 
-## What the package is for
+## 1. Scope
 
-You have a folder of files from a cytometer, one per person, and a gating
-strategy written down somewhere. cyRAVEN applies that strategy to every file,
-counts the cell types, compares your groups, and then spends the rest of its
-effort telling you when not to believe the answer.
+cyRAVEN quantifies populations declared in advance across a batch of FCS files
+and evaluates whether the declaration held. The pipeline is a single call; every
+stage is also an exported function callable in isolation, so a step can be
+replaced without forking the package.
 
-One principle runs through all of it, and it is worth stating first.
+One constraint governs the design and is stated before the stages.
 
-> The sample size is the number of people, not the number of cells.
+> The unit of replication is the donor, not the event.
 
-A cytometer records until someone stops it, so one file might contain 200,000
-cells and the next 4 million. If the statistics treat cells as the unit, your
-sample size is really a measure of how long the machine ran, and a single donor
-whose sample was recorded for longer can produce an apparently overwhelming
-result on their own.
+Event counts are set by acquisition duration rather than by study design.
+Inference over events sets the degrees of freedom from instrument time and allows
+one deeply acquired donor to determine a group result. Every test aggregates to
+one value per sample before estimation. Quantities that cannot be aggregated are
+reported with effect sizes and no p-value.
 
-Every test here reduces each sample to one number first. Anything that cannot be
-reduced that way is reported with an effect size and no p-value, which marks it
-as something to follow up rather than something established.
-
-## One call does the whole thing
+## 2. Invocation
 
 ```r
 run_cyraven(list(
@@ -54,7 +50,7 @@ run_cyraven(list(
 ))
 ```
 
-The same thing from a shell, which is how it usually gets run:
+Command-line equivalent:
 
 ```sh
 Rscript "$(Rscript -e 'cat(system.file("scripts","cyraven.R",package="cyRAVEN"))')" \
@@ -63,27 +59,23 @@ Rscript "$(Rscript -e 'cat(system.file("scripts","cyraven.R",package="cyRAVEN"))
   --group-column cohort --reference-group "Healthy controls"
 ```
 
-Progress goes to stderr through `message()`, so you can silence or capture it:
+Progress is emitted through `message()` and directed to stderr:
 
 ```r
 options(cyRAVEN.verbose = "none")     # or "inform" (default), or "debug"
 ```
 
-## The stages, and why each one is there
+## 3. Stages
 
-Every stage is also a function you can call by itself. That is the reason for the
-package layout: if you disagree with a step, you can replace it without forking
-the pipeline.
+### 3.1 Read
 
-### 1. Read
+`read_fcs_resolved()` resolves channels to marker symbols from `$PnS` with
+fallback to `$PnN`, and applies the acquisition spillover matrix where the file
+carries one. Spectral instruments write unmixed data with no matrix, so
+`maybe_compensate()` detects and reports rather than assuming; applying
+compensation twice is as damaging as omitting it.
 
-`read_fcs_resolved()` works out a marker name for each channel from `$PnS`,
-falling back to `$PnN`, and applies the spillover matrix if the file carries one.
-Spectral instruments write already-unmixed data with no matrix, so
-`maybe_compensate()` checks and reports instead of assuming either way.
-Compensating twice is as wrong as not compensating at all.
-
-### 2. Transform
+### 3.2 Transform
 
 ```{r cofactor}
 set.seed(42)
@@ -93,64 +85,56 @@ cf <- derive_cofactor(ex, setNames(1:4, colnames(ex)))
 round(as.numeric(cf), 1)
 ```
 
-The arcsinh cofactor decides how much of the near-zero region gets stretched out.
-The usual default of 5 comes from mass cytometry. On spectrally unmixed flow data
-it expands the background band until noise dominates every distance you care
-about, so cyRAVEN derives one instead of assuming it. Each marker is bisected
-until the interquartile range of its background bulk hits a target, and the panel
-takes the median of those.
+The arcsinh cofactor governs the width of the quasi-linear region near zero. The
+conventional value of 5 derives from mass cytometry and over-expands the
+background band on spectrally unmixed fluorescence data. Each marker is bisected
+until the interquartile range of its background distribution reaches a target,
+and the panel adopts the median. `derive_cofactor_pooled()` estimates across
+samples so that a single weakly stained file does not set the scale on which
+every threshold in the run is computed.
 
-`derive_cofactor_pooled()` does the same across several samples rather than one,
-so a single weakly stained file cannot set the scale that every threshold in the
-run is then computed on.
-
-### 3. Gate
-
-Thresholds come from each sample's own density, not from coordinates copied
-between samples:
+### 3.3 Gate
 
 ```{r valley}
-x <- c(rnorm(8000, 0, 0.4), rnorm(2000, 4, 0.5))   # a clean bimodal marker
+x <- c(rnorm(8000, 0, 0.4), rnorm(2000, 4, 0.5))   # bimodal marker
 round(density_valley(x), 2)
 ```
 
-`density_valley()` returns `NA` when a marker is unimodal, which is the honest
-answer. `resolve_threshold()` then tries an unstained control if one exists, and
-falls back to a flagged quantile if not. Where every threshold came from is
-recorded in `thresholds_used.csv`.
+Thresholds are placed at the density minimum within each sample.
+`density_valley()` returns `NA` for unimodal distributions, after which
+`resolve_threshold()` attempts a declared unstained control and falls back to a
+flagged quantile. Derivation is recorded per threshold in `thresholds_used.csv`.
 
-Per-sample thresholds are what a human gater does and they handle staining
-variation correctly. They also mean a population's definition can move between
-groups, which is why `stats_threshold_drift()` exists.
+Per-sample thresholding accommodates staining variation but permits the
+definition of a population to differ between groups, which
+`stats_threshold_drift()` exists to detect.
 
-### 4. Score populations
-
-Populations are a specification you write, not code:
+### 3.4 Score
 
 ```{r spec}
 str(default_population_spec()[["CD3 pos CD4 pos"]])
 ```
 
-Each entry maps a marker to `above`, `below` or `intermediate`. Editing the YAML
-changes the analysis without touching any R.
+Populations are evaluated as Boolean conjunctions of marker directions read from
+YAML. Editing the specification changes the analysis without modifying R code.
 
-### 5. Embed
+### 3.5 Embed
 
 ```{r umap, eval = FALSE}
 emb <- run_umap(mat, n_neighbors = 30, min_dist = 0.3, seed = 42)
 ```
 
-`select_umap_features()` picks the features and drops scatter, viability, time
-and the height and width duplicates of area channels. Keeping those was the
-single biggest cause of a useless embedding in the template this package grew
-out of. `plan_subsample()` then takes an equal number of cells from each sample,
-so the deepest file cannot decide the shape of the manifold.
+`select_umap_features()` excludes scatter, viability, time and the height and
+width duplicates of area channels; retaining these was the principal cause of
+uninformative embeddings in the precursor implementation. `plan_subsample()`
+draws equal cell numbers per sample so that acquisition depth does not determine
+the manifold.
 
-Pass `ret_model = TRUE` and later batches can be projected into the same space
-with `project_umap()` instead of every coordinate moving. Asking uwot to retain
-the model does change the embedding slightly, which `?run_umap` explains.
+`ret_model = TRUE` retains the model for projection of later batches through
+`project_umap()`, which holds coordinates fixed between runs. Model retention
+alters the embedding; see `?run_umap`.
 
-### 6. Test
+### 3.6 Test
 
 ```{r stats}
 freq <- data.frame(
@@ -164,79 +148,69 @@ res <- stats_group_comparison(freq, grp, reference = "HC")
 res[, c("population", "comparison_group", "n_reference", "cliffs_delta", "p_value")]
 ```
 
-`stats_marker_state()` does the same for marker intensity inside a population,
-and tests both the median and the fraction positive, because a shift that affects
-only part of a population moves one of those and not the other.
+`stats_marker_state()` applies the same treatment to marker expression within a
+population, testing median intensity and percent positive separately because a
+shift confined to a subset moves one and not the other.
 
-### 7. Diagnose
+### 3.7 Diagnose
 
-This is the stage that decides how much of the rest you should believe. The
-[diagnostics article](diagnostics.html) covers all of it; in short:
+Four outputs constrain interpretation of the preceding stages. The
+[diagnostics article](diagnostics.html) covers each in full.
 
-`batch_mixing_report()` measures how strongly acquisition batch structures the
-embedding, against a permutation null, and separately how far batch overlaps with
-your study group. Correction is available through `--correct-batch` and is
-refused when that overlap is too large, because past a point removing the batch
-and removing your finding are the same operation.
+`batch_mixing_report()` quantifies batch structure in the embedding against a
+permutation null and reports Cramér's *V* between batch and group. Correction
+through `--correct-batch` is refused above a configurable *V*, where batch and
+biological effect are not separable.
 
-`stats_threshold_drift()` asks whether a marker's gate moves systematically
-between groups, which would make part of any abundance difference definitional
-rather than biological.
+`stats_threshold_drift()` tests whether marker thresholds separate by group,
+which would render an abundance difference partly definitional.
 
-`stats_confounding()` asks whether age or sex is both unbalanced across groups
-and associated with the outcome. Those two facts together are what make something
-a confounder.
+`stats_confounding()` reports whether a covariate both differs across groups and
+associates with the outcome, the two conditions jointly defining a confounder.
 
-`cluster_gate_agreement()` compares unsupervised clusters against your gate
-labels. It is the only output that can find a population your specification never
-described, or show you that a gate is rejecting cells that obviously belong to
-it.
+`cluster_gate_agreement()` cross-tabulates declared labels against unsupervised
+clusters and is the only output capable of identifying a population absent from
+the specification, or a threshold rejecting events that belong to its population.
 
-### 8. Explain
+### 3.8 Explain
 
-`cluster_gate_agreement()` can tell you a cluster matches nothing you named. It
-cannot tell you what the cluster is, which leaves you holding a cluster number
-and a cell count and nothing you can take back to the instrument.
+`cluster_gate_agreement()` identifies a cluster matching no declared population
+but cannot characterise it, leaving a cluster index and a cell count.
 
-`explain_cluster()` runs the gating stage backwards to close that gap. Given a
-set of labelled cells it picks the two most discriminating markers, fits a convex
-polygon in that plane, keeps the cells inside it, and repeats. That is the shape
-of a manual gating strategy, which is why the answer can be drawn by hand.
+`explain_cluster()` inverts the gating stage. Given labelled events it selects
+the two most discriminating markers, fits a convex polygon in that plane, retains
+the enclosed events and recurses, producing the topology of a manual gating
+strategy.
 
 ```r
 st <- explain_cluster(marker_matrix, cluster_id == 7)
-st$summary        # marker pair and metrics per level
+st$summary               # marker pair and metrics per level
 st$levels[[1]]$polygon   # vertices, in arcsinh units
 ```
 
-A polygon rather than more thresholds, because a conjunction of one-dimensional
-cuts is an axis-aligned rectangle, and a rectangle laid over a diagonal boundary
-has to either let contaminants in or throw real cells away.
-`derive_singlet_band()` is already a hand-written instance of that same problem.
+Convex polygons rather than thresholds: a conjunction of one-dimensional cuts is
+an axis-aligned rectangle, and an oblique boundary constrained to a rectangle
+must admit contaminants or exclude genuine events. `derive_singlet_band()` is a
+hand-written instance of the same geometry.
 
-Two things to keep in mind when reading the output. Every metric is computed on
-cells held out of the fit, with the in-sample value printed next to it, because
-eight free half-planes can memorise a few thousand cells and the gap between
-those two numbers tells you whether that happened. And the whole stage is
-descriptive. It says where cells sit in marker space, not that they are a real
-population. It carries no p-value, and nothing it produces feeds back into the
-analysis.
+Metrics are computed on held-out events with the resubstitution value alongside,
+since eight free half-planes can memorise a few thousand events. The stage is
+descriptive: it carries no p-value and scored frequencies are identical whether
+it runs or not.
 
-### 9. Report
+### 3.9 Report
 
-Figures, CSVs, and `write_run_manifest()`, which records the R version, package
-versions, the git commit and whether the checkout was dirty, the full
-invocation, and every input file with its size and modification time. It is
-written before the expensive stages and rewritten on the way out, so a run that
-crashes leaves a manifest saying `status: failed` rather than leaving nothing.
+Figures, tables, and `write_run_manifest()`, which records R version, package
+versions, git commit and working-tree state, the full invocation, and every input
+file with size and modification time. The manifest is written before the
+expensive stages and rewritten at completion, so an interrupted run records
+`status: failed`.
 
-## Where to go next
+## 4. Further reading
 
-- [Gating and populations](gating.html), for how to write your own specification.
-- [Checking the result](diagnostics.html), for everything that can tell you the
-  gates were wrong.
-- [Statistics](statistics.html), for why these tests and not others.
-- [Using cyRAVEN with cyCONDOR](with-cycondor.html), if you want a
-  clustering-first view alongside this one.
-- `?run_cyraven` for the full option list, and
-  `system.file("examples", package = "cyRAVEN")` for template metadata files.
+- [Gating](gating.html), for threshold derivation and specification syntax.
+- [Diagnostics](diagnostics.html), for the outputs that falsify a specification.
+- [Statistics](statistics.html), for test selection and its assumptions.
+- [Interoperability](with-cycondor.html), for combined use with cyCONDOR.
+- `?run_cyraven` for the option list;
+  `system.file("examples", package = "cyRAVEN")` for metadata templates.
