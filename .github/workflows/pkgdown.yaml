@@ -1,8 +1,16 @@
+# WHY THERE IS NO `release` TRIGGER.
+#
+# There was one, and it is half the reason deployments were timing out. Tagging a
+# release on a commit that was just pushed to main fires this workflow twice
+# within seconds. Both runs push to gh-pages, both spawn GitHub's own
+# pages-build-deployment, and Pages deployments serialise: the second sits in
+# deployment_in_progress waiting for the first and hits the ten-minute ceiling
+# with "Timeout reached, aborting!". A release of a commit already on main
+# produces byte-identical documentation, so the second build was never adding
+# anything to cancel out.
 on:
   push:
     branches: [main]
-  release:
-    types: [published]
   workflow_dispatch:
 
 name: pkgdown
@@ -11,8 +19,16 @@ permissions: read-all
 jobs:
   pkgdown:
     runs-on: ubuntu-latest
+    # cancel-in-progress, not queueing. Two pushes in quick succession used to
+    # mean two builds and two deployments racing each other; now the newer push
+    # kills the older build, because the older site is about to be replaced
+    # anyway and the only thing waiting for it achieves is a timeout.
     concurrency:
       group: pkgdown-${{ github.event_name != 'pull_request' || github.run_id }}
+      cancel-in-progress: true
+    # A hung build otherwise holds the concurrency group for the six-hour default
+    # and every later push queues behind it.
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
@@ -35,5 +51,20 @@ jobs:
         shell: Rscript {0}
       # v4.8.0 is the first release on the Node 24 runtime; 4.5.0 ran on Node 20,
       # which the runners now force onto 24 and warn about.
+      #
+      # single-commit REPLACES gh-pages with one commit each time, instead of
+      # adding to its history. The branch was previously deployed with
+      # clean: false, so every build layered its output on top of every earlier
+      # build: files pkgdown had stopped generating were never removed, and the
+      # branch the Pages builder has to check out grew with each release. A
+      # pkgdown site is a few hundred small files, so that accumulation is what
+      # the deployment step was spending its ten minutes on.
+      #
+      # Nothing is lost by discarding that history. gh-pages is build output; the
+      # source it came from is in main, and the commit it was built from is
+      # recorded in the deploy message.
       - uses: JamesIves/github-pages-deploy-action@v4.8.0
-        with: {clean: false, branch: gh-pages, folder: docs}
+        with:
+          branch: gh-pages
+          folder: docs
+          single-commit: true

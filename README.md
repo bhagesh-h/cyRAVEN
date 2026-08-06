@@ -14,7 +14,8 @@ differential state testing.
 
 Turns a directory of FCS files into population frequencies, marker expression, a
 shared UMAP and between-group statistics. Every threshold is placed within the
-sample it applies to, and four diagnostics test whether the gating strategy held.
+sample it applies to, every frequency carries the uncertainty of the cut that
+produced it, and five diagnostics test whether the gating strategy held.
 
 ## 1. Overview
 
@@ -31,8 +32,12 @@ than one person is involved (Cadwell et al., 2021, *PDA J Pharm Sci Technol*
 75:33). Fixed gate coordinates transferred between samples do not remove this
 variance; they convert it into a systematic bias that tracks staining intensity.
 
-cyRAVEN removes the analyst from threshold placement and reports the residual
-uncertainty rather than concealing it.
+cyRAVEN removes the analyst from threshold placement and quantifies the residual
+uncertainty rather than concealing it. Each cut is resampled from the events it
+was derived from and re-derived over the settings that placed it, and the
+resulting spread is propagated to every population that reads it, so a frequency
+separated by a clean gap and one sitting on a shoulder are no longer reported to
+the same apparent precision.
 
 ## 2. Installation
 
@@ -101,10 +106,15 @@ existing quantity are opt-in.
   --transform logicle       # auto-logicle instead of arcsinh
   --cluster                 # SOM clustering and gate concordance
   --explain-clusters        # learn gate geometry for undescribed clusters
+  --external-labels x.csv   # learn gates for a labelling from another tool
+  --export-gates            # write learned gates as Gating-ML 2.0
+  --write-baseline b.rds    # record where this run placed its thresholds
+  --baseline b.rds          # test this run against that record
   --batch-column run_date   # quantify batch structure
   --correct-batch           # correct it, subject to the confounding guard
   --auto-subcluster-k       # silhouette-selected subcluster count
   --save-umap-model         # persist the embedding for later batches
+  --no-uncertainty          # skip the gate uncertainty analysis
 ```
 
 ## 4. Methods
@@ -147,13 +157,33 @@ Abundance is additionally tested on centred log-ratios to separate compositional
 artefacts from independent change, with concordance between the two
 parameterisations reported per population.
 
-### 4.5 Falsification
+### 4.5 Uncertainty
 
-Four outputs exist to contradict the specification supplied by the user:
+Each threshold is resampled from the parent-gate events it was derived from, and
+re-derived across the settings that placed it: histogram resolution, smoothing
+width, and how completely two modes must separate before the gap between them is
+accepted. The two spreads combine in quadrature and propagate to every population
+that reads the marker, together with the parent gate, which enters all of them
+because it sets the denominator.
+
+The reported value is unchanged. Perturbation runs on copies, so a frequency is
+identical with the analysis on or off, and what is added is a second number
+beside it. `difference_over_gate_u` in the group comparison states how many
+multiples of that uncertainty a between-group difference amounts to; below one,
+the groups differ by less than the distance the cut itself moves.
+
+### 4.6 Falsification
+
+Five outputs exist to contradict the specification supplied by the user:
 
 **Threshold drift** tests whether per-sample thresholds differ systematically
 between study groups. A flagged marker indicates that part of any abundance
 difference is definitional rather than biological.
+
+**Gate uncertainty** states how far each cut moves under resampling of the events
+that determined it, and what that costs every population reading it. Where a
+between-group difference is smaller than the movement of its own threshold, the
+comparison is not resolvable by this strategy at this staining quality.
 
 **Phenotype concordance** displays measured marker intensity against the
 populations declared to express them, reading the same specification used for
@@ -170,7 +200,37 @@ two-marker convex polygon gates selecting an undescribed cluster, with
 performance measured on held-out cells and reported alongside the resubstitution
 value.
 
-### 4.6 Batch correction
+### 4.7 Conformance
+
+A baseline written from an accepted run records where each marker's threshold
+sat, how variable it was, how often it required the quantile fallback, and what
+the populations came out at. Later runs are measured against it.
+
+This is a second reference, not a replacement for the first. The within-run check
+compares each sample against its peers and identifies one deviant tube. It cannot
+identify a cohort that moved as a whole, since the leave-one-out peer median
+moves with it, which is the situation after a laser service or a reagent lot
+change. A changed transform is reported once as not comparable rather than as
+every marker having drifted, and a redefined population is reported as a
+different measurement rather than a moving one.
+
+### 4.8 Gate learning from external labels
+
+`--external-labels` accepts a cell labelling produced elsewhere, for example a
+cyCONDOR clustering, and derives an executable gating strategy for each label.
+The join is on sample and event index rather than row position, since the two
+tools subsample independently.
+
+Transferability is measured by refitting the strategy with one donor withheld and
+scoring it on that donor. Cells held out of a fit come from the same donors
+acquired in the same tubes, so they share every source of between-donor variation
+the gate will meet in use; the per-donor minimum is the quantity that predicts
+the next patient. `--export-gates` writes the result as ISAC Gating-ML 2.0 in the
+linear units the FCS file stores, with polygon edges subdivided before inversion
+because an edge that is straight on the analysis scale is a curve in linear
+units.
+
+### 4.9 Batch correction
 
 Batch structure is quantified as iLISI against a permutation null and batch
 against group association as Cramér's *V*. Correction by monotone quantile
@@ -182,17 +242,22 @@ which are already batch-local by construction.
 
 ## 5. Output
 
-A default run produces 23 tables and 20 figures.
+A default run produces 25 tables and 22 figures.
 
 | File | Content |
 |---|---|
-| `population_frequencies.csv` | Population percentage of parent, per sample |
+| `population_frequencies.csv` | Population percentage of parent, per sample, with its gate uncertainty |
 | `population_marker_mfi.csv` | Median intensity and percent positive, per sample, population and marker |
-| `group_comparison_stats.csv` | Per-population test with Cliff's delta and adjusted p |
+| `group_comparison_stats.csv` | Per-population test with Cliff's delta, adjusted p, and the difference expressed in units of gate uncertainty |
 | `thresholds_used.csv` | Every threshold, its derivation and its outlier status |
+| `threshold_uncertainty.csv` | Sampling and method components of each threshold, and how often resampling found it |
+| `uncertainty_budget.csv` | Which threshold each population's uncertainty comes from |
+| `specification_conformance.csv` | This run against an accepted baseline, written by `--baseline` |
+| `gate_transferability.csv` | Held-out-donor performance of a learned gate, written by `--external-labels` |
 | `cluster_gate_agreement_*.csv` | Declared labels against unsupervised clusters |
 | `batch_group_confounding.csv` | Cramér's *V* and correction verdict |
 | `umap_overview.png` | Shared embedding by population and by sample |
+| `frequency_uncertainty.png` | Between-sample spread against within-sample gate uncertainty |
 | `population_marker_heatmap.png` | Marker intensity against declared populations |
 | `run_manifest.txt` | Package versions, git commit, invocation, options |
 
@@ -203,12 +268,12 @@ quantity derived from them.
 
 | Article | Content |
 |---|---|
-| [Workflow](https://bhagesh-h.github.io/cyRAVEN/articles/cyRAVEN.html) | The nine pipeline stages with the function implementing each, and executable examples of cofactor estimation, density minimum detection and group comparison |
-| [Gating](https://bhagesh-h.github.io/cyRAVEN/articles/gating.html) | Gate hierarchy and its behaviour when CD45 or viability markers are absent; per-sample thresholding and interpretation of the `source` column; population specification syntax including three-level markers; arcsinh against logicle with the CCR7 memory-subset case |
-| [Diagnostics](https://bhagesh-h.github.io/cyRAVEN/articles/diagnostics.html) | Nine checks in reading order: gate inspection, staining QC, phenotype concordance, threshold drift, the four gate-cluster concordance patterns, learned gate geometry, covariate screening, iLISI batch quantification with the Cramér's *V* refusal rule, and run provenance |
+| [Workflow](https://bhagesh-h.github.io/cyRAVEN/articles/cyRAVEN.html) | The ten pipeline stages with the function implementing each, and executable examples of cofactor estimation, density minimum detection and group comparison |
+| [Gating](https://bhagesh-h.github.io/cyRAVEN/articles/gating.html) | Gate hierarchy and its behaviour when CD45 or viability markers are absent; per-sample thresholding and interpretation of the `source` column; how far a threshold moves under resampling and what that costs the population; stability against a baseline from an earlier run; population specification syntax including three-level markers; arcsinh against logicle with the CCR7 memory-subset case |
+| [Diagnostics](https://bhagesh-h.github.io/cyRAVEN/articles/diagnostics.html) | Twelve checks in reading order: gate inspection, staining QC, phenotype concordance, threshold drift, gate uncertainty and its budget, the four gate-cluster concordance patterns, held-out-donor gate transferability, learned gate geometry, covariate screening, iLISI batch quantification with the Cramér's *V* refusal rule, conformance against a baseline, and run provenance |
 | [Output](https://bhagesh-h.github.io/cyRAVEN/articles/outputs.html) | Every file the pipeline writes, its columns, the flag producing it, and why event counts are not cell counts |
-| [Statistics](https://bhagesh-h.github.io/cyRAVEN/articles/statistics.html) | Sample-level aggregation with a worked example; rank tests against moderated *t* and the sample size at which the trade reverses; compositional constraint and the limits of the log-ratio; covariate diagnosis against adjustment; multiplicity within test families |
-| [Interoperability](https://bhagesh-h.github.io/cyRAVEN/articles/with-cycondor.html) | Method selection by question type; three worked analyses; running cyRAVEN and cyCONDOR from one sample map; the four sources of divergence between their embeddings; cluster count as an analytical choice |
+| [Statistics](https://bhagesh-h.github.io/cyRAVEN/articles/statistics.html) | Sample-level aggregation with a worked example; rank tests against moderated *t* and the sample size at which the trade reverses; compositional constraint and the limits of the log-ratio; covariate diagnosis against adjustment; multiplicity within test families; the difference expressed in units of gate uncertainty |
+| [Interoperability](https://bhagesh-h.github.io/cyRAVEN/articles/with-cycondor.html) | Method selection by question type; three worked analyses; handing a cyCONDOR clustering to cyRAVEN to get an executable gate with held-out-donor performance; running both from one sample map; the four sources of divergence between their embeddings; cluster count as an analytical choice |
 | [Scope](https://bhagesh-h.github.io/cyRAVEN/articles/scope.html) | Nine excluded methods with the reasoning and the condition under which each becomes appropriate |
 
 ## 7. Citation

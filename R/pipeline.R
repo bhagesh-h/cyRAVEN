@@ -340,6 +340,67 @@ run_cyraven <- function(opt) {
     return(invisible(NULL))
   }
 
+  # ---- gate placement uncertainty -------------------------------------------
+  # Placed here because it needs the transformed matrices and the parent masks,
+  # which are at their most available immediately after scoring.
+  #
+  # IT READS AND WRITES NOTHING BACK. `pops`, `thr_rows` and every threshold
+  # already derived are untouched, so a run with this enabled and a run without
+  # produce identical frequencies, MFIs and p-values. What it adds is a second
+  # number beside each of them.
+  #
+  # ITS RNG IS BORROWED, NOT SPENT. run_gate_uncertainty() saves .Random.seed and
+  # puts it back, for the reason spelled out at run_unsupervised_clusters(): this
+  # function seeds once at the top and STEP 6's cell selection draws from that one
+  # stream, so a step that consumed draws here would change which cells are
+  # embedded and quietly redraw every UMAP in the run.
+  unc <- NULL
+  if (!isTRUE(opt$no_uncertainty)) {
+    log_step("STEP 4b - gate placement uncertainty")
+    .u_t0 <- Sys.time()
+    unc <- tryCatch(
+      run_gate_uncertainty(pops, gates, verdicts, fpr$assignment, spec,
+                           B = opt$uncertainty_boot %||% 100L,
+                           seed = opt$seed %||% 42L,
+                           max_events = opt$uncertainty_max_events %||% 20000L),
+      error = function(e) {
+        log_msg("  WARNING uncertainty analysis failed: ", conditionMessage(e),
+                ", every other output is unaffected")
+        NULL
+      })
+    if (!is.null(unc) && !is.null(unc$thresholds)) {
+      write.csv(unc$thresholds,
+                file.path(opt$outdir, "threshold_uncertainty.csv"),
+                row.names = FALSE)
+      ut <- unc$thresholds
+      log_msg("wrote threshold_uncertainty.csv (", nrow(ut), " threshold(s), ",
+              round(as.numeric(difftime(Sys.time(), .u_t0, units = "secs"))),
+              "s)")
+      # A threshold whose bootstrap rarely finds the valley at all is not
+      # imprecise, it is unresolved, and that is worth a line in the log rather
+      # than a wide interval nobody reads.
+      shaky <- ut[is.finite(ut$bootstrap_valley_rate) &
+                    ut$bootstrap_valley_rate < 0.8, , drop = FALSE]
+      if (nrow(shaky))
+        log_msg("  NOTE ", nrow(shaky), " threshold(s) were found in fewer than ",
+                "80% of resamples, so the cut is barely determined by the data. ",
+                "Worst: ",
+                paste(utils::head(paste0(shaky$sample_id[order(shaky$bootstrap_valley_rate)],
+                                         "/",
+                                         shaky$marker[order(shaky$bootstrap_valley_rate)]),
+                                  4L), collapse = ", "))
+    }
+    if (!is.null(unc) && !is.null(unc$budget)) {
+      write.csv(unc$budget, file.path(opt$outdir, "uncertainty_budget.csv"),
+                row.names = FALSE)
+      bb <- stats::aggregate(u_pct_points ~ term, unc$budget, median)
+      bb <- bb[order(-bb$u_pct_points), , drop = FALSE]
+      log_msg("wrote uncertainty_budget.csv (largest median contribution: ",
+              bb$term[1], ", ", round(bb$u_pct_points[1], 3),
+              " percentage points)")
+    }
+  }
+
   # ---- metadata -------------------------------------------------------------
   patients <- NULL
   if (!is.null(opt$patient_table)) {
@@ -835,6 +896,23 @@ run_cyraven <- function(opt) {
             "pct_of_cd45_pos, not count. Add wbc_per_ul (cells/uL, from a ",
             "haemogram) to the patient table to obtain cells/uL.")
   }
+  # Uncertainty columns are APPENDED, never inserted, and only when the analysis
+  # ran. Every column this table has always had keeps its name, its meaning and
+  # its position, so a script reading it by name or by position is unaffected and
+  # the values themselves are bit-identical to a run without --uncertainty.
+  if (!is.null(freq) && !is.null(unc) && !is.null(unc$frequencies)) {
+    .uf <- unc$frequencies[, c("sample_id", "population", "u_pct_points",
+                               "n_terms", "n_terms_missing"), drop = FALSE]
+    .k <- match(paste(freq$sample_id, freq$population, sep = "\r"),
+                paste(.uf$sample_id, .uf$population, sep = "\r"))
+    freq$u_pct_points     <- .uf$u_pct_points[.k]
+    freq$pct_lo           <- round(pmax(0, freq$pct_of_cd45_pos -
+                                          .uf$u_pct_points[.k]), 4)
+    freq$pct_hi           <- round(freq$pct_of_cd45_pos +
+                                     .uf$u_pct_points[.k], 4)
+    freq$u_n_terms        <- .uf$n_terms[.k]
+    freq$u_n_terms_missing <- .uf$n_terms_missing[.k]
+  }
   write.csv(freq, file.path(opt$outdir, "population_frequencies.csv"), row.names = FALSE)
 
   unav <- do.call(rbind, lapply(names(pops), function(s) {
@@ -1030,9 +1108,30 @@ run_cyraven <- function(opt) {
         gstats <- stats_group_comparison(freq_p, group_of,
                                          reference = opt$reference_group)
         if (!is.null(gstats)) {
+          # Two columns appended after every existing one: the typical gate
+          # uncertainty behind this population, and how many multiples of it the
+          # observed difference is. A ratio below 1 says the groups differ by less
+          # than the distance the cut itself moves, which no p-value discloses.
+          #
+          # Guarded on `unc` rather than left to the function's own NULL handling,
+          # so --no-uncertainty writes the table it always wrote. Two columns of
+          # NA are not information, and a file whose shape depends on a flag that
+          # produced nothing is a worse contract than one that does not change.
+          if (!is.null(unc))
+            gstats <- tryCatch(annotate_gate_uncertainty(gstats, unc$frequencies),
+                               error = function(e) gstats)
           write.csv(gstats, file.path(opt$outdir,
                                       paste0("group_comparison_stats", sfx, ".csv")),
                     row.names = FALSE)
+          if (!is.null(unc)) {
+            .nres <- sum(is.finite(gstats$difference_over_gate_u) &
+                           gstats$difference_over_gate_u < 1 &
+                           gstats$significant_raw, na.rm = TRUE)
+            if (.nres > 0)
+              log_msg("  NOTE ", .nres, " nominally significant result(s) differ ",
+                      "by LESS than the gate placement uncertainty behind them. ",
+                      "See difference_over_gate_u and threshold_uncertainty.csv.")
+          }
           nsig <- sum(gstats$significant_raw, na.rm = TRUE)
           nbh  <- sum(gstats$significant_BH,  na.rm = TRUE)
           log_msg("wrote group_comparison_stats", sfx, ".csv (", nrow(gstats),
@@ -1176,6 +1275,19 @@ run_cyraven <- function(opt) {
   .cells_all <- if (length(all_cells))
     as.data.frame(data.table::rbindlist(all_cells, use.names = TRUE, fill = TRUE))
   else NULL
+
+  # ---- gate uncertainty figures ---------------------------------------------
+  # Drawn here rather than at STEP 4b because the first of them wants the study
+  # groups, which are not resolved until the comparison above.
+  if (!is.null(unc)) {
+    .ext_ok("gate uncertainty figures", {
+      fig_frequency_uncertainty(unc$frequencies,
+                                file.path(opt$outdir, "frequency_uncertainty.png"),
+                                group_of = if (grouped) group_of else NULL)
+      fig_uncertainty_budget(unc$budget,
+                             file.path(opt$outdir, "uncertainty_budget.png"))
+    })
+  }
 
   # ---- differential state: population x marker, tested on SAMPLES -----------
   if (!isTRUE(opt$no_differential_state) && !is.null(mfi) && TRUE) {
@@ -1477,6 +1589,22 @@ run_cyraven <- function(opt) {
                 write.csv(ex$polygons, file.path(opt$outdir,
                           paste0("cluster_gate_polygons", sfx2, ".csv")),
                           row.names = FALSE)
+                if (isTRUE(opt$export_gates))
+                  .ext_ok(paste0("gate export (", pn, ")"), {
+                    .tr <- transforms[[pn]]
+                    write_gating_ml(ex$polygons,
+                      file.path(opt$outdir,
+                                paste0("cluster_gates", sfx2, ".gatingml.xml")),
+                      transform = .tr, id_col = "cluster",
+                      x_col = "x_asinh", y_col = "y_asinh")
+                    .lin <- polygons_linear_table(ex$polygons, .tr,
+                              id_col = "cluster", x_col = "x_asinh",
+                              y_col = "y_asinh")
+                    if (!is.null(.lin))
+                      write.csv(.lin, file.path(opt$outdir,
+                        paste0("cluster_gate_polygons_linear", sfx2, ".csv")),
+                        row.names = FALSE)
+                  })
                 log_msg("wrote cluster_gate_proposals", sfx2, ".csv and ",
                         "cluster_gate_polygons", sfx2, ".csv (",
                         length(ex$strategies), " strategy/strategies)")
@@ -1502,6 +1630,121 @@ run_cyraven <- function(opt) {
     }
   }
 
+  # ---- labels supplied by another tool --------------------------------------
+  # Runs on the embedded cells, so it sits after the clustering block and needs
+  # nothing from it. What it produces is a gate for a population this package did
+  # not define, measured on donors it was not fitted to. Descriptive throughout:
+  # no scored population, frequency or test is touched.
+  if (!is.null(opt$external_labels)) {
+    .ext_ok("external label gates", {
+      .lab <- read_external_labels(opt$external_labels)
+      for (pn in names(embeddings)) {
+        sfx3 <- if (length(embeddings) > 1L) paste0("_", pn) else ""
+        .ec <- join_external_labels(embeddings[[pn]]$cells, .lab)
+        if (is.null(.ec)) next
+        .xl <- explain_external_labels(
+          .ec, embeddings[[pn]]$features, seed = opt$seed %||% 42L,
+          max_labels = opt$external_max_labels %||% 6L,
+          max_donors = opt$transfer_max_donors %||% 8L,
+          transfer_max_cells = opt$transfer_max_cells %||% 20000L,
+          max_depth = opt$explain_max_depth %||% 4L)
+        if (is.null(.xl)) next
+        write.csv(.xl$summary, file.path(opt$outdir,
+                  paste0("external_label_gates", sfx3, ".csv")), row.names = FALSE)
+        if (!is.null(.xl$polygons))
+          write.csv(.xl$polygons, file.path(opt$outdir,
+                    paste0("external_label_polygons", sfx3, ".csv")),
+                    row.names = FALSE)
+        if (!is.null(.xl$transfer)) {
+          write.csv(.xl$transfer, file.path(opt$outdir,
+                    paste0("gate_transferability", sfx3, ".csv")), row.names = FALSE)
+          write.csv(.xl$transfer_summary, file.path(opt$outdir,
+                    paste0("gate_transferability_summary", sfx3, ".csv")),
+                    row.names = FALSE)
+          .weak <- .xl$transfer_summary[
+            is.finite(.xl$transfer_summary$f1_min) &
+              .xl$transfer_summary$f1_min < 0.5, , drop = FALSE]
+          if (nrow(.weak))
+            log_msg("  NOTE ", nrow(.weak), " gate(s) score below F1 0.5 on at ",
+                    "least one held-out donor, so they describe the donors they ",
+                    "were fitted to rather than the population: ",
+                    paste(.weak$label, collapse = ", "))
+        }
+        for (kk in names(.xl$strategies))
+          fig_gate_strategy(
+            as.matrix(.ec[, intersect(embeddings[[pn]]$features, names(.ec)),
+                          drop = FALSE]),
+            as.integer(!is.na(.ec$external_label) & .ec$external_label == kk),
+            .xl$strategies[[kk]],
+            file.path(opt$outdir, paste0("external_label_strategy_",
+                                         gsub("[^A-Za-z0-9_.-]", "_", kk),
+                                         sfx3, ".png")),
+            label = kk)
+        if (isTRUE(opt$export_gates) && !is.null(.xl$polygons))
+          .ext_ok(paste0("gate export (", pn, ", external labels)"), {
+            .tr <- transforms[[pn]]
+            write_gating_ml(.xl$polygons, file.path(opt$outdir,
+                            paste0("external_label_gates", sfx3, ".gatingml.xml")),
+                            transform = .tr)
+            .lin <- polygons_linear_table(.xl$polygons, .tr)
+            if (!is.null(.lin))
+              write.csv(.lin, file.path(opt$outdir,
+                        paste0("external_label_polygons_linear", sfx3, ".csv")),
+                        row.names = FALSE)
+          })
+      }
+    })
+  }
+
+  # ---- conformance against an accepted baseline -----------------------------
+  # The second reference. thresholds_used.csv compares each sample against its
+  # peers in this run and catches one bad tube; this compares the run against a
+  # run that was accepted earlier and catches the case where everything moved
+  # together, which the peer check cannot see because the peers moved with it.
+  .drift_failed <- FALSE
+  if (!is.null(opt$baseline)) {
+    # The verdict is taken from what the block RETURNS rather than assigned from
+    # inside it, so it does not depend on which environment .ext_ok's promise
+    # happens to evaluate in.
+    .drift_failed <- isTRUE(.ext_ok("specification conformance", {
+      .bl <- read_spec_baseline(opt$baseline)
+      .cf <- specification_conformance(thr_all, freq, spec, .bl,
+                                       transform = opt$transform %||% "arcsinh")
+      if (!is.null(.cf$markers))
+        write.csv(.cf$markers, file.path(opt$outdir,
+                  "specification_conformance.csv"), row.names = FALSE)
+      if (!is.null(.cf$populations))
+        write.csv(.cf$populations, file.path(opt$outdir,
+                  "specification_conformance_populations.csv"), row.names = FALSE)
+      if (!is.null(.cf$spec_changes))
+        write.csv(.cf$spec_changes, file.path(opt$outdir,
+                  "specification_changes.csv"), row.names = FALSE)
+      log_msg("conformance against baseline of ", .cf$summary$baseline_created,
+              ": ", .cf$summary$n_fail, " failure(s), ",
+              .cf$summary$n_qualify, " qualified")
+      if (isTRUE(.cf$summary$transform_changed))
+        log_msg("  NOTE the transform differs from the baseline's, so thresholds ",
+                "are on a different scale and no marker comparison is meaningful. ",
+                "Re-baseline, or re-run with the baseline's transform.")
+      if (isTRUE(.cf$summary$spec_changed))
+        log_msg("  NOTE the population specification changed since the baseline; ",
+                "see specification_changes.csv. A redefined population is a ",
+                "different measurement, not a drifting one.")
+      if (.cf$summary$n_fail > 0)
+        log_msg("  WARNING this run no longer places its cuts where the baseline ",
+                "did. Frequencies from the two runs are not the same measurement ",
+                "and should not be pooled until someone has looked.")
+      .cf$summary$n_fail > 0
+    }))
+  }
+  if (!is.null(opt$write_baseline)) {
+    .ext_ok("baseline", {
+      write_spec_baseline(opt$write_baseline, thr_all, freq, spec, opt, cofactors)
+      log_msg("wrote baseline ", opt$write_baseline,
+              " (compare a later run against it with --baseline)")
+    })
+  }
+
   # ---- session state --------------------------------------------------------
   if (!isTRUE(opt$no_session)) {
     log_step("STEP 8 - saving session state")
@@ -1522,6 +1765,15 @@ run_cyraven <- function(opt) {
   # Flips the on.exit manifest writer from "failed" to "completed". Set here, at
   # the last statement, so it can only be TRUE if everything above actually ran.
   .finished_ok <- TRUE
+  # --fail-on-drift raises AFTER the run is marked completed, because it is not a
+  # run failure: every output was produced and every one of them is on disk. It
+  # is a verdict about whether this cohort is comparable to the baseline, raised
+  # as an error only so a scheduled job can act on it.
+  if (isTRUE(opt$fail_on_drift) && isTRUE(.drift_failed))
+    stop("specification conformance failed against ", opt$baseline,
+         ": see specification_conformance.csv. Every output was written; ",
+         "this is --fail-on-drift reporting the verdict as an exit code.",
+         call. = FALSE)
   invisible(TRUE)
 }
 

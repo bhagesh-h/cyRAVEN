@@ -156,12 +156,14 @@ make_transform <- function(method = c("arcsinh", "logicle", "none"),
            call. = FALSE)
     return(list(method = "arcsinh", params = list(cofactor = cofactor),
                 label = "asinh intensity",
-                fn = function(x, marker = NULL) asinh(x / cofactor)))
+                fn = function(x, marker = NULL) asinh(x / cofactor),
+                inv = function(y, marker = NULL) sinh(y) * cofactor))
   }
 
   if (method == "none")
     return(list(method = "none", params = list(), label = "raw intensity",
-                fn = function(x, marker = NULL) x))
+                fn = function(x, marker = NULL) x,
+                inv = function(y, marker = NULL) y))
 
   if (is.null(logicle) || !length(logicle))
     stop("method = \"logicle\" needs parameters from derive_logicle_pooled()",
@@ -170,6 +172,23 @@ make_transform <- function(method = c("arcsinh", "logicle", "none"),
   # call would dominate the runtime of every gating step.
   fns <- lapply(logicle, function(p)
     flowCore::logicleTransform(w = p$w, t = p$t, m = p$m, a = p$a))
+  # Inverses, built by monotone interpolation rather than by calling back into
+  # flowCore. The logicle is strictly increasing, so a dense grid inverts it to
+  # far better precision than the only consumer needs (polygon vertices on their
+  # way into a gate file). Doing it this way keeps the inverse working whatever
+  # flowCore names its inverse constructor in a given release, and costs one
+  # 4001-point evaluation per marker at construction rather than per call.
+  invs <- lapply(names(logicle), function(mk) {
+    p <- logicle[[mk]]; f <- fns[[mk]]
+    hi <- max(p$t, 1)
+    pos <- exp(seq(log(1e-2), log(hi), length.out = 2000L))
+    xg  <- unique(sort(c(-rev(pos), 0, pos)))
+    yg  <- f(xg)
+    ok  <- is.finite(xg) & is.finite(yg)
+    xg  <- xg[ok]; yg <- yg[ok]
+    function(y) stats::approx(yg, xg, xout = y, rule = 2L)$y
+  })
+  names(invs) <- names(logicle)
   list(method = "logicle", params = logicle, label = "logicle intensity",
        fn = function(x, marker = NULL) {
          f <- if (!is.null(marker)) fns[[marker]] else NULL
@@ -180,5 +199,12 @@ make_transform <- function(method = c("arcsinh", "logicle", "none"),
            stop("no logicle parameters for marker '",
                 marker %||% "<unnamed>", "'", call. = FALSE)
          f(x)
+       },
+       inv = function(y, marker = NULL) {
+         g <- if (!is.null(marker)) invs[[marker]] else NULL
+         if (is.null(g))
+           stop("no logicle parameters for marker '",
+                marker %||% "<unnamed>", "'", call. = FALSE)
+         g(y)
        })
 }

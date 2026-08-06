@@ -16,9 +16,8 @@ set.seed(1)
 library(cyRAVEN)
 ```
 
-Each test in cyRAVEN represents a trade between assumptions and power. This
-article states the trade made at each point and the sample size at which it
-should be revisited.
+Every test here trades assumptions against power. This article states which trade
+was made at each point, and the sample size at which it should be revisited.
 
 ## 1. Aggregation
 
@@ -182,7 +181,29 @@ Differences rather than ratios are reported for transformed intensities. Arcsinh
 and logicle scales admit negative values, on which a ratio is undefined in
 interpretation and changes sign without a corresponding change in biology.
 
-## 8. Summary
+## 8. Measurement resolution
+
+An effect size states how large a difference is relative to the spread between
+donors. It does not state whether the instrument and the gating strategy could
+resolve a difference of that size at all.
+
+`difference_over_gate_u` supplies the second quantity: the observed difference in
+medians divided by the typical within-sample uncertainty on the frequency, itself
+propagated from where the thresholds were placed. Below one, the groups differ by
+less than the distance the cut travels under resampling of the cells that
+determined it.
+
+This is a screen, not a test. The uncertainty is partly shared across the run,
+since every sample passes through one panel, one transform and one placement
+rule, so it cancels in part when a difference is taken and the ratio is
+conservative. A ratio below one is a reason to open `threshold_uncertainty.csv`
+before interpreting the comparison, not grounds to discard it.
+
+The order to read remains: adjusted p, then effect size, then this. A result that
+survives all three is one where the groups differ, the difference is large
+relative to donor variation, and it is larger than the gate can move on its own.
+
+## 9. Summary
 
 | Question | Function | Unit |
 |---|---|---|
@@ -192,4 +213,5 @@ interpretation and changes sign without a corresponding change in biology.
 | Is the contrast confounded by age or sex? | `stats_confounding()` | sample |
 | Is the contrast confounded by batch? | `batch_mixing_report()` | cell, descriptive |
 | Is the contrast an artefact of the gate? | `stats_threshold_drift()`, `cluster_gate_agreement()` | sample and cell |
+| Is the difference bigger than the gate's own uncertainty? | `run_gate_uncertainty()`, `annotate_gate_uncertainty()` | sample |
 | Which markers shift within a subcluster? | `stats_subcluster_shifts()` | cell, no p-value |

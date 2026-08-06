@@ -73,5 +73,9 @@ utils::globalVariables(c(
   "umap_2", "value", "x", "y",
   # ggplot2 aesthetics evaluated against columns built inside the figure
   # functions themselves, and therefore invisible to static analysis.
-  "cd45", "fsc", "lab", "needs_review", "row_label", "ssc", "tag"
+  "cd45", "fsc", "lab", "needs_review", "row_label", "ssc", "tag",
+  # Uncertainty figures: `lo`/`hi` are the interval bounds and `grp` the study
+  # group, all three assigned onto the frame a few lines above the plot call;
+  # `u_pct_points` and `term` are columns of the budget table.
+  "grp", "hi", "lo", "term", "u_pct_points"
 ))

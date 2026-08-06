@@ -36,6 +36,19 @@ reference:
   - apply_gate_hierarchy
   - staining_verdict
 
+- title: Uncertainty
+  desc: >
+    How far a threshold can move, and what that costs the frequency it produced.
+    Each cut is resampled and re-derived over the settings that placed it, and
+    the resulting spread is propagated to every population that reads it. None of
+    this changes a reported number; it puts a second number beside it.
+  contents:
+  - threshold_uncertainty
+  - population_frequency_uncertainty
+  - run_gate_uncertainty
+  - annotate_gate_uncertainty
+  - valley_setting_grid
+
 - title: Populations
   desc: Scoring a declarative population specification.
   contents:
@@ -78,6 +91,30 @@ reference:
   - rank_gate_markers
   - fig_gate_strategy
 
+- title: Labels from another tool
+  desc: >
+    Take a cell labelling this package did not produce, a cyCONDOR clustering for
+    instance, learn a gate that selects it, and find out whether that gate holds
+    on a donor it was not fitted to. Held-out cells come from the same donors as
+    the training cells and overstate transferability; refitting with one donor
+    withheld does not.
+  contents:
+  - read_external_labels
+  - join_external_labels
+  - explain_external_labels
+  - gate_transferability
+  - apply_gate_strategy
+
+- title: Gate export
+  desc: >
+    A learned gate that stays in R cannot be sorted on. These write it out in the
+    units the FCS file stores, as ISAC Gating-ML 2.0 and as a plain table of
+    vertices.
+  contents:
+  - write_gating_ml
+  - polygons_linear_table
+  - polygon_to_linear
+
 - title: Statistics
   desc: >
     Every test below uses per-sample values, so the replicates are donors rather
@@ -110,6 +147,18 @@ reference:
   contents:
   - stats_threshold_drift
   - write_run_manifest
+
+- title: Conformance across runs
+  desc: >
+    The within-run check in thresholds_used.csv compares each sample against its
+    peers and catches one bad tube. It cannot catch a cohort that moved as a
+    whole, because the peer median moves with it. A baseline written from an
+    accepted run is the fixed reference that can.
+  contents:
+  - write_spec_baseline
+  - read_spec_baseline
+  - specification_conformance
+  - spec_fingerprint
 
 - title: Figures
   contents:
