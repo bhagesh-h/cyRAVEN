@@ -542,6 +542,21 @@ run_cyraven <- function(opt) {
       cells$patient_id[!is.na(canon)] <- canon[!is.na(canon)]
       cells <- merge(cells, patients, by = "patient_id", all.x = TRUE, sort = FALSE)
     }
+
+    # The group column, from the sample map, when the patient table did not
+    # supply it. Everything downstream that splits cells by study group reads it
+    # off THIS table: umap_density_by_group.png, umap_overview_by_group.png and
+    # the per-group FlowJo files. Without this a run whose grouping lives in the
+    # sample map -- which is the whole design when there is no clinical metadata
+    # -- produced neither figure and no per-group export, and said only that a
+    # 'cohort' column was missing, naming a table the user may never have had.
+    .gcol <- opt$group_column %||% "cohort"
+    if (!.gcol %in% names(cells) && !is.null(smap) &&
+        .gcol %in% names(smap) && "sample_id" %in% names(smap)) {
+      cells[[.gcol]] <- as.character(smap[[.gcol]])[
+        match(cells$sample_id, smap$sample_id)]
+    }
+
     embeddings[[p$name]] <- list(cells = as.data.frame(cells), features = fcols,
                                  params = emb$params, samples = inc)
     all_cells[[p$name]] <- as.data.frame(cells)
