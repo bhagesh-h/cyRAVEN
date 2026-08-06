@@ -1,0 +1,117 @@
+# Scope
+
+Nine methods available in comparable toolboxes are absent from cyRAVEN.
+Each section states the omission, the reasoning, and the condition under
+which it should be revisited. Where a method is required now, the
+[interoperability
+article](https://bhagesh-h.github.io/cyRAVEN/articles/with-cycondor.md)
+covers combined use with cyCONDOR.
+
+## 1. Harmony and CytoNorm
+
+Batch correction is implemented. `--correct-batch` performs monotone
+quantile alignment and refuses above a configurable Cramér’s *V* between
+batch and group.
+
+These two implementations specifically are not wrapped. Both introduce
+substantial dependency weight, and neither declines to execute when
+batch and biological effect are collinear. That refusal is the behaviour
+cyRAVEN treats as the purpose of the feature.
+
+**Revisit when** a study design requires reference-based normalisation
+across instruments rather than distributional alignment within a batch.
+
+## 2. Phenograph
+
+FlowSOM addresses the same requirement at lower cost at these event
+counts. Phenograph determines cluster count from the data rather than
+accepting it as a parameter, which is informative, but requires
+`Rphenograph` or `Rphenoannoy`. Neither is distributed through CRAN or
+Bioconductor, and a GitHub-only dependency is incompatible with the
+reproducibility guarantee the container provides.
+
+**Revisit when** cluster count is the quantity under investigation
+rather than a setting.
+
+## 3. diffcyt
+
+The rank tests address the same hypotheses without distributional
+assumptions, which is the correct trade at single-digit *n* per group.
+
+**Revisit at** approximately fifteen samples per group, where the
+empirical Bayes prior becomes informative and mixed models can
+accommodate repeated measures.
+
+## 4. Per-marker cofactors
+
+[`derive_cofactor()`](https://bhagesh-h.github.io/cyRAVEN/reference/derive_cofactor.md)
+computes per-marker candidates and returns them in
+`attr(cf, "per_marker")`. Application is not implemented.
+
+Applying them alters the arcsinh scale per channel, displacing every
+threshold, marker median and embedding distance. Validation requires
+re-derivation and re-inspection of every gating QC figure in the
+affected dataset.
+
+**Revisit when** gating QC demonstrates channels whose background
+distributions differ in scale. The data required for that judgement is
+already collected.
+
+## 5. Trajectory inference
+
+Pseudotime methods assume a continuous differentiation process sampled
+across its extent. Peripheral blood immunophenotyping panels
+predominantly measure terminally differentiated populations, where a
+fitted trajectory reflects the fitting procedure rather than a
+developmental process.
+
+**Revisit when** the panel resolves a developmental axis, for example
+thymic emigrants or plasmablast maturation. cyCONDOR provides diffusion
+maps and Slingshot.
+
+## 6. Label transfer
+
+Classifier-based cell type assignment is standard elsewhere. Here the
+training labels originate from a gating specification, so a classifier
+trained on them reproduces that specification including its errors.
+
+Unsupervised cluster concordance is the stronger check for the same
+purpose, since it does not consult the labels.
+
+**Revisit when** an externally annotated reference dataset is available
+for training.
+
+## 7. FlowJo ingestion
+
+Gates travel outward. `--export-gates` writes learned strategies as ISAC
+Gating-ML 2.0, and `--flowjo-export` writes FCS with embedding
+coordinates as additional parameters, so a result can be opened in
+FlowJo, Cytobank or FlowRepository.
+
+The inverse is absent: cyRAVEN does not read gates from a `.wsp`
+workspace, which requires `CytoML` and `flowWorkspace`. The export needs
+neither, because a Gating-ML document is written directly, whereas
+parsing a proprietary workspace is not something to reimplement.
+
+**Revisit when** manual FlowJo gates are required as input rather than
+output.
+
+## 8. Cell-level testing
+
+Absent for the reason in section 1 of the [statistics
+article](https://bhagesh-h.github.io/cyRAVEN/articles/statistics.md):
+event counts are set by acquisition duration, so a test over pooled
+events derives its degrees of freedom from instrument time. Toolboxes
+providing a cell-level Wilcoxon distribute it with a warning against its
+use.
+
+The cell-level view is available descriptively in
+`subcluster_marker_shifts.csv`, which reports effect sizes without
+p-values.
+
+## 9. Compensation matrices
+
+cyRAVEN applies the spillover matrix stored in the FCS keyword block and
+reports its absence. It does not compute one from single-stain controls,
+which belongs in acquisition software where the controls can be
+inspected.

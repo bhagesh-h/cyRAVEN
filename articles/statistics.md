@@ -1,0 +1,233 @@
+# Statistics
+
+``` r
+
+library(cyRAVEN)
+```
+
+Every test here trades assumptions against power. This article states
+which trade was made at each point, and the sample size at which it
+should be revisited.
+
+## 1. Aggregation
+
+### 1.1 Pseudoreplication
+
+The event count in an FCS file is determined by acquisition duration,
+not by study design. Treating events as independent observations sets
+the degrees of freedom from an operational parameter: sixteen donors
+contributing one million events each yield a nominal *n* of 1.6 × 10⁷.
+
+Two consequences follow. Statistical power becomes a function of
+instrument time, so extending acquisition on one tube increases apparent
+significance. More seriously, a single donor acquired to greater depth
+contributes disproportionate weight, and inter-individual variation in
+that donor is indistinguishable from a group effect.
+
+### 1.2 Implementation
+
+Every test aggregates to one value per sample per population before
+estimation, following Weber et al. (2019, *Commun Biol* 2:183). The
+degrees of freedom reflect the number of donors.
+
+``` r
+
+mfi <- expand.grid(sample_id = sprintf("S%02d", 1:12),
+                   population = "CD4 T cells", marker = "HLA-DR",
+                   stringsAsFactors = FALSE)
+mfi$n_cells <- 500
+mfi$median_asinh <- rnorm(12, 2, 0.3) + rep(c(0, 0.8), each = 6)
+mfi$pct_positive <- pmin(100, pmax(0, rnorm(12, 30, 5) + rep(c(0, 10), each = 6)))
+mfi$is_control <- FALSE; mfi$qc_status <- "pass"
+grp <- setNames(rep(c("HC", "Patient"), each = 6), sprintf("S%02d", 1:12))
+
+res <- stats_marker_state(mfi, grp, reference = "HC")
+res[, c("marker", "measure", "n_reference", "n_comparison", "delta_median", "p_value")]
+#>   marker      measure n_reference n_comparison delta_median     p_value
+#> 1 HLA-DR median_asinh           6            6     1.025903 0.005074868
+#> 2 HLA-DR pct_positive           6            6    13.592904 0.013065227
+```
+
+`n_reference` is 6, the number of control donors, not 3,000, the number
+of events they contributed.
+
+Event-level quantities remain available through
+[`stats_subcluster_shifts()`](https://bhagesh-h.github.io/cyRAVEN/reference/stats_subcluster_shifts.md),
+which reports effect sizes without p-values. They are
+hypothesis-generating.
+
+## 2. Test selection
+
+Group comparisons use Wilcoxon rank-sum and Kruskal-Wallis, which assume
+independence and ordinal comparability.
+
+The principal alternative, implemented in diffcyt, is limma’s moderated
+*t*, which stabilises variance estimates through an empirical Bayes
+prior shared across markers. At mass cytometry marker counts of 30 to 40
+and designed sample sizes, this is the more powerful choice.
+
+At a dozen markers and single-digit donors per group the prior is
+estimated from too few markers to stabilise, and the normality
+assumption becomes load-bearing at precisely the sample size where it
+cannot be assessed.
+
+**Cost.** Reduced power under normality, and no direct mechanism for
+covariate adjustment.
+
+**Revisit at.** Approximately fifteen samples per group, where the prior
+becomes informative and mixed models can accommodate repeated measures.
+
+## 3. Compositionality
+
+### 3.1 Constraint
+
+Population percentages within a sample are constrained to sum to 100 and
+cannot vary independently. A genuine granulocyte expansion mechanically
+depresses every lymphocyte percentage. Those depressions test
+significant while absolute lymphocyte counts per microlitre remain
+unchanged.
+
+### 3.2 Log-ratio
+
+[`clr_frequencies()`](https://bhagesh-h.github.io/cyRAVEN/reference/clr_frequencies.md)
+applies the centred log-ratio, expressing each population relative to
+the geometric mean of the sample composition rather than to a fixed
+total.
+
+``` r
+
+freq <- data.frame(
+  sample_id = rep(sprintf("S%02d", 1:6), each = 3),
+  population = rep(c("Granulocytes", "CD4 T cells", "B cells"), 6),
+  pct_of_cd45_pos = as.vector(replicate(6, {v <- c(60, 25, 15) * exp(rnorm(3, 0, .1)); 100*v/sum(v)})),
+  is_control = FALSE, qc_status = "pass")
+head(clr_frequencies(freq)[, c("sample_id", "population", "pct_of_cd45_pos", "clr")], 3)
+#>   sample_id   population pct_of_cd45_pos        clr
+#> 1       S01 Granulocytes        61.69888  0.8023069
+#> 2       S01  CD4 T cells        24.02756 -0.1407573
+#> 3       S01      B cells        14.27356 -0.6615496
+```
+
+### 3.3 Concordance
+
+Both parameterisations are tested and
+[`compositional_concordance()`](https://bhagesh-h.github.io/cyRAVEN/reference/compositional_concordance.md)
+classifies each result.
+
+`robust_to_composition` survives both and supports interpretation as an
+independent change.
+
+`raw_only__possible_composition_artefact` is significant on percentages
+and not on log-ratios, which is the configuration produced by section
+3.1.
+
+`clr_only__was_masked_by_composition` is the converse, an independent
+change obscured by the constraint.
+
+### 3.4 Limit
+
+The log-ratio does not recover absolute abundance. Proportional
+expansion of every population leaves the composition invariant and is
+undetectable in frequency data by construction. Discriminating expansion
+from relative expansion requires cells per microlitre, so
+[`abundance_measure()`](https://bhagesh-h.github.io/cyRAVEN/reference/abundance_measure.md)
+uses absolute counts wherever the patient table supplies a leukocyte
+count.
+
+## 4. Covariates
+
+Age and sex are diagnosed rather than adjusted.
+
+With eight samples per group, a model estimating age and sex effects
+alongside the group term consumes the residual degrees of freedom
+required for the comparison of interest. Where the covariate is strongly
+associated with group, the parameters are not separable at any sample
+size, because the design contains no observations at the covariate
+levels required to estimate the effects independently.
+
+[`stats_confounding()`](https://bhagesh-h.github.io/cyRAVEN/reference/stats_confounding.md)
+therefore reports the two conditions that jointly define a confounder:
+differential distribution across groups, and association with the
+outcome.
+[`stats_rank_ancova()`](https://bhagesh-h.github.io/cyRAVEN/reference/stats_rank_ancova.md)
+fits the adjusted model on request, labels every row `EXPLORATORY`, and
+records `NOT FITTED` with the reason where residual degrees of freedom
+are insufficient.
+
+## 5. Batch effects
+
+Correction methods displace cells until batch labels mix. This is valid
+when batch is independent of the study design.
+
+Clinical cohorts rarely satisfy that condition: recruitment and
+acquisition are typically sequential, so batch and group approach
+collinearity. Displacing cells until batches mix then also removes the
+biological contrast, and the algorithm cannot distinguish the two
+contributions.
+
+[`batch_mixing_report()`](https://bhagesh-h.github.io/cyRAVEN/reference/batch_mixing_report.md)
+returns both required quantities before any correction: iLISI against a
+permutation null, establishing whether batch structure exists, and
+Cramér’s *V*, establishing whether it is separable from group. A high
+*V* means no setting makes correction safe, which is the most
+informative result the diagnostic can return.
+
+`--correct-batch` performs the correction and is refused above a
+configurable threshold.
+
+## 6. Multiplicity
+
+Benjamini-Hochberg correction is applied within each test family, with
+raw and adjusted p-values both reported.
+
+Differential state adjusts within each measure rather than across both.
+Median intensity and percent positive are two summaries of the same
+events and are strongly correlated; pooling them would inflate the
+family with non-independent hypotheses and over-penalise every result.
+
+## 7. Effect sizes
+
+Every p-value is reported with an effect size: Cliff’s delta across
+samples, or matched-pairs rank-biserial for paired designs.
+
+Differences rather than ratios are reported for transformed intensities.
+Arcsinh and logicle scales admit negative values, on which a ratio is
+undefined in interpretation and changes sign without a corresponding
+change in biology.
+
+## 8. Measurement resolution
+
+An effect size states how large a difference is relative to the spread
+between donors. It does not state whether the instrument and the gating
+strategy could resolve a difference of that size at all.
+
+`difference_over_gate_u` supplies the second quantity: the observed
+difference in medians divided by the typical within-sample uncertainty
+on the frequency, itself propagated from where the thresholds were
+placed. Below one, the groups differ by less than the distance the cut
+travels under resampling of the cells that determined it.
+
+This is a screen, not a test. The uncertainty is partly shared across
+the run, since every sample passes through one panel, one transform and
+one placement rule, so it cancels in part when a difference is taken and
+the ratio is conservative. A ratio below one is a reason to open
+`threshold_uncertainty.csv` before interpreting the comparison, not
+grounds to discard it.
+
+The order to read remains: adjusted p, then effect size, then this. A
+result that survives all three is one where the groups differ, the
+difference is large relative to donor variation, and it is larger than
+the gate can move on its own.
+
+## 9. Summary
+
+| Question | Function | Unit |
+|----|----|----|
+| Did population abundance change? | [`stats_group_comparison()`](https://bhagesh-h.github.io/cyRAVEN/reference/stats_group_comparison.md) | sample |
+| Does it survive the compositional constraint? | [`clr_frequencies()`](https://bhagesh-h.github.io/cyRAVEN/reference/clr_frequencies.md), [`compositional_concordance()`](https://bhagesh-h.github.io/cyRAVEN/reference/compositional_concordance.md) | sample |
+| Did marker expression change within a population? | [`stats_marker_state()`](https://bhagesh-h.github.io/cyRAVEN/reference/stats_marker_state.md) | sample |
+| Is the contrast confounded by age or sex? | [`stats_confounding()`](https://bhagesh-h.github.io/cyRAVEN/reference/stats_confounding.md) | sample |
+| Is the contrast confounded by batch? | [`batch_mixing_report()`](https://bhagesh-h.github.io/cyRAVEN/reference/batch_mixing_report.md) | cell, descriptive |
+| Is the contrast an artefact of the gate? | [`stats_threshold_drift()`](https://bhagesh-h.github.io/cyRAVEN/reference/stats_threshold_drift.md), [`cluster_gate_agreement()`](https://bhagesh-h.github.io/cyRAVEN/reference/cluster_gate_agreement.md) | sample and cell |
+| Is the difference bigger than the gate’s own uncertainty? | [`run_gate_uncertainty()`](https://bhagesh-h.github.io/cyRAVEN/reference/run_gate_uncertainty.md), [`annotate_gate_uncertainty()`](https://bhagesh-h.github.io/cyRAVEN/reference/annotate_gate_uncertainty.md) | sample |
+| Which markers shift within a subcluster? | [`stats_subcluster_shifts()`](https://bhagesh-h.github.io/cyRAVEN/reference/stats_subcluster_shifts.md) | cell, no p-value |
