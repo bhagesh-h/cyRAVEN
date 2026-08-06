@@ -1,8 +1,8 @@
 ---
-title: "Gating and populations"
+title: "Gating"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Gating and populations}
+  %\VignetteIndexEntry{Gating}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -11,87 +11,84 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
 ```
 
-This page covers the part of cyRAVEN you have to think about yourself: which
-cells it keeps, how you tell it what cell types to look for, and how the raw
-numbers get put on a sensible scale. Everything else depends on these.
+Cell identification in cyRAVEN proceeds in three stages: exclusion of
+non-cellular and non-viable events, placement of per-sample marker thresholds,
+and evaluation of a declarative population specification against those
+thresholds. This article documents each stage and the parameters governing it.
 
-## Throwing away what is not a cell
+## 1. Hierarchy
 
-A cytometry file is not a clean list of cells. It also contains dust, broken
-cell fragments, two cells that went through the laser stuck together, and cells
-that were already dead. All of these produce measurements, and none of them
-should be counted.
+Four sequential gates precede any marker evaluation. Each is derived from the
+data rather than transferred between samples.
 
-cyRAVEN removes them in the same four steps a person would, in the same order.
+**1.1 Scatter.** The lower forward-scatter bound is placed at the deepest minimum
+of the log<sub>10</sub> FSC-A density. Sub-cellular debris forms a distinct
+low-scatter mode separated from intact cells; the minimum between them is the
+boundary.
 
-**Step 1, size and granularity.** Every cell scatters light in two directions:
-forward, which tracks roughly with size, and sideways, which tracks with how
-grainy the inside of the cell is. Debris is small and scatters little light, so
-it sits in a cloud near the origin, separated from real cells by a gap. cyRAVEN
-finds that gap and cuts below it.
+**1.2 Singlets.** Coincident events traverse the interrogation point over a
+longer interval than single cells, producing a pulse whose area is inflated
+relative to its height. Events are retained within median ± *k*·MAD of the
+FSC-H:FSC-A ratio computed inside the scatter gate, with *k* set by
+`--singlet-mad-k` (default 3).
 
-**Step 2, single cells.** When two cells stick together they pass the laser as
-one event and get recorded as one very large cell. They are spotted by comparing
-the height of the light pulse with its total area: a doublet takes longer to pass
-through, so its pulse is wider without being taller. Events that fall off that
-relationship are discarded. `--singlet-mad-k` controls how strict this is.
+**1.3 Viability.** Amine-reactive viability dyes penetrate only cells whose
+membrane integrity has been lost. Dead cells are excluded at the density minimum
+of the dye channel. Panels without a viability marker skip this gate, and the
+omission is logged.
 
-**Step 3, live cells.** A viability dye only enters cells whose membrane has
-already failed, so dead cells stain brightly and are cut off. If your panel does
-not include a viability dye, cyRAVEN skips this and tells you it did.
+**1.4 CD45.** Leukocytes are selected on CD45, which is expressed across
+haematopoietic lineages and absent from erythrocytes and platelets. Where CD45 is
+not in the panel, all viable events become the parent and a warning is issued,
+since percent-of-leukocytes and percent-of-viable are not interchangeable
+denominators.
 
-**Step 4, white blood cells.** CD45 is present on all leukocytes and absent on
-red cells and platelets, so it separates the cells you want from everything else
-that survived the earlier steps. If CD45 is missing from your panel, every live
-cell becomes the denominator instead, and the run warns you, because "percent of
-white blood cells" and "percent of everything" are different numbers and should
-not be compared.
+All subsequent population frequencies are expressed as a percentage of the
+CD45<sup>+</sup> parent.
 
-Everything you define later is counted inside the CD45 positive group, so your
-frequencies are percentages of white blood cells.
+## 2. Thresholding
 
-## Why each sample gets its own cut-off
+### 2.1 Rationale
 
-Antibodies do not stain every sample equally. Reagent lots differ, tubes sit for
-different lengths of time before they are run, and the cells themselves vary.
-The practical result is that the boundary between "negative" and "positive" for a
-given protein sits in a slightly different place in every sample.
+Staining index varies between samples through reagent lot, fluorochrome
+degradation, time between staining and acquisition, and cellular autofluorescence.
+A threshold transferred between samples is therefore mis-specified in both
+directions: conservative in dim samples, permissive in bright ones. The resulting
+bias is systematic and correlated with acquisition order, which is the
+configuration most likely to be confounded with study group.
 
-A cut-off drawn once and copied across a batch ignores that. In a weakly stained
-sample it sits too high and throws away real positive cells; in a bright one it
-sits too low and lets negatives in.
+### 2.2 Implementation
 
-So for each protein in each sample, cyRAVEN takes the cells that survived the
-four steps above, looks at the distribution of that protein, and finds the dip
-between the dim group and the bright group. The cut-off goes in the dip. A sample
-whose CD4 signal is shifted lower gets a lower cut-off and keeps its CD4 cells.
+For each marker, within each sample, the density of cells passing the parent gate
+is evaluated and the threshold placed at the minimum separating the negative from
+the positive mode. `density_valley()` returns `NA` where the distribution is
+unimodal. `resolve_threshold()` then attempts an unstained control if one is
+declared in the sample map, and falls back to a fixed quantile otherwise.
 
-### Checking the cut-offs it chose
+### 2.3 Interpretation
 
-This is the decision that most affects your results, so cyRAVEN writes down every
-one of them in `thresholds_used.csv`. Two columns matter.
+`thresholds_used.csv` records one row per sample and marker. Two columns
+determine how far a downstream frequency can be trusted.
 
-`threshold` is where the cut landed.
+`threshold` is the value applied.
 
-`source` says how it got there. `valley` means a genuine dip was found between
-two groups of cells. `quantile_fallback` means there was no dip, and the software
-fell back to taking a fixed percentage of the distribution.
+`source` is `valley` where a density minimum was resolved and
+`quantile_fallback` where none existed. A fallback indicates that the marker did
+not separate positive from negative events in that sample. Frequencies derived
+from a fallback threshold are not invalid, but they carry no evidence of
+separation. A marker falling back across the majority of samples is not
+resolving in that panel, and no gating strategy will recover it.
 
-A `quantile_fallback` is not automatically wrong, but it means the protein did
-not visibly separate positive from negative cells in that sample, so any
-frequency that depends on it deserves suspicion. If one protein falls back in
-most of your samples, that protein is not working in your panel and no gating
-strategy will rescue it.
+`threshold_scale_qc.csv` reports, per panel and marker, the median threshold
+across samples and the robust *z* of each deviation from it. Thresholds flagged
+here are the first candidates for manual review.
 
-`threshold_scale_qc.csv` goes further and flags any cut-off that sits far from
-where the same protein landed in your other samples. Those are the first ones to
-look at.
+## 3. Specification
 
-## Writing a population specification
+### 3.1 Syntax
 
-This is the one input you have to write yourself, and almost everything cyRAVEN
-produces depends on it. It goes in the `populations:` block of the file you pass
-to `--config`.
+Populations are declared in the `populations:` block of the `--config` YAML as
+conjunctions of marker directions.
 
 ```yaml
 populations:
@@ -107,117 +104,118 @@ populations:
     CD45RA: below
 ```
 
-Read the first entry as a sentence: a CD4 T cell is a cell that has CD3, has CD4,
-and does not have CD8. That is the same definition an immunologist would give,
-written in a form the software can apply. A cell joins the population only if it
-satisfies every line, checked against that sample's own cut-offs.
+An event is assigned to a population when it satisfies every declared direction
+against that sample's thresholds. The first entry above is the conventional
+definition of a CD4 T cell, expressed in a form the scoring stage can evaluate.
 
-Three directions are available.
+### 3.2 Directions
 
-`above` and `below` mean the protein is present or absent.
+`above` and `below` denote expression and its absence.
 
-`intermediate` is for proteins that come at three levels rather than two. CD14 on
-monocytes is the standard example: classical monocytes are CD14 bright,
-intermediate monocytes sit in the middle, and non-classical monocytes are
-CD14 dim. For these, cyRAVEN looks for a second dip inside the positive cells to
-find the upper edge of the middle group. If there is no second dip, it reports
-the population as unavailable rather than silently lumping the middle cells in
-with the bright ones.
+`intermediate` addresses markers with three resolvable levels. CD14 in monocyte
+subsetting is the canonical case: classical monocytes are CD14<sup>++</sup>,
+intermediate monocytes CD14<sup>+</sup>CD16<sup>+</sup>, and non-classical
+monocytes CD14<sup>dim</sup>. The upper bound of the intermediate interval is
+derived from a second density minimum within the positive fraction. Where no
+second minimum exists the population is reported UNAVAILABLE rather than being
+merged into the bright fraction.
 
-### Four steps to writing one
+### 3.3 Construction
 
-1. Find out what your panel actually contains. Any run writes
-   `thresholds_used.csv`, which lists every marker it resolved. The `$PnS` field
-   of any file in the batch has the same information.
-2. Write the top-level lineages first and check they score sensibly before adding
-   subsets. If CD3 is wrong, every T cell subset below it is wrong too.
-3. Pass the file with `--config my_panel.yaml`. The same file can also hold
-   colour choices, threshold overrides and metadata translations, all optional.
-4. Read the run log. Any population whose markers are not all in the panel is
-   reported as UNAVAILABLE and scored as nothing. An empty frequency table is
-   almost always a spelling difference between your specification and the `$PnS`
-   field, not a missing population.
+1. Enumerate the panel. `thresholds_used.csv` from any run lists every resolved
+   marker; the `$PnS` keyword of any file in the batch carries the same
+   information.
+2. Declare lineage-level populations first and confirm they score plausibly
+   before adding subsets. An error in the CD3 gate propagates to every T cell
+   subset beneath it.
+3. Pass the file with `--config`. The same file optionally carries threshold
+   overrides, colour assignments and metadata translations.
+4. Read the run log. A population whose markers are not all present is reported
+   UNAVAILABLE and scored as absent. An empty frequency table almost always
+   indicates a nomenclature mismatch between the specification and `$PnS` rather
+   than a biologically absent population.
 
-Copy `system.file("config", "config_cohorts.yaml", package = "cyRAVEN")` for the
-overall shape of the file and replace the populations with your own.
+`system.file("config", "config_cohorts.yaml", package = "cyRAVEN")` provides the
+file structure; replace the populations with those of the panel in use.
 
-### If you skip the config
+### 3.4 Default
 
-The built-in specification describes a myeloid and lymphoid panel: CD14, CD16,
-CD19, CD56 with NKG2D, CD127 with CD25, and the gamma delta T cell receptors. On
-any other panel most of it reports UNAVAILABLE. A T cell panel of CD3, CD4, CD8,
-CD38, HLA-DR, CCR7 and CD45RA overlaps it in three populations out of fifteen.
-Treat the built-in one as a worked example, not a default that will fit you.
+The built-in specification describes a myeloid and lymphoid panel comprising
+CD14, CD16, CD19, CD56 with NKG2D, CD127 with CD25, and the gamma-delta T cell
+receptor chains. A T cell panel of CD3, CD4, CD8, CD38, HLA-DR, CCR7 and CD45RA
+intersects it in three populations of fifteen. It is a worked example, not a
+default suitable for arbitrary panels.
 
-### Why the specification is not learned from the data
+### 3.5 Provenance
 
-You could imagine cyRAVEN looking at your samples and proposing the populations
-itself. It deliberately does not. A specification fitted to the same samples it
-is then tested against cannot be contradicted by them, and contradiction is the
-whole point of the threshold drift check, the phenotype heatmap and the gate
-against cluster comparison.
+The specification is not estimated from the data. A specification fitted to the
+samples against which it is subsequently tested cannot be falsified by them, and
+falsification is the function of the threshold drift, phenotype concordance and
+gate-cluster concordance outputs.
 
-What the data is allowed to do is propose. `--explain-clusters` takes any cluster
-your specification does not describe and learns a short sequence of two-marker
-gates that selects those cells, with performance measured on cells held out of
-the fit. The result goes to `cluster_gate_proposals.csv`. Deciding which of those
-becomes a named population is your job, and next run's specification is a file
-you edited by hand.
+Data-driven proposal is available and kept separate. `--explain-clusters` derives
+two-marker gate geometry for any cluster the specification does not describe,
+with performance measured on held-out cells, and writes it to
+`cluster_gate_proposals.csv`. Promotion of a proposal to a named population is a
+manual decision, and the following run reads an edited specification.
 
-## Putting the numbers on a readable scale
+## 4. Transformation
 
-Raw fluorescence values span an enormous range. A negative cell might read 30 and
-a bright one 200,000, so plotted directly the negatives collapse into a line
-against the axis and you cannot see where one group ends and the next begins.
-Every cytometry tool therefore rescales the data first, and the choice of scale
-affects where the cut-offs end up.
+### 4.1 Scale
 
-cyRAVEN offers two.
+Fluorescence intensities span four to five decades. Untransformed, the negative
+population compresses against the axis and mode separation is not resolvable.
+Every threshold in section 2 is therefore placed on a transformed scale, and the
+choice of transform determines where it lands.
 
-**arcsinh** (the default) compresses the bright end while leaving the dim end
-spread out. It needs one number, the cofactor, which sets how much of the
-near-zero region gets stretched. The usual published value of 5 comes from mass
-cytometry and is wrong for most fluorescence data, so cyRAVEN measures a suitable
-value from your own files instead of assuming one.
+### 4.2 Arcsinh
 
-**logicle** (`--transform logicle`) is the flow cytometry convention. It behaves
-linearly near zero, which matters because correcting for optical bleed between
-channels pushes some genuinely negative cells below zero. arcsinh has nowhere to
-put those; logicle does.
+The default. The cofactor governs the width of the quasi-linear region near zero
+and is estimated per panel by bisection until the interquartile range of the
+background distribution reaches a target. The conventional value of 5 derives
+from mass cytometry and over-expands the background band on spectrally unmixed
+fluorescence data, so it is estimated rather than assumed.
+`derive_cofactor_pooled()` estimates across samples so that a single weakly
+stained file does not set the scale for the batch.
 
-One detail is worth knowing. cyRAVEN works out the logicle settings once for the
-whole panel and applies them to every sample. Some tools fit them separately for
-each file, which puts every sample on a slightly different scale and makes
-comparing brightness between samples meaningless.
+### 4.3 Logicle
 
-### The choice changes your answer
+`--transform logicle` implements the automatic logicle rule with linearisation
+width *w* = (*m* − log<sub>10</sub>(*t*/|*r*|))/2, where *r* is the fifth
+percentile of the negative population. The quasi-linear region near zero
+accommodates compensated negative values, which arcsinh cannot represent.
 
-This is not a cosmetic setting. On a seven-colour T cell panel, the major
-populations came out within 0.1% of each other under both transforms, but the
-CCR7 and CD45RA memory subsets moved by tens of percent.
+Parameters are pooled across the panel. Per-file fitting, implemented by some
+tools, assigns each sample an independent scale and invalidates cross-sample
+comparison of medians.
 
-The reason is visible in `thresholds_used.csv`. CCR7 is a dim marker with no
-clean separation. Under arcsinh, the software found a real dip in some samples
-and had to fall back to a quantile in others, so the cut-off jumped around. Under
-logicle it found a dip every time.
+### 4.4 Consequence
 
-The lesson generalises: for dim proteins with no obvious negative and positive
-groups, the scale decides whether a stable cut-off exists at all. Check the
-`source` column before trusting a memory subset frequency.
+The transform is not a display parameter. On a seven-colour T cell panel,
+lineage-level populations agreed within 0.1% between transforms while CCR7 and
+CD45RA memory subsets differed by tens of percent.
 
-`--transform none` leaves the values alone, for data that has already been
-transformed elsewhere.
+The mechanism is recorded in `thresholds_used.csv`. Under arcsinh the CCR7
+threshold resolved to a density minimum in some samples and to a quantile
+fallback in others, a difference of approximately 2.5 units on that scale. Under
+logicle a minimum was resolved in every sample. For dim markers without clear
+bimodality the transform determines whether a stable threshold exists at all,
+which makes the `source` column a prerequisite for interpreting any memory subset
+frequency.
 
-## Correcting for colour bleed
+`--transform none` bypasses transformation for pre-transformed input.
 
-Fluorescent dyes emit across a range of wavelengths, so light from one dye leaks
-into the detector meant for another. Left uncorrected, a cell bright for one
-protein looks mildly positive for several others it does not actually have.
+## 5. Compensation
 
-The correction is calculated on the instrument from single-stain controls and
-saved inside the FCS file. cyRAVEN applies it when it is there and tells you when
-it is not.
+Fluorochrome emission spectra overlap, so signal from one dye is registered in
+detectors assigned to others. Uncorrected, this produces apparent positivity in
+channels the cell does not express.
 
-It will not calculate one for you. That belongs in the acquisition software,
-where you can see the controls and check the result, and applying a correction
-twice is as damaging as never applying it.
+The spillover matrix is determined at acquisition from single-stain controls and
+stored in the FCS keyword block. cyRAVEN applies it where present and reports its
+absence. Spectral instruments write unmixed data with no matrix, so
+`maybe_compensate()` detects rather than assumes, since applying compensation
+twice is as damaging as omitting it.
+
+Matrix construction is out of scope. It belongs in acquisition software, where
+the single-stain controls can be inspected.

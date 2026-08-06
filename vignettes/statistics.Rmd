@@ -1,8 +1,8 @@
 ---
-title: "Statistical choices, and what they cost"
+title: "Statistics"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Statistical choices, and what they cost}
+  %\VignetteIndexEntry{Statistics}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -16,31 +16,30 @@ set.seed(1)
 library(cyRAVEN)
 ```
 
-Every statistical test involves a choice, and every choice gives something up.
-This page says what each one gives up, so you can judge whether you agree.
+Each test in cyRAVEN represents a trade between assumptions and power. This
+article states the trade made at each point and the sample size at which it
+should be revisited.
 
-## Count people, not cells
+## 1. Aggregation
 
-This is the most important idea here, and it costs nothing to understand.
+### 1.1 Pseudoreplication
 
-Suppose you study eight patients and eight controls. Your sample size is 16
-people. But each blood sample contains a million cells, so if you run a test
-across all the cells, the software thinks your sample size is 16 million.
+The event count in an FCS file is determined by acquisition duration, not by
+study design. Treating events as independent observations sets the degrees of
+freedom from an operational parameter: sixteen donors contributing one million
+events each yield a nominal *n* of 1.6 × 10<sup>7</sup>.
 
-That is not a technicality. Two things go wrong.
+Two consequences follow. Statistical power becomes a function of instrument time,
+so extending acquisition on one tube increases apparent significance. More
+seriously, a single donor acquired to greater depth contributes disproportionate
+weight, and inter-individual variation in that donor is indistinguishable from a
+group effect.
 
-First, the number of cells depends on how long the operator left the machine
-running, so your sample size is really a measure of laboratory scheduling. Run one
-patient's tube for an extra ten minutes and your study appears more powerful.
+### 1.2 Implementation
 
-Second, and worse, one person can produce the whole result. If a single patient's
-sample was recorded for longer than everyone else's, their cells outnumber the
-rest and their personal quirks look like a finding about the disease.
-
-cyRAVEN reduces every sample to a single number for each cell type before any
-test runs, so the sample size stays at 16. That is the same approach the diffcyt
-method uses, and it is the reason the numbers below look modest rather than
-impressive.
+Every test aggregates to one value per sample per population before estimation,
+following Weber et al. (2019, *Commun Biol* 2:183). The degrees of freedom
+reflect the number of donors.
 
 ```{r ds}
 mfi <- expand.grid(sample_id = sprintf("S%02d", 1:12),
@@ -56,50 +55,46 @@ res <- stats_marker_state(mfi, grp, reference = "HC")
 res[, c("marker", "measure", "n_reference", "n_comparison", "delta_median", "p_value")]
 ```
 
-Look at `n_reference`: it is 6, the number of control donors, not 3,000, the
-number of cells they contributed.
+`n_reference` is 6, the number of control donors, not 3,000, the number of events
+they contributed.
 
-Cell-level numbers are still produced, in `stats_subcluster_shifts()`, but they
-carry an effect size and deliberately no p-value. They are there to suggest what
-to look at next, not to establish anything.
+Event-level quantities remain available through `stats_subcluster_shifts()`,
+which reports effect sizes without p-values. They are hypothesis-generating.
 
-## Tests that do not assume a bell curve
+## 2. Test selection
 
-The tests here are Wilcoxon and Kruskal-Wallis, which work on the rank order of
-values rather than their exact size. They assume only that your samples are
-independent and that the values can be put in order.
+Group comparisons use Wilcoxon rank-sum and Kruskal-Wallis, which assume
+independence and ordinal comparability.
 
-The main alternative, used by diffcyt, is a method that assumes the data follows
-a normal distribution and borrows information across proteins to stabilise its
-estimates. With 30 to 40 proteins and a properly sized study, that is the better
-choice and gives more power.
+The principal alternative, implemented in diffcyt, is limma's moderated *t*,
+which stabilises variance estimates through an empirical Bayes prior shared
+across markers. At mass cytometry marker counts of 30 to 40 and designed sample
+sizes, this is the more powerful choice.
 
-With a dozen proteins and eight people per group, it stops being the better
-choice. There are too few proteins for the borrowing to help, and the normality
-assumption starts doing real work rather than being a formality, at exactly the
-sample size where you cannot check whether it holds.
+At a dozen markers and single-digit donors per group the prior is estimated from
+too few markers to stabilise, and the normality assumption becomes load-bearing
+at precisely the sample size where it cannot be assessed.
 
-What the rank tests cost you: some power when the data really are normal, and no
-tidy way to adjust for age or sex.
+**Cost.** Reduced power under normality, and no direct mechanism for covariate
+adjustment.
 
-When to switch: around fifteen or more samples per group.
+**Revisit at.** Approximately fifteen samples per group, where the prior becomes
+informative and mixed models can accommodate repeated measures.
 
-## Percentages are a fixed pie
+## 3. Compositionality
 
-Every cell type is reported as a percentage of white blood cells, and those
-percentages must add to 100. That means they cannot move independently, and it
-produces a trap that catches people constantly.
+### 3.1 Constraint
 
-Suppose a patient group has a genuine expansion of granulocytes, which are the
-most common white cell. Because the total is fixed at 100%, every other cell type
-must fall as a percentage. Your T cells, B cells and NK cells will all appear
-reduced and may all test significant, when in absolute terms not one of them has
-changed. The patient has the same number of T cells per millilitre of blood as
-everybody else.
+Population percentages within a sample are constrained to sum to 100 and cannot
+vary independently. A genuine granulocyte expansion mechanically depresses every
+lymphocyte percentage. Those depressions test significant while absolute
+lymphocyte counts per microlitre remain unchanged.
 
-cyRAVEN runs each comparison twice: once on the raw percentages, and once after a
-transformation that expresses each population relative to the sample's overall
-composition rather than to a fixed total.
+### 3.2 Log-ratio
+
+`clr_frequencies()` applies the centred log-ratio, expressing each population
+relative to the geometric mean of the sample composition rather than to a fixed
+total.
 
 ```{r clr}
 freq <- data.frame(
@@ -110,104 +105,91 @@ freq <- data.frame(
 head(clr_frequencies(freq)[, c("sample_id", "population", "pct_of_cd45_pos", "clr")], 3)
 ```
 
-Comparing the two answers is where the value is, and
-`compositional_concordance()` does that for you, labelling every result as one of
-three things.
+### 3.3 Concordance
 
-`robust_to_composition` means the difference held up both ways, and you can
-believe it.
+Both parameterisations are tested and `compositional_concordance()` classifies
+each result.
 
-`raw_only__possible_composition_artefact` means it was significant on raw
-percentages but vanished once composition was accounted for. This is the
-granulocyte trap above. Something else in the sample probably moved.
+`robust_to_composition` survives both and supports interpretation as an
+independent change.
 
-`clr_only__was_masked_by_composition` is the reverse: a real change that the
-fixed total was hiding.
+`raw_only__possible_composition_artefact` is significant on percentages and not
+on log-ratios, which is the configuration produced by section 3.1.
 
-One thing this cannot fix. If every cell type in a patient doubles, the
-percentages are all unchanged and no amount of clever transformation will notice,
-because the information is simply not in a percentage. Only an actual count of
-cells per microlitre of blood distinguishes "this population grew" from "this
-population grew relative to the others". If your patient table has a white cell
-count from a routine blood test, cyRAVEN will use it and give you real counts.
-Percentages are what you work with when you have nothing better; counts are
-better data.
+`clr_only__was_masked_by_composition` is the converse, an independent change
+obscured by the constraint.
 
-## Age and sex are flagged, not silently corrected
+### 3.4 Limit
 
-Your patient table may have age and sex in it, and the instinct is to put them
-into the model and let the statistics handle it.
+The log-ratio does not recover absolute abundance. Proportional expansion of
+every population leaves the composition invariant and is undetectable in
+frequency data by construction. Discriminating expansion from relative expansion
+requires cells per microlitre, so `abundance_measure()` uses absolute counts
+wherever the patient table supplies a leukocyte count.
 
-That works when you have enough people. With eight per group it does not. The
-model has to estimate an age effect and a sex effect out of the same 16
-observations you wanted for the main comparison, leaving very little for the
-question you care about.
+## 4. Covariates
 
-There is a harder version of the problem. If your patients are all children and
-your controls are all adults, there is no way to separate age from disease,
-because you have no young controls and no old patients to learn the difference
-from. No sample size fixes this. Any adjusted number the model produces is an
-extrapolation into a region where you have no data, and it will arrive with a
-confidence interval that makes it look trustworthy.
+Age and sex are diagnosed rather than adjusted.
 
-So `stats_confounding()` reports the facts and lets you judge: does age differ
-between groups, and is age related to the population you are measuring. Both have
-to be true before there is a problem. If you still want the adjusted model,
-`stats_rank_ancova()` will fit it, mark every row `EXPLORATORY`, and write
-`NOT FITTED` with a reason wherever there is not enough data to support it.
+With eight samples per group, a model estimating age and sex effects alongside
+the group term consumes the residual degrees of freedom required for the
+comparison of interest. Where the covariate is strongly associated with group,
+the parameters are not separable at any sample size, because the design contains
+no observations at the covariate levels required to estimate the effects
+independently.
 
-## Batch effects are measured before anything is removed
+`stats_confounding()` therefore reports the two conditions that jointly define a
+confounder: differential distribution across groups, and association with the
+outcome. `stats_rank_ancova()` fits the adjusted model on request, labels every
+row `EXPLORATORY`, and records `NOT FITTED` with the reason where residual
+degrees of freedom are insufficient.
 
-The standard tools for this shift cells around until samples from different
-processing days overlap. That works when the days are unrelated to the study
-design.
+## 5. Batch effects
 
-Clinical studies rarely oblige. Patients get recruited and run in one period,
-controls in another, so "which day it was processed" and "patient or control"
-become close to the same variable. Shifting cells until the days overlap then
-also shifts away the difference you are studying, and the method has no way to
-tell the two apart.
+Correction methods displace cells until batch labels mix. This is valid when
+batch is independent of the study design.
 
-`batch_mixing_report()` answers both questions before anything is changed: is
-there a batch effect, judged against what random labelling would look like, and
-can it be told apart from the study group at all. If the answer to the second is
-no, then no setting makes correction safe, and saying so is the most useful thing
-it can do.
+Clinical cohorts rarely satisfy that condition: recruitment and acquisition are
+typically sequential, so batch and group approach collinearity. Displacing cells
+until batches mix then also removes the biological contrast, and the algorithm
+cannot distinguish the two contributions.
 
-Correction is available with `--correct-batch` and is refused above a threshold
-you control. The refusal is the point of the feature, not an obstacle to it.
+`batch_mixing_report()` returns both required quantities before any correction:
+iLISI against a permutation null, establishing whether batch structure exists,
+and Cramér's *V*, establishing whether it is separable from group. A high *V*
+means no setting makes correction safe, which is the most informative result the
+diagnostic can return.
 
-## Testing many things at once
+`--correct-batch` performs the correction and is refused above a configurable
+threshold.
 
-Test twenty populations at the usual 5% threshold and you expect one false
-positive even when nothing is going on. cyRAVEN applies the Benjamini-Hochberg
-correction, which adjusts the p-values for how many tests were run, and reports
-both the raw and adjusted values.
+## 6. Multiplicity
 
-One detail. For marker brightness, cyRAVEN measures two things per population:
-the median level, and the percentage of cells that are positive. These are two
-views of the same cells and tend to move together, so the correction is applied
-within each measure rather than pooling them. Pooling would double the apparent
-number of independent questions and penalise every real result for it.
+Benjamini-Hochberg correction is applied within each test family, with raw and
+adjusted p-values both reported.
 
-## Effect sizes sit next to every p-value
+Differential state adjusts within each measure rather than across both. Median
+intensity and percent positive are two summaries of the same events and are
+strongly correlated; pooling them would inflate the family with non-independent
+hypotheses and over-penalise every result.
 
-A p-value tells you whether a difference is likely to be real. It says nothing
-about whether it is big enough to matter. Every test here reports an effect size
-alongside, so you can see both.
+## 7. Effect sizes
 
-For transformed brightness values, cyRAVEN reports differences rather than fold
-changes. Those scales run below zero, and a ratio between two numbers that can be
-negative flips sign for reasons that have nothing to do with biology.
+Every p-value is reported with an effect size: Cliff's delta across samples, or
+matched-pairs rank-biserial for paired designs.
 
-## Summary
+Differences rather than ratios are reported for transformed intensities. Arcsinh
+and logicle scales admit negative values, on which a ratio is undefined in
+interpretation and changes sign without a corresponding change in biology.
+
+## 8. Summary
 
 | Question | Function | Unit |
 |---|---|---|
-| Did a population change size? | `stats_group_comparison()` | sample |
-| The same, after removing the compositional constraint | `clr_frequencies()` and `compositional_concordance()` | sample |
-| Did a marker change level inside a population? | `stats_marker_state()` | sample |
-| Is it really age or sex? | `stats_confounding()` | sample |
-| Is it really the batch? | `batch_mixing_report()` | cell, descriptive |
-| Is it really the gate? | `stats_threshold_drift()`, `cluster_gate_agreement()` | sample and cell |
+| Did population abundance change? | `stats_group_comparison()` | sample |
+| Does it survive the compositional constraint? | `clr_frequencies()`, `compositional_concordance()` | sample |
+| Did marker expression change within a population? | `stats_marker_state()` | sample |
+| Is the contrast confounded by age or sex? | `stats_confounding()` | sample |
+| Is the contrast confounded by batch? | `batch_mixing_report()` | cell, descriptive |
+| Is the contrast an artefact of the gate? | `stats_threshold_drift()`, `cluster_gate_agreement()` | sample and cell |
 | Which markers shift within a subcluster? | `stats_subcluster_shifts()` | cell, no p-value |

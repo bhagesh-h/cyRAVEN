@@ -1,8 +1,8 @@
 ---
-title: "What lands in results/"
+title: "Output"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{What lands in results/}
+  %\VignetteIndexEntry{Output}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -11,122 +11,121 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
 ```
 
-A reference for every file a run can write. A typical run on eight samples
-produces around twenty tables and twenty figures.
+Reference for every file a run writes. A default run on eight samples produces 23
+tables and 20 figures.
 
-## Read these first
+## 1. Quality control
 
-| File | Why |
+| File | Content |
 |---|---|
-| `recon_diagnostics.png` | Where every cut-off landed, sample by sample |
-| `gating_qc.png` | The same, drawn on the distributions the cut-offs came from |
-| `staining_qc.csv` | Which samples were dropped, and why |
-| `thresholds_used.csv` | Every cut-off, and whether it found a clean dip or had to guess |
+| `recon_diagnostics.png` | Gate boundaries per sample |
+| `gating_qc.png` | Thresholds superimposed on the densities they derive from |
+| `staining_qc.csv` | Per-sample verdict and exclusion reason |
+| `thresholds_used.csv` | Threshold, derivation, cofactor and outlier status per sample and marker |
+| `threshold_scale_qc.csv` | Panel median and robust *z* per marker |
 
-These four tell you whether the cells were divided up sensibly. If they were not,
-nothing further down is worth reading, however good the p-values look.
+These constrain the interpretation of every subsequent file. A run whose gates
+are misplaced produces internally consistent statistics that are unusable.
 
-## Populations and intensity
+## 2. Abundance
 
-| File | Contents |
+| File | Content |
 |---|---|
-| `population_frequencies.csv` | What percentage each cell type makes up, per sample |
-| `population_marker_mfi.csv` | How brightly each protein is expressed in each cell type, per sample, as both a median and a percentage of positive cells |
-| `functional_markers.csv` | The same for any activation or exhaustion markers your config groups together |
-| `population_ratios.csv` | Ratios such as CD4 to CD8, if your config asks for them |
-| `gate_counts.csv` | How many cells survived each cleanup step |
-| `population_frequencies.png` | Frequencies across all samples together |
-| `population_marker_heatmap.png` | Proteins against cell types, so you can check the labels match the biology |
+| `population_frequencies.csv` | Percentage of parent per population per sample |
+| `population_marker_mfi.csv` | Median transformed intensity and percent positive per sample, population and marker |
+| `functional_markers.csv` | The same restricted to functional marker blocks declared in the config |
+| `population_ratios.csv` | Derived ratios where declared |
+| `gate_counts.csv` | Event counts at each level of the gate hierarchy |
+| `population_frequencies.png` | Pooled composition across samples |
+| `population_marker_heatmap.png` | Marker intensity against declared populations, z-scored |
 
-One warning about the `count` column. It is the number of cells recorded, which
-depends on how long the machine ran, so it is not a measure of how many cells the
-person has. Use `pct_of_cd45_pos` unless you supplied real counts from a blood
-test.
+`count` is an event count and scales with acquisition duration. It is not an
+abundance. Report `pct_of_cd45_pos` unless absolute counts were supplied through
+`--absolute-counts`.
 
-## The embedding
+## 3. Embedding
 
-| File | Contents |
+| File | Content |
 |---|---|
-| `cells_umap.csv` | One row per embedded cell with coordinates, sample, population |
-| `umap_overview.png` | The embedding coloured by population and by sample |
+| `cells_umap.csv` | Per-cell coordinates with sample, population and panel |
+| `umap_overview.png` | Embedding by population and by sample |
 | `umap_markers.png` | One panel per marker |
-| `umap_density.png` | Where cells are concentrated |
-| `umap_density_by_group.png` | The same, split by study group |
-| `umap_overview_by_group.png` | Combined view plus one column per group |
-| `umap_multigraph_overlay.png` | Per compartment marker curves against the reference group |
-| `umap.model`, `umap.model.meta.rds` | Saved model, written by `--save-umap-model` |
+| `umap_density.png` | Cell density in embedding space |
+| `umap_density_by_group.png` | The same, faceted by study group |
+| `umap_overview_by_group.png` | Combined embedding with one column per group |
+| `umap_multigraph_overlay.png` | Per-compartment marker distributions against the reference group |
+| `umap.model`, `umap.model.meta.rds` | Persisted model, written by `--save-umap-model` |
 
-The saved model lets a later batch be projected onto the same axes, so a cluster
-stays where it was between runs. Projection is refused when the new data is
-missing markers the model used, because filling the gap with zeros would give
-coordinates that look plausible and mean nothing.
+A persisted model permits projection of subsequent batches into the same
+coordinate space, holding cluster positions fixed between runs. Projection is
+refused where the new data lack markers the model used, since zero-filling would
+produce coordinates that are geometrically valid and biologically meaningless.
 
-## Statistics
+## 4. Inference
 
-| File | Contents |
+| File | Content |
 |---|---|
-| `group_comparison_stats.csv` | Abundance between groups, one row per population |
-| `group_comparison.png` | The same as boxplots |
-| `marker_state_stats.csv` | Differential state, per population and marker |
-| `marker_state.png` | The same as boxplots |
-| `functional_markers_stats.csv` | Functional marker blocks between groups |
+| `group_comparison_stats.csv` | Abundance between groups, per population |
+| `group_comparison.png` | The same as per-sample distributions |
+| `marker_state_stats.csv` | Differential state per population and marker |
+| `marker_state.png` | The same as per-sample distributions |
+| `functional_markers_stats.csv` | Functional blocks between groups |
 | `population_ratios_stats.csv` | Declared ratios between groups |
-| `compositional_clr_stats.csv` | The abundance tests repeated on centred log-ratios |
-| `compositional_concordance.csv` | Which findings survive both, and which do not |
-| `paired_comparison_stats.csv` | Paired design, written by `--paired-column` |
+| `compositional_clr_stats.csv` | Abundance tests on centred log-ratios |
+| `compositional_concordance.csv` | Classification of each result against both parameterisations |
+| `paired_comparison_stats.csv` | Paired designs, written by `--paired-column` |
 | `covariate_adjusted_stats.csv` | Rank ANCOVA, written by `--rank-ancova` |
-| `subcluster_marker_shifts.csv` | Pooled-cell marker shifts per compartment, no p-values |
+| `subcluster_marker_shifts.csv` | Pooled-event marker shifts per compartment |
 
-Every test here uses one value per sample. `subcluster_marker_shifts.csv` is the
-exception and says so: it ranks shifts over pooled cells, carries no p-value, and
-answers a different question from the tests above it.
+Every file above except the last uses one value per sample.
+`subcluster_marker_shifts.csv` operates on pooled events, carries effect sizes
+without p-values, and answers a different question from the tests above it.
 
-## Diagnostics
+## 5. Diagnostics
 
-| File | Contents |
+| File | Content |
 |---|---|
-| `threshold_drift_stats.csv`, `threshold_drift.png` | Whether a gate moved with group |
-| `threshold_scale_qc.csv` | Thresholds far from their peers in the same panel |
-| `confounding_diagnostics.csv` | Whether each covariate differs by group and tracks the outcome |
+| `threshold_drift_stats.csv`, `threshold_drift.png` | Whether thresholds separate by group |
+| `confounding_diagnostics.csv` | Covariate imbalance, outcome association, and verdict |
 | `batch_mixing_stats.csv` | iLISI against a permutation null |
-| `batch_group_confounding.csv` | Cramér's V between batch and group |
-| `batch_diagnostic.png` | The same, drawn |
-| `run_manifest.txt` | Everything needed to say what produced this folder |
+| `batch_group_confounding.csv` | Cramér's *V* and correction verdict |
+| `batch_diagnostic.png` | Observed against null mixing |
+| `run_manifest.txt` | Versions, commit, invocation, options |
 
-## Clustering and learned gates
+## 6. Clustering
 
-Written when you pass `--cluster` or `--explain-clusters`.
+Written under `--cluster` and `--explain-clusters`.
 
-| File | Contents |
+| File | Content |
 |---|---|
 | `unsupervised_clusters.csv`, `.png` | Cluster assignment per cell |
-| `cluster_gate_agreement_clusters.csv` | Per cluster: which label dominates, and how purely |
-| `cluster_gate_agreement_populations.csv` | Per population: recovered as a cluster, or scattered |
-| `subcluster_k_selection.csv` | Chosen k per population, from `--auto-subcluster-k` |
-| `cluster_gate_proposals.csv` | Learned gating strategies with held-out metrics |
-| `cluster_gate_polygons.csv` | The polygon vertices, so you can redraw them |
+| `cluster_gate_agreement_clusters.csv` | Dominant label and purity per cluster |
+| `cluster_gate_agreement_populations.csv` | Recovery of each declared population |
+| `subcluster_k_selection.csv` | Silhouette-selected k, from `--auto-subcluster-k` |
+| `cluster_gate_proposals.csv` | Learned gate geometry with held-out metrics |
+| `cluster_gate_polygons.csv` | Polygon vertices in transformed units |
 | `cluster_gate_strategy_<k>.png` | One figure per explained cluster |
 
-## Other
+## 7. Auxiliary
 
-| File | Contents |
+| File | Content |
 |---|---|
-| `patient_metadata_english.csv` | The patient table after column mapping and translation |
-| `absolute_counts.csv`, `.png`, `_stats.csv`, `_raw.csv`, `_qc.png` | Written by `--absolute-counts` |
-| `flowjo/` | UMAP-annotated FCS files, written by `--flowjo-export` |
-| `config_derived.yaml` | Everything the run derived, written by `--write-config` |
-| `sample_map_template.csv` | A blank sample map, written by `--write-sample-map` |
+| `patient_metadata_english.csv` | Patient table after column mapping and value translation |
+| `absolute_counts*.csv`, `.png` | Written by `--absolute-counts` |
+| `flowjo/` | UMAP-annotated FCS, written by `--flowjo-export` |
+| `config_derived.yaml` | Derived parameters, written by `--write-config` |
+| `sample_map_template.csv` | Written by `--write-sample-map` |
 
-`--write-config` and `--write-sample-map` both derive what they need and then
-stop, so neither can be combined with a full run.
+`--write-config` and `--write-sample-map` terminate after writing and cannot be
+combined with a full run.
 
-The FlowJo export writes one pooled file, one per sample, and one per group. Open
+The FlowJo export writes one pooled file, one per sample and one per group. Open
 `_ALL_SAMPLES.fcs`, plot UMAP-1 against UMAP-2, and decode the Population,
-SampleID and CohortID channels with `population_codes.csv`.
+SampleID and CohortID parameters using `population_codes.csv`.
 
-## A note on failures
+## 8. Failure handling
 
-Every analysis added on top of the core pipeline runs after the primary outputs
-are already on disk, and is wrapped so that a failure logs a warning naming the
-analysis and leaves everything else alone. An addition that can destroy the thing
-it was added to is not an addition.
+Analyses beyond the core pipeline execute after the primary outputs are written
+and are individually wrapped. A failure logs a warning naming the analysis and
+leaves all other output intact. An addition capable of destroying the result it
+augments is not an addition.
