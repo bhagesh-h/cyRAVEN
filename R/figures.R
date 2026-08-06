@@ -1223,7 +1223,7 @@ fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort"
   num  <- setNames(seq_along(lv), lv)
   cells$.num <- unname(num[as.character(cells$population_label)])
   d$num <- unname(num[d$population])
-  keylab  <- setNames(sprintf("%d u00b7 %s", num, names(num)), names(num))
+  keylab  <- setNames(sprintf("%d \u00b7 %s", num, names(num)), names(num))
   pal_pop <- population_colours(lv, colors = colors)
 
   # --- UMAP row: pooled, then one panel per STUDY GROUP ----------------------

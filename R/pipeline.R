@@ -958,10 +958,35 @@ run_cyraven <- function(opt) {
   if (!is.null(patients) && gcol %in% names(patients) &&
       !is.null(smap) && "patient_id" %in% names(smap)) {
     group_of <- resolve_group_of(patients, smap, gcol)
-  } else if (!is.null(opt$group_column)) {
-    log_msg("NOTE --group-column '", gcol, "' not found in the patient table; ",
-            "grouped comparison skipped. Available: ",
-            paste(setdiff(names(patients), "patient_id"), collapse = ", "))
+  } else if (!is.null(smap) && gcol %in% names(smap) &&
+             "sample_id" %in% names(smap)) {
+    # FALL BACK TO THE SAMPLE MAP. The patient table is optional -- a design
+    # with no clinical metadata still has study groups -- and a sample map that
+    # names the group column is a complete specification of the grouping on its
+    # own. Requiring the patient table meant a run with `cohort` sitting in the
+    # sample map reported it "not found in the patient table" and silently
+    # skipped the grouped comparison, the compositional tests and the paired
+    # test, which is most of the point of the run.
+    #
+    # The batch-correction step above already reads the group straight from the
+    # sample map, so without this the pipeline disagreed with itself about where
+    # the group lives.
+    g <- as.character(smap[[gcol]])
+    keep <- !is.na(g) & nzchar(g) & !is.na(smap$sample_id)
+    if (any(keep)) {
+      group_of <- setNames(g[keep], smap$sample_id[keep])
+      log_msg("  group column '", gcol, "' taken from the sample map (",
+              length(unique(group_of)), " group(s))")
+    }
+  }
+  if (is.null(group_of) && !is.null(opt$group_column)) {
+    log_msg("NOTE --group-column '", gcol, "' found in neither the patient ",
+            "table nor the sample map; grouped comparison skipped. Available ",
+            "in the sample map: ",
+            paste(setdiff(names(smap), c("file", "sample_id")), collapse = ", "),
+            if (!is.null(patients))
+              paste0("; in the patient table: ",
+                     paste(setdiff(names(patients), "patient_id"), collapse = ", ")))
   }
   p_src <- if (identical(opt$p_adjust_display, "BH")) "BH" else "raw"
   grouped <- !is.null(group_of) && length(unique(group_of)) > 1L

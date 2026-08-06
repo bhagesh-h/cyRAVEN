@@ -123,7 +123,7 @@ functional_blocks:
 # Derived abundance ratios: standard immunology summary numbers computed from
 # the frequencies above, not independently gated. `numerator`/`denominator`
 # must be population names declared under `populations:` above. Written to
-# population_ratios.csv and plotted in population_ratios.png (see README §8).
+# population_ratios.csv and plotted in population_ratios.png.
 ratios:
   CD4_CD8:
     label: "CD4:CD8 ratio"

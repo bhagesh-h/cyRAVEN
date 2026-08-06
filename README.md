@@ -1,6 +1,4 @@
-# cyRAVEN
-
-<img src="man/figures/logo.png" alt="cyRAVEN" width="200" align="right"/>
+# cyRAVEN <img src="man/figures/logo.png" alt="cyRAVEN logo" width="200" align="right"/>
 
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/bhagesh-h/cyRAVEN/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/bhagesh-h/cyRAVEN/actions/workflows/R-CMD-check.yaml)
@@ -432,7 +430,7 @@ cohort**, report both, and let that decide. If they are separable and mixing is
 poor, `--correct-batch` aligns each marker across batches by monotone quantile
 mapping. If they are confounded, no correction is safe at any setting, and
 `correct_batch()` refuses rather than obliging; that refusal is the single most
-important thing this diagnostic can tell you. See §2 for the flags and for what
+important thing this diagnostic can tell you. See section 2 for the flags and for what
 correction does and does not reach.
 
 **The metric** is iLISI (Korsunsky et al. 2019, the metric Harmony itself is
@@ -522,7 +520,7 @@ immediately.
 
 #### 3.8.1 Learning a gate back out of a cluster: `--explain-clusters`
 
-**The gap §3.8 opens and cannot close.** The agreement table can tell you that
+**The gap section 3.8 opens and cannot close.** The agreement table can tell you that
 cluster 7 matches no described population. It cannot tell you **what cluster 7
 is**. The finding arrives as a cluster number and a cell count, nothing a
 cytometrist can act on, because there is no way to go back to the instrument, or
@@ -677,32 +675,32 @@ option, every input file with size and mtime, and the derived cofactors.
 
 ### New files in `results/`
 
-| File | From |
+| File | Section |
 |---|---|
-| `marker_state_stats.csv` | §3.1 |
-| `marker_state.png` | §3.1 |
-| `population_marker_heatmap.png` | §3.2 |
-| `cohort_composition_heatmap.png` | §3.2 |
-| `compositional_clr_stats.csv` | §3.3 |
-| `compositional_concordance.csv` | §3.3 |
-| `confounding_diagnostics.csv` | §3.4 |
-| `covariate_adjusted_stats.csv` | §3.4 (`--rank-ancova`) |
-| `paired_comparison_stats.csv` | §3.5 (`--paired-column`) |
-| `batch_mixing_stats.csv` | §3.6 |
-| `batch_group_confounding.csv` | §3.6 |
-| `batch_diagnostic.png` | §3.6 |
-| `threshold_drift_stats.csv` | §3.7 |
-| `threshold_drift.png` | §3.7 |
-| `unsupervised_clusters.csv` | §3.8 (`--cluster`) |
-| `cluster_gate_agreement_clusters.csv` | §3.8 (`--cluster`) |
-| `cluster_gate_agreement_populations.csv` | §3.8 (`--cluster`) |
-| `unsupervised_clusters.png` | §3.8 (`--cluster`) |
-| `cluster_gate_proposals.csv` | §3.8.1 (`--explain-clusters`) |
-| `cluster_gate_polygons.csv` | §3.8.1 (`--explain-clusters`) |
-| `cluster_gate_strategy_<k>.png` | §3.8.1 (`--explain-clusters`) |
-| `subcluster_k_selection.csv` | §3.9 (`--auto-subcluster-k`) |
-| `umap.model` + `umap.model.meta.rds` | §3.10 (`--save-umap-model`) |
-| `run_manifest.txt` | §3.12 |
+| `marker_state_stats.csv` | 3.1 |
+| `marker_state.png` | 3.1 |
+| `population_marker_heatmap.png` | 3.2 |
+| `cohort_composition_heatmap.png` | 3.2 |
+| `compositional_clr_stats.csv` | 3.3 |
+| `compositional_concordance.csv` | 3.3 |
+| `confounding_diagnostics.csv` | 3.4 |
+| `covariate_adjusted_stats.csv` | 3.4 (`--rank-ancova`) |
+| `paired_comparison_stats.csv` | 3.5 (`--paired-column`) |
+| `batch_mixing_stats.csv` | 3.6 |
+| `batch_group_confounding.csv` | 3.6 |
+| `batch_diagnostic.png` | 3.6 |
+| `threshold_drift_stats.csv` | 3.7 |
+| `threshold_drift.png` | 3.7 |
+| `unsupervised_clusters.csv` | 3.8 (`--cluster`) |
+| `cluster_gate_agreement_clusters.csv` | 3.8 (`--cluster`) |
+| `cluster_gate_agreement_populations.csv` | 3.8 (`--cluster`) |
+| `unsupervised_clusters.png` | 3.8 (`--cluster`) |
+| `cluster_gate_proposals.csv` | 3.8.1 (`--explain-clusters`) |
+| `cluster_gate_polygons.csv` | 3.8.1 (`--explain-clusters`) |
+| `cluster_gate_strategy_<k>.png` | 3.8.1 (`--explain-clusters`) |
+| `subcluster_k_selection.csv` | 3.9 (`--auto-subcluster-k`) |
+| `umap.model` + `umap.model.meta.rds` | section 3.10 (`--save-umap-model`) |
+| `run_manifest.txt` | 3.12 |
 
 Every one of these is produced under `tryCatch`, after all primary outputs are
 already on disk. A failure in any of them logs a warning naming the analysis and
@@ -715,7 +713,7 @@ added to is not an addition.
 | File | Change | Breaking? |
 |---|---|---|
 | `population_marker_mfi.csv` | **+2 columns** `is_control`, `qc_status` | No, appended. Without them `qc_pass_rows()` passes the table through unchanged, so an unstained control's marker medians would enter the DS tests and the phenotype heatmap silently. Brings it in line with `functional_markers.csv`, which already carried both. |
-| every derived number | cofactor now pooled across samples (§3.11) | Values may shift where samples disagree. `--cofactor-from-first-sample` reverts. |
+| every derived number | cofactor now pooled across samples (section 3.11) | Values may shift where samples disagree. `--cofactor-from-first-sample` reverts. |
 | `config_cohorts.yaml` | **+3 keys** `heatmap_low/mid/high` | No, optional, defaults apply if absent. |
 
 ### Unchanged
@@ -729,7 +727,7 @@ is deliberately **not** drawn from `study_palette`, a colour that means "subject
 ## 5. Not implemented, and why
 
 ### 5.1 Harmony and CytoNorm specifically
-Batch correction itself is implemented, see §2 and §3.6: `--correct-batch` does
+Batch correction itself is implemented, see section 2 and section 3.6: `--correct-batch` does
 monotone quantile alignment and refuses under batch-cohort confounding. What is
 not wrapped is Harmony or CytoNorm. Both are heavier dependencies, and neither
 declines to run when correction and deleting the finding are the same operation,
@@ -743,9 +741,9 @@ Bioconductor, which would break the container's reproducibility guarantee.
 **Add if:** the cluster count itself becomes a question rather than a setting.
 
 ### 5.3 diffcyt (limma / LMM differential testing)
-The rank tests in §3.1 and §3.3 answer the same questions without the
+The rank tests in section 3.1 and section 3.3 answer the same questions without the
 distributional assumptions, which is the right trade at single-digit n, see
-§3.1. **Add if:** cohorts reach ~15+ samples each, where the empirical-Bayes
+section 3.1 for the argument. **Add if:** cohorts reach ~15+ samples each, where the empirical-Bayes
 prior starts paying for itself and mixed models can absorb repeated measures
 properly.
 
@@ -768,7 +766,7 @@ blood populations, where a fitted trajectory would be an artefact of the fitting
 ### 5.6 Supervised cell-type classifiers (Astir, CytoDx, random forest)
 Label-transfer models are a standard offering elsewhere. Here the labels come
 from a written gate spec, so a classifier trained on them can only reproduce the
-spec, including its errors. §3.8 is the better cross-check because it is
+spec, including its errors. Section 3.8 is the better cross-check because it is
 independent of the labels. **Add if:** an external reference-annotated dataset
 becomes available to train against.
 
@@ -779,7 +777,7 @@ does (`--flowjo-export`). Parsing `.wsp` needs `CytoML` +
 be the input rather than the output.
 
 ### 5.8 Cell-level differential expression
-Deliberately absent, for exactly the pseudoreplication reason in §3.1, which
+Deliberately absent, for exactly the pseudoreplication reason in section 3.1, which
 is why the tools that do provide a cell-level Wilcoxon ship it with a warning
 against using it. The cell-level view
 is already available descriptively in `subcluster_marker_shifts.csv`, which

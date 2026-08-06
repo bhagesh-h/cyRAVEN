@@ -4,7 +4,8 @@ Title: Gated Multi-Sample Flow Cytometry Embedding and Differential Analysis
 Version: 0.1.0
 Authors@R: c(
     person(given = "Bhagesh", family = "Hunakunti",
-           email = "bhunakun@uni-bonn.de", role = c("aut", "cre", "cph")))
+           email = "bhunakun@uni-bonn.de", role = c("aut", "cre", "cph"),
+           comment = c(ORCID = "0000-0002-5957-8005")))
 Description: An end-to-end workflow for batches of flow cytometry standard (FCS)
     files. Gating thresholds are derived from each sample's own marker density
     rather than transferred from fixed coordinates, populations are scored from a
