@@ -77,5 +77,8 @@ utils::globalVariables(c(
   # Uncertainty figures: `lo`/`hi` are the interval bounds and `grp` the study
   # group, all three assigned onto the frame a few lines above the plot call;
   # `u_pct_points` and `term` are columns of the budget table.
-  "grp", "hi", "lo", "term", "u_pct_points"
+  "grp", "hi", "lo", "term", "u_pct_points",
+  # Detection limits figure: `detection` is the verdict column and `n` the
+  # tabulated sample count, both columns of the frame built from table().
+  "detection", "n"
 ))

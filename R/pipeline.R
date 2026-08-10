@@ -362,7 +362,9 @@ run_cyraven <- function(opt) {
       run_gate_uncertainty(pops, gates, verdicts, fpr$assignment, spec,
                            B = opt$uncertainty_boot %||% 100L,
                            seed = opt$seed %||% 42L,
-                           max_events = opt$uncertainty_max_events %||% 20000L),
+                           max_events = opt$uncertainty_max_events %||% 20000L,
+                           lod_events = opt$lod_events %||% 20L,
+                           loq_events = opt$loq_events %||% 50L),
       error = function(e) {
         log_msg("  WARNING uncertainty analysis failed: ", conditionMessage(e),
                 ", every other output is unaffected")
@@ -398,6 +400,25 @@ run_cyraven <- function(opt) {
       log_msg("wrote uncertainty_budget.csv (largest median contribution: ",
               bb$term[1], ", ", round(bb$u_pct_points[1], 3),
               " percentage points)")
+    }
+    # Counting is not a gate term and is deliberately absent from the budget
+    # above, which answers "which threshold". It is reported here and on the
+    # frequency table instead, because a population can sit behind a perfectly
+    # placed cut and still rest on too few events to mean anything.
+    if (!is.null(unc) && !is.null(unc$frequencies) &&
+        "detection" %in% names(unc$frequencies)) {
+      .df <- qc_pass_rows(unc$frequencies)
+      if (!is.null(.df) && nrow(.df)) {
+        .nq <- sum(.df$detection %in% c("below LOD", "detected, below LOQ"))
+        if (.nq)
+          log_msg("NOTE ", .nq, " of ", nrow(.df), " population-sample values ",
+                  "rest on fewer than ", opt$loq_events %||% 50L, " events and ",
+                  "are not quantifiable at this acquisition depth (",
+                  sum(.df$detection == "below LOD"), " below the limit of ",
+                  "detection). See the detection column of ",
+                  "population_frequencies.csv; raising --max-events-per-file ",
+                  "lowers the limit, changing the gating does not")
+      }
     }
   }
 
@@ -901,8 +922,7 @@ run_cyraven <- function(opt) {
   # its position, so a script reading it by name or by position is unaffected and
   # the values themselves are bit-identical to a run without --uncertainty.
   if (!is.null(freq) && !is.null(unc) && !is.null(unc$frequencies)) {
-    .uf <- unc$frequencies[, c("sample_id", "population", "u_pct_points",
-                               "n_terms", "n_terms_missing"), drop = FALSE]
+    .uf <- unc$frequencies
     .k <- match(paste(freq$sample_id, freq$population, sep = "\r"),
                 paste(.uf$sample_id, .uf$population, sep = "\r"))
     freq$u_pct_points     <- .uf$u_pct_points[.k]
@@ -912,6 +932,21 @@ run_cyraven <- function(opt) {
                                      .uf$u_pct_points[.k], 4)
     freq$u_n_terms        <- .uf$n_terms[.k]
     freq$u_n_terms_missing <- .uf$n_terms_missing[.k]
+    # Counting uncertainty and the detection limits follow the same rule: append
+    # only. u_pct_points above still means gate placement alone and still holds
+    # the value it always did, and pct_lo/pct_hi are still built from it.
+    if ("u_total_pct_points" %in% names(.uf)) {
+      freq$n_parent_events        <- .uf$n_parent_events[.k]
+      freq$u_counting_pct_points  <- .uf$u_counting_pct_points[.k]
+      freq$u_total_pct_points     <- .uf$u_total_pct_points[.k]
+      freq$pct_lo_total <- round(pmax(0, freq$pct_of_cd45_pos -
+                                        .uf$u_total_pct_points[.k]), 4)
+      freq$pct_hi_total <- round(freq$pct_of_cd45_pos +
+                                   .uf$u_total_pct_points[.k], 4)
+      freq$lod_pct    <- .uf$lod_pct[.k]
+      freq$loq_pct    <- .uf$loq_pct[.k]
+      freq$detection  <- .uf$detection[.k]
+    }
   }
   write.csv(freq, file.path(opt$outdir, "population_frequencies.csv"), row.names = FALSE)
 
@@ -1286,6 +1321,8 @@ run_cyraven <- function(opt) {
                                 group_of = if (grouped) group_of else NULL)
       fig_uncertainty_budget(unc$budget,
                              file.path(opt$outdir, "uncertainty_budget.png"))
+      fig_detection_limits(unc$frequencies,
+                           file.path(opt$outdir, "detection_limits.png"))
     })
   }
 
@@ -1527,6 +1564,37 @@ run_cyraven <- function(opt) {
           fig_batch_diagnostic(bcells, br,
                                file.path(opt$outdir, "batch_diagnostic.png"), bcol)
         }
+
+        # WHICH channel moved, not merely whether the batches mix. iLISI above is
+        # a property of the embedding and names nothing anyone can act on; a
+        # flagged marker names a reagent lot or a detector.
+        #
+        # Two views, because they fail differently. The threshold test reuses
+        # stats_threshold_drift() with batch as the grouping variable -- it was
+        # always generic in that argument -- and sees drift that moves the CUT.
+        # The distributional test sees a marker that changed its spread or lost
+        # its separation while the density minimum between the modes stayed put,
+        # which the first cannot detect at all.
+        mbd <- marker_batch_drift(bcells, bcol, seed = opt$seed %||% 42L)
+        if (!is.null(mbd)) {
+          write.csv(mbd, file.path(opt$outdir, "marker_batch_drift.csv"),
+                    row.names = FALSE)
+          nfl <- sum(mbd$verdict == "differs between batches")
+          log_msg("wrote marker_batch_drift.csv (", nfl, " of ", nrow(mbd),
+                  " marker(s) differ between batches by at least half their own ",
+                  "spread", if (nfl) paste0("; worst: ", mbd$marker[1], ", ",
+                                            mbd$emd_over_mad[1], " MAD") else "", ")")
+        }
+        bmap <- setNames(as.character(bcells[[bcol]]), bcells$sample_id)
+        bmap <- bmap[!duplicated(names(bmap))]
+        btd <- stats_threshold_drift(thr_all, bmap, spec)
+        if (!is.null(btd)) {
+          write.csv(btd, file.path(opt$outdir, "threshold_batch_drift.csv"),
+                    row.names = FALSE)
+          log_msg("wrote threshold_batch_drift.csv (the same test as ",
+                  "threshold_drift_stats.csv, grouped by ", bcol,
+                  " instead of by study group)")
+        }
       }
     })
   }
@@ -1742,6 +1810,18 @@ run_cyraven <- function(opt) {
       write_spec_baseline(opt$write_baseline, thr_all, freq, spec, opt, cofactors)
       log_msg("wrote baseline ", opt$write_baseline,
               " (compare a later run against it with --baseline)")
+    })
+  }
+
+  # ---- MIFlowCyt report -----------------------------------------------------
+  # Written by default, because a reporting standard nobody remembers to ask for
+  # is one nobody files. Costs nothing: the instrument section is keywords this
+  # run already holds and discards, and the analysis section is the run itself.
+  if (!isTRUE(opt$no_miflowcyt)) {
+    .ext_ok("MIFlowCyt report", {
+      write_miflowcyt(file.path(opt$outdir, "miflowcyt.md"), reads, opt = opt,
+                      spec = spec, transforms = transforms, fpr = fpr,
+                      thresholds = thr_all)
     })
   }
 

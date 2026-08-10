@@ -163,6 +163,87 @@ threshold_uncertainty <- function(x, source = "valley", B = 100L, seed = 42L,
   out
 }
 
+# =============================================================================
+# SECTION 3c -- COUNTING UNCERTAINTY AND DETECTION LIMITS
+# =============================================================================
+#
+# WHY THIS IS SEPARATE FROM EVERYTHING ABOVE. The section above answers how far a
+# frequency moves when the cut behind it moves. It does not answer how many cells
+# there were to count, and only one of those two quantities was being reported. A
+# population of twelve events and a population of twelve thousand, both sitting
+# behind a deep clean valley, came out with the same small uncertainty, because
+# displacing a well-separated cut moves neither of them much. One of those
+# numbers is worth acting on and the other is not, and nothing in the output
+# distinguished them.
+#
+# This is the oldest quantified source of imprecision in cytometry and the reason
+# rare-event protocols specify event targets at all: about 4,000 events of a
+# population gives a 2% coefficient of variation on its frequency, and 25 events
+# gives 20%. Clinical practice fixes the two limits that follow. Roughly 20
+# events is the fewest that can be called a detection and roughly 50 the fewest
+# that can be called a measurement, against a stated denominator (Sommer et al.
+# 2021, Cytometry B 100:42; the GIMEMA AML1310 post-hoc analysis, Haematologica
+# 2022, 107:2823).
+#
+# WHY WILSON RATHER THAN THE TEXTBOOK FORMULA. The binomial standard error
+# sqrt(p(1-p)/n) tends to zero as p does. At k = 0 it reports perfect certainty
+# about a population nobody observed, which is the reverse of the truth, and at
+# single-digit k it is still badly optimistic -- exactly the regime where the
+# number is being consulted. The Wilson score interval has no such failure at the
+# boundary. Its half-width at z = 1 is taken here as the standard uncertainty,
+# and it agrees with the textbook value to three figures once a population has a
+# few hundred events, so nothing is lost in the common case.
+#
+# THE DENOMINATOR IS THIS RUN'S, NOT THE ACQUISITION'S. n is the number of
+# parent-gate events this analysis saw, so --max-events-per-file lowers it and
+# raises every limit reported here in proportion. That is the honest reading: a
+# population under the limit of detection of a subsample may be perfectly well
+# resolved in the whole file, and the answer is to raise the cap rather than to
+# believe the limit.
+
+#' Counting uncertainty and detection limits for a population frequency
+#'
+#' The uncertainty a frequency carries from the number of events behind it,
+#' independent of where the thresholds were placed. Returned in percentage points
+#' so it combines directly with the gate placement uncertainty.
+#'
+#' @param k events in the population; may be a vector
+#' @param n events in the parent gate the population is expressed against;
+#'   scalar or the same length as `k`
+#' @param z coverage factor for the Wilson half-width. The default of 1 gives a
+#'   standard uncertainty, matching the convention used for the gate terms
+#' @param lod_events events below which a population is not called detected
+#' @param loq_events events below which a population is detected but not
+#'   quantified
+#' @return a data.frame with one row per element of `k`, carrying the counts, the
+#'   standard uncertainty, both limits expressed as percentages of the parent
+#'   gate, and a verdict
+#' @export
+counting_uncertainty <- function(k, n, z = 1, lod_events = 20L,
+                                 loq_events = 50L) {
+  k <- as.numeric(k)
+  n <- rep_len(as.numeric(n), length(k))
+  ok <- is.finite(k) & is.finite(n) & n > 0 & k >= 0 & k <= n
+
+  u <- rep(NA_real_, length(k))
+  u[ok] <- 100 * z * sqrt(k[ok] * (n[ok] - k[ok]) / n[ok] + z^2 / 4) /
+    (n[ok] + z^2)
+
+  lod <- ifelse(ok, 100 * lod_events / n, NA_real_)
+  loq <- ifelse(ok, 100 * loq_events / n, NA_real_)
+
+  data.frame(
+    n_cells = k,
+    n_parent_events = n,
+    u_counting_pct_points = round(u, 4),
+    lod_pct = round(lod, 4),
+    loq_pct = round(loq, 4),
+    detection = ifelse(!ok, NA_character_,
+                ifelse(k < lod_events, "below LOD",
+                ifelse(k < loq_events, "detected, below LOQ", "quantified"))),
+    row.names = NULL, stringsAsFactors = FALSE)
+}
+
 #' Propagate threshold uncertainty into one sample's population frequencies
 #'
 #' For every marker a population's definition reads, the frequency is re-scored
@@ -182,6 +263,17 @@ threshold_uncertainty <- function(x, source = "valley", B = 100L, seed = 42L,
 #' `n_terms_missing`, so a small total that is small only because most terms
 #' could not be computed is distinguishable from a genuinely tight one.
 #'
+#' THE COUNTING TERM IS REPORTED BESIDE THE GATE TERMS, NOT MIXED INTO THEM.
+#' `u_pct_points` keeps its meaning: gate placement only. `u_counting_pct_points`
+#' is what the frequency carries from the number of events behind it, and
+#' `u_total_pct_points` is their quadrature sum. Keeping the first column fixed
+#' means every number this table published before is still the same number.
+#'
+#' The two are not strictly independent, since displacing a cut also changes the
+#' count. Quadrature treats them as though they were, which is the same
+#' approximation the GUM makes for the marker terms and is stated here rather
+#' than left for the reader to find.
+#'
 #' @param tmat transformed marker matrix for one sample
 #' @param thr named threshold vector for that sample
 #' @param parent logical parent-gate mask
@@ -191,12 +283,17 @@ threshold_uncertainty <- function(x, source = "valley", B = 100L, seed = 42L,
 #' @param cd45_live logical mask of live cells, the parent of the CD45 gate
 #' @param cd45_threshold the CD45 cut
 #' @param cd45_u standard uncertainty of the CD45 cut
+#' @param lod_events events below which a population is not called detected
+#' @param loq_events events below which a population is detected but not
+#'   quantified
 #' @return list(per_population = data.frame, budget = data.frame)
 #' @export
 population_frequency_uncertainty <- function(tmat, thr, parent, spec, u,
                                              cd45_x = NULL, cd45_live = NULL,
                                              cd45_threshold = NA_real_,
-                                             cd45_u = NA_real_) {
+                                             cd45_u = NA_real_,
+                                             lod_events = 20L,
+                                             loq_events = 50L) {
   pct_at <- function(thr2, parent2) {
     hi <- derive_intermediate_bounds(tmat, thr2, parent2, spec)
     sp <- score_populations(tmat, thr2, parent2, spec, hi_thr = hi)
@@ -204,7 +301,14 @@ population_frequency_uncertainty <- function(tmat, thr, parent, spec, u,
     vapply(sp$masks, function(m) 100 * sum(m) / den, numeric(1))
   }
 
-  base <- pct_at(thr, parent)
+  # The base case is scored once and its event counts kept, rather than being
+  # recovered from the percentage afterwards. Same call, same arithmetic as
+  # pct_at(thr, parent), so `base` is unchanged; the counts come out of it free.
+  n_parent <- sum(parent)
+  hi0  <- derive_intermediate_bounds(tmat, thr, parent, spec)
+  sp0  <- score_populations(tmat, thr, parent, spec, hi_thr = hi0)
+  k0   <- vapply(sp0$masks, sum, integer(1))
+  base <- 100 * k0 / max(1L, n_parent)
   if (!length(base)) return(NULL)
   pops <- names(base)
 
@@ -249,10 +353,26 @@ population_frequency_uncertainty <- function(tmat, thr, parent, spec, u,
         stringsAsFactors = FALSE)
   }
 
+  # Quadrature over the finite components, matching how threshold_uncertainty()
+  # forms u_combined. Where neither term could be computed the total is NA rather
+  # than zero: an uncertainty nobody could estimate is not a small one.
+  cu <- counting_uncertainty(k0, n_parent, lod_events = lod_events,
+                             loq_events = loq_events)
+  u_tot <- vapply(seq_along(pops), function(i) {
+    v <- c(u_pop[[i]], cu$u_counting_pct_points[[i]])
+    v <- v[is.finite(v)]
+    if (length(v)) sqrt(sum(v^2)) else NA_real_
+  }, numeric(1))
+
   list(per_population = data.frame(
          population = pops, pct_of_cd45_pos = unname(base),
          u_pct_points = round(unname(u_pop), 4),
          n_terms = unname(n_used), n_terms_missing = unname(n_miss),
+         n_cells = unname(k0), n_parent_events = as.integer(n_parent),
+         u_counting_pct_points = cu$u_counting_pct_points,
+         u_total_pct_points = round(u_tot, 4),
+         lod_pct = cu$lod_pct, loq_pct = cu$loq_pct,
+         detection = cu$detection,
          row.names = NULL, stringsAsFactors = FALSE),
        budget = if (length(budget)) do.call(rbind, budget) else NULL)
 }
@@ -270,10 +390,14 @@ population_frequency_uncertainty <- function(tmat, thr, parent, spec, u,
 #' @param B bootstrap replicates
 #' @param seed base seed
 #' @param max_events cap on events per replicate
+#' @param lod_events events below which a population is not called detected
+#' @param loq_events events below which a population is detected but not
+#'   quantified
 #' @return list(thresholds, frequencies, budget), each a data.frame or NULL
 #' @export
 run_gate_uncertainty <- function(pops, gates, verdicts, panel_of, spec,
-                                 B = 100L, seed = 42L, max_events = 20000L) {
+                                 B = 100L, seed = 42L, max_events = 20000L,
+                                 lod_events = 20L, loq_events = 50L) {
   # Each (sample, marker) draws from its own stream, keyed on the two names, so a
   # threshold's uncertainty does not depend on how many markers happened to be
   # processed before it. Reordering a panel must not change a published number.
@@ -338,7 +462,8 @@ run_gate_uncertainty <- function(pops, gates, verdicts, panel_of, spec,
     fu <- tryCatch(population_frequency_uncertainty(
       P$tmat, thr, parent, spec, u, cd45_x = g$cd45_x,
       cd45_live = g$masks$live_cells, cd45_threshold = g$cd45_threshold,
-      cd45_u = cd45_u), error = function(e) NULL)
+      cd45_u = cd45_u, lod_events = lod_events, loq_events = loq_events),
+      error = function(e) NULL)
     if (is.null(fu)) next
 
     pp <- fu$per_population
@@ -370,24 +495,50 @@ run_gate_uncertainty <- function(pops, gates, verdicts, panel_of, spec,
 #' distance the cut itself can move, which is a reason to look at
 #' threshold_uncertainty.csv before interpreting the result, not a p-value.
 #'
+#' TWO RATIOS, NOT ONE. `difference_over_gate_u` compares the difference against
+#' gate placement alone and keeps exactly the value it has always had.
+#' `difference_over_total_u` compares it against placement and counting together,
+#' and is the stricter of the two. They separate for a rare population, where the
+#' cut can be well placed and the frequency still be built on too few events: the
+#' first ratio passes and the second does not, and the second is the one to
+#' believe.
+#'
 #' @param gstats a table from [stats_group_comparison()]
 #' @param ufreq the `frequencies` element of [run_gate_uncertainty()]
-#' @return `gstats` with `gate_u_pct_points` and `difference_over_gate_u`
-#'   appended, unchanged if the uncertainty table is missing
+#' @return `gstats` with `gate_u_pct_points`, `difference_over_gate_u`,
+#'   `total_u_pct_points` and `difference_over_total_u` appended, unchanged if
+#'   the uncertainty table is missing
 #' @export
 annotate_gate_uncertainty <- function(gstats, ufreq) {
   if (is.null(gstats) || !nrow(gstats)) return(gstats)
   gstats$gate_u_pct_points   <- NA_real_
   gstats$difference_over_gate_u <- NA_real_
+  gstats$total_u_pct_points  <- NA_real_
+  gstats$difference_over_total_u <- NA_real_
   if (is.null(ufreq) || !nrow(ufreq)) return(gstats)
-  keep <- ufreq[(ufreq$qc_status %||% "pass") == "pass" &
-                  is.finite(ufreq$u_pct_points), , drop = FALSE]
-  if (!nrow(keep)) return(gstats)
-  um <- tapply(keep$u_pct_points, keep$population, median, na.rm = TRUE)
-  u <- unname(um[gstats$population])
+  pass <- (ufreq$qc_status %||% "pass") == "pass"
   d <- abs(gstats$median_comparison - gstats$median_reference)
-  gstats$gate_u_pct_points <- round(u, 4)
-  gstats$difference_over_gate_u <-
-    ifelse(is.finite(u) & u > 0, round(d / u, 2), NA_real_)
+
+  keep <- ufreq[pass & is.finite(ufreq$u_pct_points), , drop = FALSE]
+  if (nrow(keep)) {
+    um <- tapply(keep$u_pct_points, keep$population, median, na.rm = TRUE)
+    u <- unname(um[gstats$population])
+    gstats$gate_u_pct_points <- round(u, 4)
+    gstats$difference_over_gate_u <-
+      ifelse(is.finite(u) & u > 0, round(d / u, 2), NA_real_)
+  }
+
+  # Absent when the run predates the counting term, so guard on the column
+  # rather than assuming the shape of the table handed in.
+  if ("u_total_pct_points" %in% names(ufreq)) {
+    k2 <- ufreq[pass & is.finite(ufreq$u_total_pct_points), , drop = FALSE]
+    if (nrow(k2)) {
+      tm <- tapply(k2$u_total_pct_points, k2$population, median, na.rm = TRUE)
+      ut <- unname(tm[gstats$population])
+      gstats$total_u_pct_points <- round(ut, 4)
+      gstats$difference_over_total_u <-
+        ifelse(is.finite(ut) & ut > 0, round(d / ut, 2), NA_real_)
+    }
+  }
   gstats
 }

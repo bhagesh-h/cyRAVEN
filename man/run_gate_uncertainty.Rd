@@ -12,7 +12,9 @@ run_gate_uncertainty(
   spec,
   B = 100L,
   seed = 42L,
-  max_events = 20000L
+  max_events = 20000L,
+  lod_events = 20L,
+  loq_events = 50L
 )
 }
 \arguments{
@@ -31,6 +33,11 @@ run_gate_uncertainty(
 \item{seed}{base seed}
 
 \item{max_events}{cap on events per replicate}
+
+\item{lod_events}{events below which a population is not called detected}
+
+\item{loq_events}{events below which a population is detected but not
+quantified}
 }
 \value{
 list(thresholds, frequencies, budget), each a data.frame or NULL

@@ -107,6 +107,28 @@ Each marker a population reads contributes a term, as does the CD45 parent
 threshold, which enters every population because it fixes the denominator.
 The [diagnostics article](diagnostics.html) covers how to read the result.
 
+### 2.5 Sufficiency
+
+Precision of placement and sufficiency of counting are separate guarantees, and a
+population can have one without the other. A cut through a wide empty gap is
+well determined however few cells sit beyond it.
+
+`u_counting_pct_points` in `population_frequencies.csv` is what the frequency
+carries from the number of events behind it, computed as the Wilson half-width at
+one standard deviation. The ordinary binomial standard error is not used because
+it evaluates to zero when no events were observed, which asserts certainty about
+a population that was never seen.
+
+`lod_pct` and `loq_pct` express the conventional twenty and fifty events as
+percentages of that sample's parent gate, and `detection` states which side of
+them the population falls. Both are properties of the acquisition rather than of
+the gating strategy: a population below the limit of quantification is not
+mis-gated, it is under-sampled, and no threshold placement recovers it.
+
+Because the denominator is the parent-gate events this run saw,
+`--max-events-per-file` raises both limits in proportion. A population reported
+below the limit of a subsample may be perfectly well resolved in the full file.
+
 None of this alters a threshold. The value in `thresholds_used.csv` is
 `density_valley()` at its defaults on the real events, with or without the
 analysis; the perturbation runs on copies.

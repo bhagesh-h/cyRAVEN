@@ -97,6 +97,42 @@ studies following the same convention report expanded uncertainty rising from
 around 12% on a three-gate strategy to around 16% on a five-gate one, with the
 first gate contributing most of it (Whitmore et al. 2021, *Methods Protoc* 4:24).
 
+## 5a. Detection limits
+
+The preceding section asks how well the cut is determined. This asks whether
+enough cells were counted for the answer to mean anything, which is a separate
+question with a separate failure mode: a cut through a wide empty gap is well
+determined however few events lie beyond it.
+
+`u_counting_pct_points` in `population_frequencies.csv` is the uncertainty the
+frequency carries from its own event count, and `u_total_pct_points` combines it
+with the gate term. `difference_over_total_u` in the group comparison applies the
+same reading as `difference_over_gate_u` against both components and is the
+stricter of the two; the two separate exactly where a well-placed cut sits in
+front of too few cells.
+
+`detection` classifies each value against the conventional twenty and fifty
+events, expressed as `lod_pct` and `loq_pct` of that sample's parent gate.
+
+`detection_limits.png` counts how many samples clear each limit, per population.
+Three readings:
+
+A population quantified in every sample is measurable in this cohort.
+
+A population mostly below the limit of quantification is not, and the gating
+strategy is not the reason. The numerator is small because few cells were
+acquired, so the remedies are a longer acquisition or a higher
+`--max-events-per-file`, not a different threshold.
+
+A population split across the limit is the case to be careful with, because a
+group difference in it can be produced entirely by which samples happened to
+clear the limit.
+
+Both limits are computed against the parent-gate events this run saw, so
+subsampling raises them proportionally. That is deliberate: it reports the
+resolution of the analysis that was actually performed rather than of the files
+on disk.
+
 ## 6. Cluster concordance
 
 `--cluster` computes a self-organising map clustering of the same cells without
@@ -224,6 +260,29 @@ batch and study group. Where patients and controls were acquired in distinct
 periods, *V* approaches unity and batch is not distinguishable from the
 comparison of interest.
 
+**10.3 Which channel.** The two quantities above are properties of the shared
+embedding. Neither identifies the marker responsible, and a flagged embedding
+does not correspond to any action at the bench.
+
+`marker_batch_drift.csv` compares each marker's distribution between batches by
+Earth Mover's distance, the L1 distance between their empirical quantile
+functions. It is reported in analysis units as `emd_max`, and divided by the
+marker's own pooled MAD as `emd_over_mad`, which is the comparable form: a marker
+displaced by half its own spread is flagged regardless of the scale it sits on.
+`worst_pair` names the two batches responsible.
+
+`threshold_batch_drift.csv` is the test in section 4 with batch substituted for
+study group. The two answer different questions and both are needed. A threshold
+is one number per sample, so it registers only drift that moves the cut; a marker
+can change its spread, grow a tail, or lose the separation between its modes
+while the density minimum between them stays exactly where it was. The
+distributional comparison sees that, and the threshold comparison cannot.
+
+A marker flagged in either is a statement about the assay rather than about the
+donors, unless batch and study group coincide, which is what 10.2 establishes and
+should be read first. Where *V* is high, neither table separates a reagent lot
+from the biology.
+
 Correction proceeds only when both readings permit it. `--correct-batch` aligns
 each marker across batches by monotone quantile mapping; monotonicity guarantees
 that within-batch cell ordering is preserved, so location and scale are adjusted
@@ -275,3 +334,19 @@ loaded at run time, the git commit and working-tree state where the code was a
 checkout, the full invocation, and every option in force. It is written before
 the expensive stages and rewritten at completion, so an interrupted run leaves
 `status: failed` rather than an absent or misleading record.
+
+`miflowcyt.md` restates the same run against the ISAC reporting checklist, which
+several journals check at submission. Its instrument section is read from the FCS
+keyword block: cytometer, serial number, acquisition software, date, operator and
+event counts per file, and per panel a detector table giving `$PnN`, `$PnS`,
+voltage, range and whether amplification was linear or logarithmic. Its
+data-analysis section is read from the run, so it cannot disagree with what was
+computed.
+
+The two sections a run cannot establish, why the experiment was done and what the
+cells and reagents were, are marked `TO BE COMPLETED`. An omitted section reads
+as one that did not apply. Individual keywords follow the same rule and are
+reported as `not recorded in the FCS file` rather than dropped, since a missing
+`$PnV` or `$SPILLOVER` is usually the explanation for something further down.
+
+`--no-miflowcyt` skips it.

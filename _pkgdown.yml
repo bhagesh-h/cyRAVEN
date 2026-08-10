@@ -38,12 +38,16 @@ reference:
 
 - title: Uncertainty
   desc: >
-    How far a threshold can move, and what that costs the frequency it produced.
-    Each cut is resampled and re-derived over the settings that placed it, and
-    the resulting spread is propagated to every population that reads it. None of
-    this changes a reported number; it puts a second number beside it.
+    How far a threshold can move, how many cells were behind the frequency it
+    produced, and what each of those costs. Every cut is resampled and re-derived
+    over the settings that placed it, and the resulting spread is propagated to
+    the populations that read it; the counting term is reported beside it,
+    because a well-placed cut and a sufficient number of events are different
+    guarantees. None of this changes a reported number; it puts a second number
+    next to it.
   contents:
   - threshold_uncertainty
+  - counting_uncertainty
   - population_frequency_uncertainty
   - run_gate_uncertainty
   - annotate_gate_uncertainty
@@ -138,6 +142,8 @@ reference:
   contents:
   - lisi_score
   - batch_mixing_report
+  - marker_batch_drift
+  - emd_1d
   - correct_batch
 
 - title: Diagnostics
@@ -147,6 +153,7 @@ reference:
   contents:
   - stats_threshold_drift
   - write_run_manifest
+  - write_miflowcyt
 
 - title: Conformance across runs
   desc: >
@@ -198,4 +205,5 @@ articles:
   navbar: Going further
   contents:
   - with-cycondor
+  - claude-skill
   - scope

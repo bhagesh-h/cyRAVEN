@@ -1,0 +1,295 @@
+# SECTION 12 -- MIFlowCyt REPORT
+# =============================================================================
+#
+# WHY THIS FILE EXISTS. MIFlowCyt is the ISAC reporting standard for a cytometry
+# experiment, and Cytometry A, Nature and PLOS check submissions against it. It
+# has four parts: what the experiment was for, what the specimens were, what the
+# instrument was, and how the data were analysed.
+#
+# The last part is the one that is normally hardest to write and is the one this
+# package already knows completely: the gating specification, the transform and
+# its derived parameters, every threshold and how it was obtained. The third part
+# is sitting unused in memory -- read_fcs_resolved() keeps the whole keyword list
+# and the pipeline reads about four keys out of it.
+#
+# So most of a MIFlowCyt document can be emitted from what a run already has, and
+# the parts that genuinely require a human -- why the experiment was done, what
+# the cells were, which antibody clone and lot went into which channel -- cannot
+# be. Those are written as explicit TO BE COMPLETED markers.
+#
+# WHY BLANKS ARE MARKED RATHER THAN OMITTED. A section that is absent reads as a
+# section that did not apply. A section that says TO BE COMPLETED reads as work
+# outstanding, which is what it is. The same rule governs missing keywords: a
+# keyword the file does not carry is written as "not recorded in the FCS file"
+# rather than dropped, because its absence is a fact about the acquisition and
+# is frequently the answer to why an analysis could not be done.
+
+#' Pull one keyword out of an FCS keyword list, trying several spellings
+#' @param kw keyword list from [read_fcs_resolved()]
+#' @param ... candidate keyword names, in preference order
+#' @return the first non-empty value as a length-1 character, or NA
+#' @keywords internal
+kw_get <- function(kw, ...) {
+  for (k in c(...)) {
+    v <- kw[[k]]
+    if (!is.null(v) && length(v) && !is.na(v[1]) && nzchar(trimws(as.character(v[1]))))
+      return(trimws(as.character(v[1])))
+  }
+  NA_character_
+}
+
+#' Format a value for the report, naming absence rather than hiding it
+#' @param x a value
+#' @param absent text to use when `x` is missing
+#' @keywords internal
+or_absent <- function(x, absent = "not recorded in the FCS file") {
+  if (is.null(x) || !length(x) || is.na(x[1]) || !nzchar(trimws(as.character(x[1]))))
+    absent else as.character(x[1])
+}
+
+#' Per-parameter detector table for one file
+#'
+#' `$PnN` is the detector and is always present; `$PnS` is the marker and is
+#' optional, which is why the reading stage resolves one to the other. Voltage,
+#' range and amplification are recorded where the instrument wrote them.
+#'
+#' @param kw keyword list for one file
+#' @return a data.frame, one row per parameter
+#' @keywords internal
+miflowcyt_parameters <- function(kw) {
+  n <- suppressWarnings(as.integer(kw_get(kw, "$PAR", "PAR")))
+  if (!is.finite(n) || n < 1L) return(NULL)
+  do.call(rbind, lapply(seq_len(n), function(i) {
+    g <- function(suffix) kw_get(kw, paste0("$P", i, suffix), paste0("P", i, suffix))
+    e <- g("E")
+    data.frame(
+      parameter = i,
+      detector  = or_absent(g("N"), "unnamed"),
+      marker    = or_absent(g("S"), "none ($PnS absent)"),
+      voltage   = or_absent(g("V"), "not recorded"),
+      range     = or_absent(g("R"), "not recorded"),
+      # $PnE is "f1,f2": f1 = decades of log amplification, 0 means linear.
+      amplification = if (is.na(e)) "not recorded"
+                      else if (grepl("^0[,.]", e)) paste0("linear (", e, ")")
+                      else paste0("logarithmic (", e, ")"),
+      bits      = or_absent(g("B"), "not recorded"),
+      stringsAsFactors = FALSE)
+  }))
+}
+
+#' Write a MIFlowCyt-structured report of the run
+#'
+#' Emits the parts of the ISAC MIFlowCyt checklist a run can establish on its
+#' own, and marks the parts that require a human as outstanding rather than
+#' leaving them out.
+#'
+#' The instrument and data-file sections are read from the FCS keyword block. The
+#' data-analysis section is read from the run itself, so it cannot disagree with
+#' what was actually computed.
+#'
+#' @param path output file
+#' @param reads the per-sample list returned by the reading stage
+#' @param opt parsed options
+#' @param spec population specification, as scored
+#' @param transforms named list of per-panel transform objects
+#' @param fpr panel fingerprint result, for the panel-to-sample assignment
+#' @param thresholds the `thresholds_used.csv` table, or NULL
+#' @return the path, invisibly
+#' @export
+write_miflowcyt <- function(path, reads, opt = NULL, spec = NULL,
+                            transforms = NULL, fpr = NULL, thresholds = NULL) {
+  if (is.null(reads) || !length(reads)) return(invisible(NULL))
+  TBC <- "**TO BE COMPLETED** -- this cannot be derived from the data files."
+
+  ln <- c(
+    "# MIFlowCyt report",
+    "",
+    "Generated by cyRAVEN ",
+    paste0("(version ", tryCatch(as.character(utils::packageVersion("cyRAVEN")),
+                                 error = function(e) "unknown"), ") on ",
+           format(Sys.time(), tz = "UTC", usetz = TRUE), "."),
+    "",
+    "Structured to the ISAC Minimum Information about a Flow Cytometry",
+    "Experiment checklist. Sections 3 and 4 are read from the FCS keyword block",
+    "and from this run, so they describe what actually happened. Sections 1 and",
+    "2 describe intent and biology, which no analysis can recover from the files;",
+    "they are marked outstanding and must be completed before submission.",
+    "",
+    "## 1. Experiment overview", "",
+    paste("**Purpose.**", TBC), "",
+    paste("**Keywords.**", TBC), "",
+    paste("**Experiment variables.**", TBC), "",
+    paste("**Organisation and primary contact.**", TBC), "",
+    paste("**Conclusions.**", TBC), "")
+
+  # ---- 2. specimens ---------------------------------------------------------
+  # The sample map is metadata the user supplied, so what it holds is reportable;
+  # what it does not hold is exactly the part MIFlowCyt wants and cyRAVEN cannot
+  # invent.
+  ln <- c(ln, "", "## 2. Flow sample and specimen details", "",
+          paste("**Biological samples: organism, cell type, treatments.**", TBC), "",
+          paste("**Reagents: antibody clone, fluorochrome, vendor, lot,",
+                "concentration, per channel.**", TBC),
+          "",
+          "The channel-to-marker assignment the instrument recorded is in",
+          "section 3.2 and can be used as the row list for that table.", "")
+
+  # ---- 3. instrument --------------------------------------------------------
+  ln <- c(ln, "", "## 3. Instrumentation", "", "### 3.1 Acquisition", "")
+  inst <- do.call(rbind, lapply(names(reads), function(s) {
+    kw <- reads[[s]]$keywords
+    data.frame(
+      sample = s,
+      file = basename(reads[[s]]$file %||% NA_character_),
+      cytometer = or_absent(kw_get(kw, "$CYT", "CYT")),
+      serial = or_absent(kw_get(kw, "$CYTSN", "CYTSN")),
+      software = or_absent(kw_get(kw, "$SYS", "SYS", "CREATOR")),
+      date = or_absent(kw_get(kw, "$DATE", "DATE")),
+      start = or_absent(kw_get(kw, "$BTIM", "BTIM")),
+      stop = or_absent(kw_get(kw, "$ETIM", "ETIM")),
+      operator = or_absent(kw_get(kw, "$OP", "OP")),
+      events_in_file = or_absent(kw_get(kw, "$TOT", "TOT")),
+      events_analysed = as.character(reads[[s]]$n_events %||% NA),
+      stringsAsFactors = FALSE)
+  }))
+  ln <- c(ln, md_table(inst), "")
+  if (!is.null(opt) && (opt$max_events_per_file %||% 0L) > 0L)
+    ln <- c(ln, paste0("Events analysed is lower than events in file because ",
+                       "--max-events-per-file was set to ",
+                       opt$max_events_per_file,
+                       ", sampled evenly through the acquisition."), "")
+
+  # 3.2 detector configuration. Reported once per distinct panel rather than once
+  # per file: repeating an identical 20-row table for every sample would bury the
+  # case where two files genuinely differ.
+  ln <- c(ln, "### 3.2 Detector configuration", "")
+  first_of_panel <- if (!is.null(fpr) && !is.null(fpr$panels))
+    vapply(fpr$panels, function(p) p$samples[1], character(1)) else names(reads)[1]
+  for (i in seq_along(first_of_panel)) {
+    s <- first_of_panel[[i]]
+    pn <- if (!is.null(fpr) && !is.null(fpr$panels)) fpr$panels[[i]]$name else "panel"
+    tab <- miflowcyt_parameters(reads[[s]]$keywords)
+    ln <- c(ln, paste0("**Panel `", pn, "`**, as recorded in `",
+                       basename(reads[[s]]$file %||% s), "`."), "")
+    ln <- c(ln, if (is.null(tab)) "$PAR absent; the parameter block cannot be read."
+                else md_table(tab), "")
+  }
+  ln <- c(ln, paste("**Light sources, filters and optical configuration.**", TBC),
+          "",
+          "Most instruments do not write the laser and filter block into the FCS",
+          "keywords, so it has to come from the instrument configuration report.",
+          "")
+
+  # ---- 4. data analysis -----------------------------------------------------
+  ln <- c(ln, "", "## 4. Data analysis", "", "### 4.1 List-mode data files", "",
+          paste0("`", paste(vapply(reads, function(r)
+            basename(r$file %||% NA_character_), character(1)), collapse = "`, `"),
+            "`"), "")
+
+  ln <- c(ln, "### 4.2 Compensation", "")
+  comp <- vapply(names(reads), function(s) {
+    kw <- reads[[s]]$keywords
+    k <- intersect(c("$SPILLOVER", "SPILL", "$SPILL", "spillover"), names(kw))
+    if (!length(k)) "absent" else "present, applied"
+  }, character(1))
+  ln <- c(ln, if (all(comp == "absent"))
+    paste("No `$SPILLOVER` keyword in any file. Either the data were already",
+          "unmixed by the acquisition software, which is what spectral",
+          "instruments write, or compensation was never applied. cyRAVEN does",
+          "not construct a matrix; that belongs in acquisition software where",
+          "the single-stain controls can be inspected.")
+  else if (all(comp == "present, applied"))
+    paste("The acquisition spillover matrix stored in the `$SPILLOVER` keyword",
+          "was applied to every file as read. No matrix was computed here.")
+  else paste0("Mixed: ", sum(comp != "absent"), " of ", length(comp),
+              " files carry a `$SPILLOVER` matrix, which was applied to those",
+              " files only. This is worth resolving before the results are used."),
+  "")
+
+  ln <- c(ln, "### 4.3 Transformation", "")
+  if (!is.null(transforms) && length(transforms)) {
+    tr <- do.call(rbind, lapply(names(transforms), function(p) {
+      t <- transforms[[p]]
+      data.frame(panel = p, method = or_absent(t$method %||% t$kind, "unknown"),
+                 parameters = or_absent(
+                   if (!is.null(t$cofactor)) paste0("cofactor = ", signif(t$cofactor, 6))
+                   else if (!is.null(t$logicle)) paste0("logicle, m = ",
+                                                        signif(t$m %||% NA, 4),
+                                                        ", pooled across the panel")
+                   else NA_character_, "see run manifest"),
+                 stringsAsFactors = FALSE)
+    }))
+    ln <- c(ln, md_table(tr), "")
+  } else {
+    ln <- c(ln, paste0("Transform: ", or_absent(opt$transform %||% "arcsinh"),
+                       ". Parameters are derived per panel and recorded in the ",
+                       "run manifest."), "")
+  }
+  ln <- c(ln, paste("Parameters are derived once per panel rather than per file,",
+                    "so every sample sits on one scale and cross-sample medians",
+                    "remain comparable."), "")
+
+  # 4.4 gating. This is the section MIFlowCyt asks for in prose and that most
+  # submissions answer with a screenshot. Here it is the executable definition.
+  ln <- c(ln, "### 4.4 Gating", "",
+          "Thresholds are derived independently within each sample from that",
+          "sample's own marker density, not transferred between samples. The",
+          "hierarchy preceding any marker evaluation is:", "",
+          "1. Scatter, at the deepest minimum of the log10 FSC-A density.",
+          paste0("2. Singlets, within median +/- ",
+                 or_absent(opt$singlet_mad_k %||% 3), " MAD of the FSC-H:FSC-A",
+                 " ratio inside the scatter gate."),
+          "3. Viability, at the density minimum of the viability dye, where the panel carries one.",
+          "4. CD45, selecting leukocytes. Every population frequency below is a percentage of this parent.",
+          "")
+  if (!is.null(spec) && length(spec)) {
+    ln <- c(ln, paste0("The population specification, as scored (",
+                       length(spec), " populations):"), "", "```yaml", "populations:")
+    for (p in names(spec)) {
+      ln <- c(ln, paste0("  ", p, ":"))
+      d <- spec[[p]]
+      for (m in setdiff(names(d), "any_of"))
+        ln <- c(ln, paste0("    ", m, ": ", as.character(d[[m]])[1]))
+      if (!is.null(d[["any_of"]])) {
+        ln <- c(ln, "    any_of:")
+        for (m in names(d[["any_of"]]))
+          ln <- c(ln, paste0("      ", m, ": ", as.character(d[["any_of"]][[m]])[1]))
+      }
+    }
+    ln <- c(ln, "```", "")
+  }
+  if (!is.null(thresholds) && nrow(thresholds) && "source" %in% names(thresholds)) {
+    st <- table(thresholds$source)
+    ln <- c(ln, "How the thresholds were obtained, over all sample and marker pairs:",
+            "",
+            paste0("- `", names(st), "`: ", as.integer(st)), "",
+            paste("Every value is in `thresholds_used.csv`, and",
+                  "`threshold_uncertainty.csv` states how far each one moves",
+                  "under resampling of the events it was derived from."), "")
+  }
+
+  ln <- c(ln, "### 4.5 Software", "",
+          paste0("cyRAVEN ", tryCatch(as.character(utils::packageVersion("cyRAVEN")),
+                                      error = function(e) "unknown"),
+                 ", ", R.version.string, "."),
+          "Every package version loaded at run time is in `run_manifest.txt`.",
+          "", "---", "",
+          "Sections marked TO BE COMPLETED require information that is not in the",
+          "data files. Everything else was read from them or from this run.", "")
+
+  writeLines(ln, path)
+  log_msg("wrote ", basename(path), " (MIFlowCyt sections 3 and 4 completed, ",
+          "1 and 2 marked outstanding)")
+  invisible(path)
+}
+
+#' Render a data.frame as a GitHub-flavoured markdown table
+#' @param d a data.frame
+#' @keywords internal
+md_table <- function(d) {
+  if (is.null(d) || !nrow(d)) return(character(0))
+  d[] <- lapply(d, function(x) gsub("|", "\\|", as.character(x), fixed = TRUE))
+  c(paste0("| ", paste(names(d), collapse = " | "), " |"),
+    paste0("|", paste(rep("---", ncol(d)), collapse = "|"), "|"),
+    apply(d, 1, function(r) paste0("| ", paste(r, collapse = " | "), " |")))
+}

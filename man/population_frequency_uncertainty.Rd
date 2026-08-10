@@ -13,7 +13,9 @@ population_frequency_uncertainty(
   cd45_x = NULL,
   cd45_live = NULL,
   cd45_threshold = NA_real_,
-  cd45_u = NA_real_
+  cd45_u = NA_real_,
+  lod_events = 20L,
+  loq_events = 50L
 )
 }
 \arguments{
@@ -34,6 +36,11 @@ population_frequency_uncertainty(
 \item{cd45_threshold}{the CD45 cut}
 
 \item{cd45_u}{standard uncertainty of the CD45 cut}
+
+\item{lod_events}{events below which a population is not called detected}
+
+\item{loq_events}{events below which a population is detected but not
+quantified}
 }
 \value{
 list(per_population = data.frame, budget = data.frame)
@@ -56,4 +63,15 @@ leave out the largest one.
 Markers whose uncertainty is NA contribute nothing and are counted in
 \code{n_terms_missing}, so a small total that is small only because most terms
 could not be computed is distinguishable from a genuinely tight one.
+
+THE COUNTING TERM IS REPORTED BESIDE THE GATE TERMS, NOT MIXED INTO THEM.
+\code{u_pct_points} keeps its meaning: gate placement only. \code{u_counting_pct_points}
+is what the frequency carries from the number of events behind it, and
+\code{u_total_pct_points} is their quadrature sum. Keeping the first column fixed
+means every number this table published before is still the same number.
+
+The two are not strictly independent, since displacing a cut also changes the
+count. Quadrature treats them as though they were, which is the same
+approximation the GUM makes for the marker terms and is stated here rather
+than left for the reader to find.
 }

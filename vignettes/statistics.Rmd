@@ -199,9 +199,30 @@ rule, so it cancels in part when a difference is taken and the ratio is
 conservative. A ratio below one is a reason to open `threshold_uncertainty.csv`
 before interpreting the comparison, not grounds to discard it.
 
-The order to read remains: adjusted p, then effect size, then this. A result that
-survives all three is one where the groups differ, the difference is large
-relative to donor variation, and it is larger than the gate can move on its own.
+`difference_over_total_u` repeats the comparison against the gate term and the
+counting term together. The two ratios coincide for an abundant population and
+separate for a rare one, where the threshold can be well placed and the frequency
+still rest on too few events to support the difference being tested. Where they
+disagree, the smaller is the one to act on.
+
+The order to read remains: adjusted p, then effect size, then these. A result
+that survives all of them is one where the groups differ, the difference is large
+relative to donor variation, and it is larger than both the distance the gate can
+move and the noise in the count.
+
+## 8a. Detection limits
+
+An effect size and a p-value can both be computed from a population of nine
+events. Neither reports that fact.
+
+`detection` in `population_frequencies.csv` classifies each value against the
+conventional limits of detection and quantification, twenty and fifty events
+against the parent gate. A population below the limit of quantification in most
+samples should not be carried into a group comparison at all: the test will run,
+and its result is a statement about acquisition depth.
+
+This is a screen on the measurement rather than a correction to the test. No
+p-value is adjusted by it, and the tests behave as they did before.
 
 ## 9. Summary
 
@@ -214,4 +235,5 @@ relative to donor variation, and it is larger than the gate can move on its own.
 | Is the contrast confounded by batch? | `batch_mixing_report()` | cell, descriptive |
 | Is the contrast an artefact of the gate? | `stats_threshold_drift()`, `cluster_gate_agreement()` | sample and cell |
 | Is the difference bigger than the gate's own uncertainty? | `run_gate_uncertainty()`, `annotate_gate_uncertainty()` | sample |
+| Were enough cells counted for the frequency to mean anything? | `counting_uncertainty()` | sample |
 | Which markers shift within a subcluster? | `stats_subcluster_shifts()` | cell, no p-value |

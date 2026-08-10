@@ -35,6 +35,7 @@ are misplaced produces internally consistent statistics that are unusable.
 | `uncertainty_budget.csv` | Contribution of each threshold to each population's uncertainty, per sample |
 | `frequency_uncertainty.png` | Per-sample frequencies with their uncertainty, one row per population |
 | `uncertainty_budget.png` | The same budget as a stacked median contribution |
+| `detection_limits.png` | Samples per population, split by whether the event count clears each limit |
 
 `bootstrap_valley_rate` is the column to read first. A threshold found in every
 resample is a population boundary; one found in half of them is histogram noise
@@ -46,6 +47,24 @@ happens for a threshold taken from a separate control tube. `n_terms_missing` on
 the frequency table counts how many of a population's markers contributed
 nothing, so a small total that is small only because most terms are absent is
 distinguishable from a genuinely tight one.
+
+Two uncertainties are reported per frequency and they answer different questions.
+`u_pct_points` is placement: how far the number moves when the cuts behind it
+move. `u_counting_pct_points` is sufficiency: what it carries from the number of
+events counted, as the Wilson half-width at one standard deviation.
+`u_total_pct_points` is their quadrature sum. The two are alike for an abundant
+population and diverge for a rare one, where a cut through a wide gap is well
+determined and the count behind it is not.
+
+`lod_pct` and `loq_pct` place the conventional twenty and fifty events on the
+percentage scale of that sample's parent gate, and `detection` says which side of
+them the value falls. Both are set by what was acquired rather than by the gating
+strategy, so `--max-events-per-file` raises them in proportion; `--lod-events` and
+`--loq-events` change the conventions themselves.
+
+Counting is deliberately not a row in `uncertainty_budget.csv`. That table
+answers which threshold a population's uncertainty comes from, and counting is
+not a threshold.
 
 Written by default. `--no-uncertainty` skips it and restores the previous output
 exactly.
@@ -136,6 +155,24 @@ without p-values, and answers a different question from the tests above it.
 | `batch_mixing_stats.csv` | iLISI against a permutation null |
 | `batch_group_confounding.csv` | Cramér's *V* and correction verdict |
 | `batch_diagnostic.png` | Observed against null mixing |
+| `marker_batch_drift.csv` | Earth Mover's distance between batches per marker, in analysis units and scaled by the marker's own MAD |
+| `threshold_batch_drift.csv` | The threshold test above, grouped by batch instead of by study group |
+
+The last two are written by `--batch-column` and answer the question the first
+three cannot: which channel moved. iLISI is a property of the embedding, so a
+flagged run names nothing actionable, whereas a flagged marker names a reagent
+lot or a detector.
+
+Read `emd_over_mad` rather than `emd_max`: the raw distance is in the units of
+whichever marker it describes, and dividing by that marker's own spread is what
+makes two of them comparable. `worst_pair` names the batches responsible.
+
+Both tables are needed. A threshold is one number per sample and registers only
+drift that moves the cut, while a marker can change its spread or lose the
+separation between its modes with the density minimum between them unmoved.
+
+| File | Content |
+|---|---|
 | `run_manifest.txt` | Versions, commit, invocation, options |
 
 ## 8. Clustering
@@ -180,14 +217,30 @@ is what cyRAVEN resolves from `$PnS`.
 
 | File | Content |
 |---|---|
+| `run_manifest.txt` | R and package versions, git commit, invocation, options, run status |
+| `miflowcyt.md` | The same run against the ISAC reporting checklist |
 | `patient_metadata_english.csv` | Patient table after column mapping and value translation |
 | `absolute_counts*.csv`, `.png` | Written by `--absolute-counts` |
 | `flowjo/` | UMAP-annotated FCS, written by `--flowjo-export` |
 | `config_derived.yaml` | Derived parameters, written by `--write-config` |
 | `sample_map_template.csv` | Written by `--write-sample-map` |
 
-`--write-config` and `--write-sample-map` terminate after writing and cannot be
-combined with a full run.
+`miflowcyt.md` completes the two checklist sections a run can establish. The
+instrument section comes from the FCS keyword block: cytometer, serial,
+acquisition software, date, operator and event counts per file, then one detector
+table per panel with `$PnN`, `$PnS`, voltage, range and amplification mode. The
+data-analysis section comes from the run, so the compensation statement, the
+transform and its parameters, the gate hierarchy, the population specification
+and the tally of how the thresholds were obtained all describe what was actually
+computed.
+
+Experiment intent and specimen biology are marked `TO BE COMPLETED`, and a
+keyword the file does not carry is written as `not recorded in the FCS file`
+rather than dropped. Both follow the same rule: an absent line reads as a line
+that did not apply, and neither of those is true here.
+
+`--no-miflowcyt` skips it. `--write-config` and `--write-sample-map` terminate
+after writing and cannot be combined with a full run.
 
 The FlowJo export writes one pooled file, one per sample and one per group. Open
 `_ALL_SAMPLES.fcs`, plot UMAP-1 against UMAP-2, and decode the Population,

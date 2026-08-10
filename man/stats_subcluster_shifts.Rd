@@ -34,6 +34,6 @@ column rather than an eyeball over 288 panels.
 }
 \details{
 Effect size is the median difference in asinh units plus Cliff's delta, which
-is bounded �-1 to 1 and rank-based: at these per-subcluster n a difference in
+is bounded -1 to 1 and rank-based: at these per-subcluster n a difference in
 means is dominated by outliers, and these distributions are not normal.
 }

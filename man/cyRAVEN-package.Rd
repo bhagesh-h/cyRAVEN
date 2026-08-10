@@ -73,10 +73,5 @@ Useful links:
 \author{
 \strong{Maintainer}: Bhagesh Hunakunti \email{bhunakun@uni-bonn.de} (\href{https://orcid.org/0000-0002-5957-8005}{ORCID}) [copyright holder]
 
-Authors:
-\itemize{
-  \item Bhagesh Hunakunti \email{bhunakun@uni-bonn.de} (\href{https://orcid.org/0000-0002-5957-8005}{ORCID}) [copyright holder]
-}
-
 }
 \keyword{internal}
