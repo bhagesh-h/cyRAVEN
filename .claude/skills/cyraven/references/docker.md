@@ -30,11 +30,11 @@ yaml 2.3.12 · optparse 1.8.2 · hexbin 1.28.5
 
 ## Build
 
-From the package root — the directory containing `DESCRIPTION`, not
+From the package root, the directory containing `DESCRIPTION`, not
 `inst/scripts/`:
 
 ```bash
-docker build -f inst/scripts/Dockerfile -t cyraven:0.2.0 .
+docker build -f inst/scripts/Dockerfile -t cyraven:0.3.0 .
 ```
 
 The build copies `DESCRIPTION` and `install_deps.R` before anything else, so the
@@ -55,7 +55,7 @@ image fails here.
 docker run --rm \
   -v "$PWD:/data:ro" \
   -v "$PWD/results:/results" \
-  cyraven:0.2.0 \
+  cyraven:0.3.0 \
   --dir /data --recursive \
   --config /data/panel.yaml \
   --sample-map /data/sample_map.csv \
@@ -84,7 +84,7 @@ PowerShell expands `${PWD}`, not `$PWD`:
 docker run --rm `
   -v "${PWD}:/data:ro" `
   -v "${PWD}/results:/results" `
-  cyraven:0.2.0 `
+  cyraven:0.3.0 `
   --dir /data --recursive --outdir /results
 ```
 
@@ -131,13 +131,13 @@ docker run --rm \
   -v "$PWD/data:/data:ro" \
   -v "$PWD/results:/results" \
   -e CYRAVEN_SOURCE=/src \
-  cyraven:0.2.0 --dir /data --outdir /results
+  cyraven:0.3.0 --dir /data --outdir /results
 ```
 
 `entrypoint.sh` sees `CYRAVEN_SOURCE` and loads that tree with
 `pkgload::load_all()` through `R_PROFILE_USER`, which runs before the script. The
-mounted tree gets the same namespace semantics as an installed package — internal
-functions resolve, `system.file()` finds `inst/` — without writing to the image's
+mounted tree gets the same namespace semantics as an installed package (internal
+functions resolve, `system.file()` finds `inst/`) without writing to the image's
 library, which is read-only in most run configurations.
 
 A rebuild is still required once the mounted source needs a package the image
@@ -146,12 +146,12 @@ does not have. R says so plainly at startup: "there is no package called ...".
 ## Docker-specific failures
 
 **`Rscript: not a valid option`, or the container ignores your command.**
-The image has an `ENTRYPOINT`, so `docker run cyraven:0.2.0 Rscript foo.R` passes
+The image has an `ENTRYPOINT`, so `docker run cyraven:0.3.0 Rscript foo.R` passes
 `Rscript foo.R` as *arguments to the entrypoint*. Override it:
 
 ```bash
-docker run --rm --entrypoint Rscript cyraven:0.2.0 -e 'sessionInfo()'
-docker run --rm -it --entrypoint bash cyraven:0.2.0
+docker run --rm --entrypoint Rscript cyraven:0.3.0 -e 'sessionInfo()'
+docker run --rm -it --entrypoint bash cyraven:0.3.0
 ```
 
 **`R CMD INSTALL -l /tmp/rlib: cannot cd to directory`.**
@@ -178,10 +178,10 @@ directory, or `chown` it afterwards.
 ## Checking what an image actually contains
 
 ```bash
-docker run --rm --entrypoint Rscript cyraven:0.2.0 \
+docker run --rm --entrypoint Rscript cyraven:0.3.0 \
   -e 'cat(as.character(packageVersion("cyRAVEN")), "\n")'
 
-docker run --rm cyraven:0.2.0 --help
+docker run --rm cyraven:0.3.0 --help
 ```
 
 The manifest written by every run (`run_manifest.txt`) records the R version, the

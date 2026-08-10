@@ -35,9 +35,32 @@ reported with effect sizes and no p-value.
 
 ## 2. Invocation
 
+The supported execution path is the container. `uwot` is a stochastic embedder
+whose output varies with its own version and with the BLAS beneath it, and every
+gate is placed at a kernel density minimum, so a different density implementation
+moves thresholds and the frequencies derived from them. The image pins R 4.4.3, a
+dated CRAN snapshot and Bioconductor 3.20. Build instructions and a runnable
+example on public data are in the
+[README](https://github.com/bhagesh-h/cyRAVEN#2-quick-start).
+
+```sh
+docker run --rm \
+  -v "$PWD/data:/data:ro" \
+  -v "$PWD/results:/results" \
+  cyraven:0.3.0 \
+  --dir /data/fcs --recursive \
+  --sample-map /data/sample_map.csv \
+  --config /data/panel.yaml \
+  --group-column cohort --reference-group "Healthy controls" \
+  --outdir /results
+```
+
+The same run from an R session, where the package is installed locally and
+bit-level reproducibility against the pinned environment is not required:
+
 ```r
 run_cyraven(list(
-  dir              = "data/",
+  dir              = "data/fcs",
   recursive        = TRUE,
   outdir           = "results/",
   sample_map       = "data/sample_map.csv",
@@ -50,14 +73,9 @@ run_cyraven(list(
 ))
 ```
 
-Command-line equivalent:
-
-```sh
-Rscript "$(Rscript -e 'cat(system.file("scripts","cyraven.R",package="cyRAVEN"))')" \
-  --dir data/ --recursive --outdir results/ \
-  --sample-map data/sample_map.csv \
-  --group-column cohort --reference-group "Healthy controls"
-```
+Both forms call the same `run_cyraven()`. The command-line front end resolves to
+`system.file("scripts", "cyraven.R", package = "cyRAVEN")` and is what the
+container entrypoint executes.
 
 Progress is emitted through `message()` and directed to stderr:
 
@@ -170,7 +188,9 @@ shift confined to a subset moves one and not the other.
 
 ### 3.8 Diagnose
 
-Five outputs constrain interpretation of the preceding stages. The
+Six outputs constrain interpretation of the preceding stages: threshold drift,
+gate and counting uncertainty, phenotype concordance, gate against cluster
+concordance, learned gate geometry, and conformance against a baseline. The
 [diagnostics article](diagnostics.html) covers each in full.
 
 `batch_mixing_report()` quantifies batch structure in the embedding against a

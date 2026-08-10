@@ -27,7 +27,7 @@ If `--dir` has subdirectories, the log says so. Add `--recursive`.
 
 They are excluded by filename by default, matching
 `compensation|single[ _-]?stain|comp[ _-]?control`. If yours are named otherwise
-they will be admitted, and each contains beads or cells carrying one fluorophore —
+they will be admitted, and each contains beads or cells carrying one fluorophore:
 no CD45 population, no viable-cell population, no marker set in common with the
 panel. They form a spurious panel group and clutter every figure.
 
@@ -91,7 +91,7 @@ The marker did not separate positive from negative. In order:
 2. **Supply an unstained control** (`is_control = TRUE`). Unimodal markers get
    `control_q995` instead of a guess.
 3. **Accept it.** A marker falling back across most samples is not resolving in
-   that panel. No gating strategy recovers it — the fix is panel design.
+   that panel. No gating strategy recovers it. The fix is panel design.
 
 Frequencies from a fallback are not invalid. They carry no evidence of
 separation, which is a different statement, and `source` is how the reader knows.
@@ -108,14 +108,14 @@ Look at that sample's density in `gating_qc.png` first.
 
 ### `bootstrap_valley_rate` is low
 
-Below about 0.8 the cut is unresolved, not merely imprecise — it was found by
+Below about 0.8 the cut is unresolved, not merely imprecise. It was found by
 histogram noise that happened to clear the depth rule. It looks identical to a
 solid threshold in `thresholds_used.csv`. Treat any frequency reading that marker
 as provisional.
 
 ## The embedding
 
-### The UMAP is uninformative — one blob, or structure that tracks sample rather than biology
+### The UMAP is uninformative: one blob, or structure that tracks sample rather than biology
 
 Feature selection is the usual cause. Height and width channels are redundant
 duplicates of area and would double-weight every marker; scatter and Time encode
@@ -138,7 +138,7 @@ That fallback is a warning, not a solution. Name the panel's lineage markers:
 ```
 
 If structure tracks acquisition order rather than group, quantify it before
-correcting it — `--batch-column`, then read §6.2 of `interpretation.md`.
+correcting it: `--batch-column`, then read §6.2 of `interpretation.md`.
 
 ### Adding samples moved every coordinate
 
@@ -150,14 +150,14 @@ Expected. A fresh embedding is fitted to whatever cells it is given.
 ```
 
 Right for adding more of the same kind of sample. Wrong for a new panel or a new
-cell type — retrain.
+cell type; retrain.
 
 ### The UMAP changed between runs with the same seed
 
 Any new step that consumes random draws before the embedding changes which cells
 are selected. `run_cyraven()` seeds once and the UMAP cell selection draws from
 that one stream. Every entry point that needs randomness must save and restore
-`.Random.seed` — see `uncertainty.R` and `clustering.R` for the pattern.
+`.Random.seed`: see `uncertainty.R` and `clustering.R` for the pattern.
 
 If this happens after a code change, that is the cause.
 
@@ -222,7 +222,7 @@ bias toward the start of the tube.
 
 ### The run is far slower than expected
 
-If in Docker, check for an orphaned container competing for CPU — killing the
+If in Docker, check for an orphaned container competing for CPU. Killing the
 shell that started `docker run` does not stop the container.
 
 ```bash
@@ -237,10 +237,10 @@ to 4.
 
 See `docker.md` for the full list. The two that catch everyone:
 
-**`Rscript: not a valid option`** — the image has an `ENTRYPOINT`, so your command
+**`Rscript: not a valid option`**: the image has an `ENTRYPOINT`, so your command
 arrives as arguments to it. Use `--entrypoint Rscript` or `--entrypoint bash`.
 
-**Results directory empty after a successful run** — `--outdir` pointed outside
+**Results directory empty after a successful run**: `--outdir` pointed outside
 every `-v` mount. `/results` is a declared `VOLUME`, so an unmounted path writes
 into an anonymous volume that vanishes with `--rm`.
 

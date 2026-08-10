@@ -24,7 +24,7 @@ omission is logged. `--viability-marker` overrides auto-detection.
 
 **CD45.** Leukocytes are selected on CD45, expressed across haematopoietic
 lineages and absent from erythrocytes and platelets. Where CD45 is not in the
-panel, all viable events become the parent and a warning is raised —
+panel, all viable events become the parent and a warning is raised, because
 percent-of-leukocytes and percent-of-viable are not interchangeable denominators.
 
 Every population frequency is a percentage of the CD45⁺ parent.
@@ -46,14 +46,14 @@ Within each sample, for each marker, the density of parent-gate cells is
 evaluated and the threshold placed at the minimum separating negative from
 positive. The resolution order is fixed:
 
-1. **`config`** — an explicit value in the YAML always wins.
-2. **`valley`** — the density minimum. A valley falling *below* the
+1. **`config`**: an explicit value in the YAML always wins.
+2. **`valley`**: the density minimum. A valley falling *below* the
    control-derived value is rejected, because it sits inside the background
    distribution and would call noise positive.
-3. **`control_q995`** — the 99.5th percentile of an unstained control tube, where
+3. **`control_q995`**: the 99.5th percentile of an unstained control tube, where
    one is declared through `is_control` in the sample map. This is the path for
    unimodal markers.
-4. **`quantile_fallback`** — a fixed quantile, flagged `needs_review`.
+4. **`quantile_fallback`**: a fixed quantile, flagged `needs_review`.
 
 ### Reading the result
 
@@ -63,18 +63,18 @@ positive. The resolution order is fixed:
 `quantile_fallback` means the marker did not separate positive from negative in
 that sample. Frequencies from a fallback are not invalid, but they carry no
 evidence of separation. **A marker that falls back across most samples is not
-resolving in that panel, and no gating strategy will recover it** — change the
+resolving in that panel, and no gating strategy will recover it**. Change the
 panel or the transform.
 
 `source` does not say how well determined the value is. Two cuts both recorded as
 `valley` can differ by an order of magnitude in that respect: one in a wide empty
 gap, the other on a shallow dip a slightly different histogram would have missed.
-`threshold_uncertainty.csv` supplies that quantity — see
+`threshold_uncertainty.csv` supplies that quantity. See
 `interpretation.md` §3.
 
 `threshold_scale_qc.csv` reports, per panel and marker, the median threshold
 across samples and the robust *z* of each deviation. Flagged rows are the first
-candidates for review. This check is **within run** — it finds one deviant tube
+candidates for review. This check is **within run**: it finds one deviant tube
 among sound ones and is blind to a cohort that moved together, because the
 leave-one-out peer median moves with it. For that case use `--write-baseline` and
 `--baseline`.
@@ -114,15 +114,15 @@ and a deeper definition receives the deeper label.
 
 ### Directions
 
-`above` — value above threshold.
-`below` — value below threshold.
-`intermediate` — between the threshold and an upper bound derived per sample from
+`above`: value above threshold.
+`below`: value below threshold.
+`intermediate`: between the threshold and an upper bound derived per sample from
 a second density minimum inside the positive fraction. Where no second minimum
 exists the population is reported UNAVAILABLE rather than merged into the bright
 fraction. The canonical case is monocyte subsetting: classical CD14⁺⁺,
 intermediate CD14⁺CD16⁺, non-classical CD14^dim.
 
-`any_of` — a reserved key holding a nested map satisfied when **any** member is.
+`any_of`: a reserved key holding a nested map satisfied when **any** member is.
 
 ```yaml
   NK cells:
@@ -141,7 +141,7 @@ mode-finding machinery.
 
 1. **Enumerate the panel.** `thresholds_used.csv` from any run lists every
    resolved marker. The `$PnS` keyword of any file in the batch carries the same
-   information. Names must match `$PnS` exactly — this is the single most common
+   information. Names must match `$PnS` exactly. This is the single most common
    cause of an empty frequency table.
 2. **Declare lineage-level populations first** and confirm they score plausibly
    before adding subsets. An error in the CD3 gate propagates to every T cell
@@ -152,7 +152,7 @@ mode-finding machinery.
    reported UNAVAILABLE and scored as absent.
 
 `system.file("config", "config_cohorts.yaml", package = "cyRAVEN")` shows the
-file structure. Replace its populations with those of the panel in use — it is a
+file structure. Replace its populations with those of the panel in use; it is a
 worked example for one myeloid-lymphoid panel, not a default.
 
 ### Do not fit the specification to the data
@@ -174,7 +174,7 @@ compresses against the axis and mode separation cannot be resolved. Every
 threshold is placed on a transformed scale, and the choice decides where it
 lands.
 
-### arcsinh — the default
+### arcsinh: the default
 
 The cofactor sets the width of the quasi-linear region near zero and is estimated
 per panel by bisection until the background interquartile range reaches a target.
@@ -225,7 +225,7 @@ does not express.
 The spillover matrix is determined at acquisition from single-stain controls and
 stored in the FCS keyword block. cyRAVEN applies it where present and reports its
 absence. Spectral instruments write already-unmixed data with no matrix, so
-`maybe_compensate()` detects rather than assumes — applying compensation twice is
+`maybe_compensate()` detects rather than assumes, because applying compensation twice is
 as damaging as omitting it.
 
 Matrix construction is out of scope. It belongs in acquisition software, where
