@@ -189,6 +189,10 @@ specification_conformance <- function(thr_all, freq, spec, baseline,
       panel = d$panel[1], marker = d$marker[1], n = nrow(d),
       median_threshold = median(d$threshold, na.rm = TRUE),
       fallback_rate = mean(d$source == "quantile_fallback", na.rm = TRUE),
+      # A marker some of whose cuts were placed by hand did not conform, it was
+      # made to conform. That is a different statement and gets its own verdict
+      # below rather than being counted as agreement with the baseline.
+      n_manual = sum(d$source == "manual", na.rm = TRUE),
       stringsAsFactors = FALSE)))
     rownames(cur) <- NULL
     m <- merge(cur, bm, by = c("panel", "marker"), suffixes = c("", "_baseline"),
@@ -204,13 +208,22 @@ specification_conformance <- function(thr_all, freq, spec, baseline,
       robust_z = round(z, 2),
       fallback_rate = round(m$fallback_rate, 3),
       baseline_fallback_rate = round(m$fallback_rate_baseline, 3),
-      verdict = if (scale_changed) "not comparable" else verdict_of(z),
+      n_manual_overrides = m$n_manual %||% 0L,
+      verdict = if (scale_changed) "not comparable"
+                else ifelse((m$n_manual %||% 0L) > 0L, "manually set",
+                            verdict_of(z)),
       note = ifelse(is.na(m$median_threshold_baseline), "absent from baseline",
              ifelse(scale_changed, "transform differs from baseline",
+             ifelse((m$n_manual %||% 0L) > 0L,
+                    "one or more cuts were set by hand; see override_reason in thresholds_used.csv",
              ifelse(m$fallback_rate > (m$fallback_rate_baseline + 0.25),
                     "more samples fell back to a quantile than in the baseline",
-                    NA_character_))),
+                    NA_character_)))),
       row.names = NULL, stringsAsFactors = FALSE)
+    # The override column earns its place only when there is an override to
+    # report. A run that set nothing by hand writes the table it always wrote.
+    if (all((mk$n_manual_overrides %||% 0L) == 0L))
+      mk$n_manual_overrides <- NULL
     mk <- mk[order(-ifelse(is.finite(mk$robust_z), mk$robust_z, -1)), ]
   }
 

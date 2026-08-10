@@ -28,6 +28,31 @@ threshold superimposed on the density from which it was derived.
 A threshold placed on a distribution shoulder rather than a minimum is visible
 here and is not detectable in any downstream table.
 
+## 1a. Acquisition stability
+
+Every number reported for a sample is derived from that sample's pooled events,
+which is correct only if the instrument behaved the same way throughout the
+acquisition. A partial clog, a bubble or a drift in laser power makes a file two
+instruments over its run, and one threshold then suits neither half.
+
+`acquisition_qc.csv` bins the Time channel into equal-width intervals and tracks
+two quantities across them: the event rate, which a clog lowers and a bubble
+spikes, and each channel's median, which catches a shift the rate does not show.
+Bins are equal in time rather than in count, because a bin holding a fixed number
+of events cannot reveal that the rate changed. `acquisition_qc.png` draws the
+rate per sample with the flagged intervals marked, and `acquisition_qc_bins.csv`
+holds the per-interval detail.
+
+Nothing is removed. `acquisition_qc_impact.csv` states how far each population
+would move if the flagged intervals were excluded, and that is the number the
+decision rests on: a file with a visible anomaly that moves no population by more
+than its own gate uncertainty does not need re-acquiring. Compare
+`pct_delta_if_cleaned` against `u_pct_points` for the same population before
+concluding anything. `--drop-unstable-events` performs the exclusion and is
+recorded in the manifest.
+
+A file carrying no Time channel is reported as such rather than as stable.
+
 ## 2. Staining QC
 
 `staining_qc.csv` records a per-sample verdict. A sample with no resolvable

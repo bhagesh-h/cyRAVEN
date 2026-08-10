@@ -26,6 +26,22 @@ exhaustive list rather than a second copy of them.
 | `staining_qc.csv` | Per-sample verdict and exclusion reason |
 | `thresholds_used.csv` | Threshold, derivation, cofactor and outlier status per sample and marker |
 | `threshold_scale_qc.csv` | Panel median and robust *z* per marker |
+| `acquisition_qc.csv`, `.png` | Per-sample acquisition stability, and the flagged intervals |
+| `acquisition_qc_bins.csv` | Per-interval rate and channel departure |
+| `acquisition_qc_impact.csv` | How far each population would move if the flagged intervals were excluded |
+| `fmo_agreement.csv` | Derived cut against its FMO-anchored equivalent, in units of the cut's own uncertainty |
+| `spreading_pairs.csv` | Per channel pair, how much wider the receiver's negatives become |
+| `spreading_receivers.csv` | Per marker, total spreading received and whether it explains a fallback |
+| `calibration.csv` | Bead fit per channel, written by `--calibration-beads` |
+
+`thresholds_used.csv` gains `override_reason` and `override_by` only when the
+config declares a `sample_overrides:` block, so a run that overrides nothing
+writes the table it always wrote. `source` is `manual` for an overridden cut,
+`fmo_q995` for one anchored to a fluorescence-minus-one control.
+
+Read `acquisition_qc_impact.csv` against `u_pct_points` for the same population
+before acting on an acquisition flag. `--drop-unstable-events` performs the
+exclusion; without it nothing is removed.
 
 These constrain the interpretation of every subsequent file. A run whose gates
 are misplaced produces internally consistent statistics that are unusable.
@@ -222,6 +238,7 @@ is what cyRAVEN resolves from `$PnS`.
 |---|---|
 | `run_manifest.txt` | R and package versions, git commit, invocation, options, run status |
 | `miflowcyt.md` | The same run against the ISAC reporting checklist |
+| `report.html` | Every output above, in the order this documentation says to read them |
 | `patient_metadata_english.csv` | Patient table after column mapping and value translation |
 | `absolute_counts*.csv`, `.png` | Written by `--absolute-counts` |
 | `flowjo/` | UMAP-annotated FCS, written by `--flowjo-export` |
@@ -242,8 +259,14 @@ keyword the file does not carry is written as `not recorded in the FCS file`
 rather than dropped. Both follow the same rule: an absent line reads as a line
 that did not apply, and neither of those is true here.
 
-`--no-miflowcyt` skips it. `--write-config` and `--write-sample-map` terminate
-after writing and cannot be combined with a full run.
+`report.html` is the reading order made navigable: each section states the
+question it answers, shows the figures behind it, and links the tables. A run
+that excluded samples says so above every result. It references the figures
+beside it rather than embedding them, so it is read in the results directory.
+
+`--no-miflowcyt` and `--no-report` skip those two. `--write-config` and
+`--write-sample-map` terminate after writing and cannot be combined with a full
+run.
 
 The FlowJo export writes one pooled file, one per sample and one per group. Open
 `_ALL_SAMPLES.fcs`, plot UMAP-1 against UMAP-2, and decode the Population,

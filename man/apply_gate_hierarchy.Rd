@@ -12,7 +12,8 @@ apply_gate_hierarchy(
   singlet_k = 3,
   viability_name = NULL,
   cd45_name = "CD45",
-  transform = NULL
+  transform = NULL,
+  overrides = NULL
 )
 }
 \arguments{
@@ -33,6 +34,11 @@ apply_gate_hierarchy(
 \item{transform}{Intensity transform from \code{\link[=make_transform]{make_transform()}}. Defaults to
 arcsinh with \code{cofactor}, which is what every caller got before the
 transform became selectable.}
+
+\item{overrides}{Optional per-marker override entries for THIS sample, as
+returned by indexing the config's \code{sample_overrides} block by sample id.
+See \code{\link[=sample_override]{sample_override()}}. Absent by default, in which case every threshold is
+derived exactly as before.}
 }
 \value{
 list of masks, derived geometry, thresholds, and a tidy counts table

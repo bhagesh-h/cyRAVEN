@@ -58,7 +58,7 @@ require only Docker.
 ```bash
 git clone https://github.com/bhagesh-h/cyRAVEN.git
 cd cyRAVEN
-docker build -f inst/scripts/Dockerfile -t cyraven:0.3.0 .
+docker build -f inst/scripts/Dockerfile -t cyraven:0.4.0 .
 ```
 
 The first build compiles the dependency stack and takes 15 to 25 minutes. It
@@ -70,7 +70,7 @@ image fails at build time rather than during an analysis.
 ```bash
 mkdir -p demo results
 docker run --rm -v "$PWD/demo:/demo" \
-  --entrypoint Rscript cyraven:0.3.0 \
+  --entrypoint Rscript cyraven:0.4.0 \
   /opt/cyraven/src/inst/scripts/demo_data.R /demo
 ```
 
@@ -92,7 +92,7 @@ present.
 docker run --rm \
   -v "$PWD/demo:/data:ro" \
   -v "$PWD/results:/results" \
-  cyraven:0.3.0 \
+  cyraven:0.4.0 \
   --dir /data/fcs \
   --sample-map /data/sample_map.csv \
   --config /data/panel.yaml \
@@ -164,10 +164,13 @@ existing quantity are opt-in.
   --lod-events 20           # events below which a population is not detected
   --auto-subcluster-k       # silhouette-selected subcluster count
   --save-umap-model         # persist the embedding for later batches
+  --drop-unstable-events    # exclude the flagged acquisition intervals
+  --subsample rare          # inverse-density draw, so rare populations survive
+  --calibration-beads b.fcs # convert channel units to MESF or ERF
   --no-uncertainty          # skip the gate uncertainty analysis
 ```
 
-`docker run --rm cyraven:0.3.0 --help` lists every option.
+`docker run --rm cyraven:0.4.0 --help` lists every option.
 
 ## 5. Output
 
@@ -245,7 +248,37 @@ which is what a correctly calibrated test returns at this number of comparisons.
 percentages only, the configuration produced by the compositional constraint
 rather than by an independent change.
 
-### 5.7 Principal tables
+### 5.7 Was the acquisition stable?
+
+Events recorded in each equal-width slice of the acquisition. A sustained trough
+is a partial clog, a spike is usually a bubble, and a step is a settings change
+part-way through the tube.
+
+Six of the eight pseudo-samples carry a flagged slice here, which is inherited
+rather than introduced: they are thinned in place, so each keeps its source
+acquisition's rate profile. The number that decides what to do about it is in
+`acquisition_qc_impact.csv`, which states that excluding every flagged slice
+would move the largest population by 0.195 percentage points, against gate
+uncertainties of one to two points for the same populations. Nothing is removed
+unless `--drop-unstable-events` is given.
+
+### 5.8 Why a threshold did not resolve
+
+`spreading_receivers.csv` reports, per marker, how much wider its negative
+population becomes when another channel is bright. On this panel CD38 and CCR7
+resolve no density minimum in any sample and receive 2.2-fold and 3.0-fold
+widening from CD45RA and CD3 respectively. Spreading fills in the valley a
+threshold would sit in, so those cuts are unresolved because of the panel and no
+gating strategy recovers them.
+
+### 5.9 Every figure, with its interpretation
+
+The [worked example
+article](https://bhagesh-h.github.io/cyRAVEN/articles/figures.html) shows all 19
+figures from this run, with what each measures and what this particular run
+shows.
+
+### 5.10 Principal tables
 
 | File | Content |
 |---|---|
@@ -336,6 +369,7 @@ unchanged.
 | [Output](https://bhagesh-h.github.io/cyRAVEN/articles/outputs.html) | Every file the pipeline writes, its columns, the flag producing it, and why event counts are not cell counts |
 | [Statistics](https://bhagesh-h.github.io/cyRAVEN/articles/statistics.html) | Sample-level aggregation; rank tests against moderated *t* and the sample size at which the trade reverses; the compositional constraint; covariate diagnosis against adjustment; multiplicity within test families; differences expressed in units of uncertainty |
 | [Interoperability](https://bhagesh-h.github.io/cyRAVEN/articles/with-cycondor.html) | Method selection by question type; handing a cyCONDOR clustering to cyRAVEN to obtain an executable gate with held-out-donor performance; the four sources of divergence between their embeddings |
+| [Worked example](https://bhagesh-h.github.io/cyRAVEN/articles/figures.html) | All 19 figures from a run on public data, each with what it measures and what that run shows |
 | [Claude skill](https://bhagesh-h.github.io/cyRAVEN/articles/claude-skill.html) | Installing and using the bundled Claude Code skill, which executes through Docker by default |
 | [Scope](https://bhagesh-h.github.io/cyRAVEN/articles/scope.html) | Nine excluded methods with the reasoning and the condition under which each becomes appropriate |
 

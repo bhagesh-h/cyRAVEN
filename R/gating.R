@@ -101,11 +101,16 @@ detect_viability_marker <- function(markers, explicit = NULL) {
 #' @param transform Intensity transform from [make_transform()]. Defaults to
 #'   arcsinh with `cofactor`, which is what every caller got before the
 #'   transform became selectable.
+#' @param overrides Optional per-marker override entries for THIS sample, as
+#'   returned by indexing the config's `sample_overrides` block by sample id.
+#'   See [sample_override()]. Absent by default, in which case every threshold is
+#'   derived exactly as before.
 #' @return list of masks, derived geometry, thresholds, and a tidy counts table
 #' @export
 apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,
                                  singlet_k = 3, viability_name = NULL,
-                                 cd45_name = "CD45", transform = NULL) {
+                                 cd45_name = "CD45", transform = NULL,
+                                 overrides = NULL) {
   ex <- rd$exprs; sc <- rd$scatter_cols; mc <- rd$marker_cols
   sg <- derive_scatter_gate(ex, sc)
   sb <- derive_singlet_band(ex, sc, sg$mask, k = singlet_k)
@@ -133,7 +138,8 @@ apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,
   if (!is.na(vmk)) {
     vx <- tf(vmk)
     rr <- resolve_threshold(vmk, vx[sb$mask], cfg_threshold(cfg[[vmk]]),
-                            control_ref[[vmk]], fallback_q = 0.90)
+                            control_ref[[vmk]], fallback_q = 0.90,
+                            override = sample_override(list(x = overrides), "x", vmk))
     v_thr <- rr$threshold; v_src <- rr$source
     live <- sb$mask & vx < v_thr        # dead cells are the BRIGHT tail
     log_msg("  viability '", vmk, "' threshold ", round(v_thr, 2), " (", v_src, ")")
@@ -146,7 +152,8 @@ apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,
   if (cd45_name %in% names(mc)) {
     cd45_x <- tf(cd45_name)
     rr <- resolve_threshold(cd45_name, cd45_x[live], cfg_threshold(cfg[[cd45_name]]),
-                            control_ref[[cd45_name]])
+                            control_ref[[cd45_name]],
+                            override = sample_override(list(x = overrides), "x", cd45_name))
     c_thr <- rr$threshold; c_src <- rr$source
     cd45 <- live & cd45_x > c_thr
     log_msg("  CD45 threshold ", round(c_thr, 2), " (", c_src, ")")

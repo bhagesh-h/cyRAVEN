@@ -80,5 +80,8 @@ utils::globalVariables(c(
   "grp", "hi", "lo", "term", "u_pct_points",
   # Detection limits figure: `detection` is the verdict column and `n` the
   # tabulated sample count, both columns of the frame built from table().
-  "detection", "n"
+  "detection", "n",
+  # Acquisition-time QC figure: columns of the per-bin table, plus the midpoint
+  # assigned onto it immediately before the plot call.
+  "n_events", "t_mid", "flagged"
 ))

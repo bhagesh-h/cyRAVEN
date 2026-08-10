@@ -108,8 +108,13 @@ threshold_uncertainty <- function(x, source = "valley", B = 100L, seed = 42L,
     out$basis <- "declared"
     return(out)
   }
-  if (grepl("^control_q995", source %||% "")) {
-    out$basis <- "control tube not available here"
+  # Both control paths are outside this function's reach: the cut came from a
+  # separate tube whose events were not passed in, so neither component can be
+  # estimated from `x`. NA with a reason, rather than a small number that would
+  # read as confidence.
+  if (grepl("^control_q995|^fmo_q995", source %||% "")) {
+    out$basis <- if (grepl("^fmo", source)) "FMO control not available here"
+                 else "control tube not available here"
     return(out)
   }
   if (length(x) < 500L) {

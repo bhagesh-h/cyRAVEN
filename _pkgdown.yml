@@ -29,12 +29,41 @@ reference:
 - title: Gating
   desc: >
     Thresholds derived from each sample's own density rather than transferred
-    from fixed coordinates.
+    from fixed coordinates. The reference for a marker that resolves no minimum
+    can be an unstained tube or a fluorescence-minus-one control, and a single
+    sample's cut can be corrected by hand with the correction recorded.
   contents:
   - density_valley
   - resolve_threshold
   - apply_gate_hierarchy
   - staining_verdict
+  - sample_override
+  - parse_fmo_map
+  - fmo_for_sample
+  - fmo_agreement
+
+- title: Acquisition and panel quality
+  desc: >
+    Two questions the gating stage cannot answer on its own: whether the
+    instrument was doing the same thing throughout the acquisition, and whether a
+    marker that resolves no density minimum is failing because of the panel.
+  contents:
+  - find_time_column
+  - detect_time_anomalies
+  - run_acquisition_qc
+  - frequency_delta_if_cleaned
+  - fig_acquisition_qc
+  - spreading_pairs
+  - run_spreading_report
+
+- title: Calibration
+  desc: >
+    Channel units are comparable within an instrument and never between two.
+    Beads of assigned fluorophore equivalence convert them to units that are.
+  contents:
+  - bead_peaks
+  - fit_bead_calibration
+  - apply_bead_calibration
 
 - title: Uncertainty
   desc: >
@@ -67,6 +96,8 @@ reference:
   contents:
   - select_umap_features
   - plan_subsample
+  - density_weights
+  - draw_subsample_rare
   - run_umap
   - save_umap_model
   - load_umap_model
@@ -154,6 +185,7 @@ reference:
   - stats_threshold_drift
   - write_run_manifest
   - write_miflowcyt
+  - write_run_report
 
 - title: Conformance across runs
   desc: >
@@ -192,6 +224,7 @@ articles:
   navbar: ~
   contents:
   - cyRAVEN
+  - figures
   - gating
 
 - title: Reading a run

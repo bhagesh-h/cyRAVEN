@@ -13,7 +13,12 @@ load_sample_map(path, fcs_files)
 }
 \description{
 Schema (see README): file, well, sample_id, patient_id, timepoint,
-is_control, panel. Only \code{file} is required.
+is_control, panel, fmo_for, control_group. Only \code{file} is required.
+}
+\details{
+\code{fmo_for} names the markers a file is the fluorescence-minus-one control for,
+comma separated; \code{control_group} confines a control to the samples sharing its
+value. Both are optional and inert when absent. See \code{\link[=parse_fmo_map]{parse_fmo_map()}}.
 A supplied map that does not cover every input file is a FATAL error: guessing
 well->patient assignment from plate order would silently mislabel patients.
 }

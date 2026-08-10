@@ -59,11 +59,28 @@ run_cyraven <- function(opt) {
   .finished_ok <- FALSE
   on.exit({
     if (TRUE)
-      try(write_run_manifest(.manifest, opt = opt, files = fcs,
-                             extra = if (exists("cofactors", inherits = FALSE))
-                               list(cofactors = unlist(cofactors)) else NULL,
-                             status = if (.finished_ok) "completed" else "failed",
-                             started = .run_started), silent = TRUE)
+      try(write_run_manifest(
+            .manifest, opt = opt, files = fcs,
+            extra = {
+              .x <- list()
+              if (exists("cofactors", inherits = FALSE))
+                .x$cofactors <- unlist(cofactors)
+              # Manual threshold corrections belong in the provenance record, not
+              # only in the table they altered. A reader asking "was this run
+              # touched by hand" should not have to grep a CSV to find out.
+              if (exists("cfg_ovr", inherits = FALSE) && length(cfg_ovr))
+                .x$manual_threshold_overrides <- unlist(lapply(names(cfg_ovr),
+                  function(s) vapply(names(cfg_ovr[[s]]), function(m) {
+                    e <- cfg_ovr[[s]][[m]]
+                    if (!is.list(e)) e <- list(threshold = e)
+                    paste0(s, " / ", m, " = ", e$threshold,
+                           "  by=", e$set_by %||% "unattributed",
+                           "  reason=", e$reason %||% "none given")
+                  }, character(1))), use.names = FALSE)
+              if (length(.x)) .x else NULL
+            },
+            status = if (.finished_ok) "completed" else "failed",
+            started = .run_started), silent = TRUE)
   }, add = TRUE)
 
   if (!is.null(opt$write_sample_map)) {
@@ -78,6 +95,17 @@ run_cyraven <- function(opt) {
   # another, so this is opt-in per config (see compute_population_ratios()).
   ratios <- cfg$ratios %||% list()
   cfg_thr <- cfg$thresholds       %||% list()
+  # Per-sample, per-marker manual corrections. Distinct from cfg_thr, which
+  # applies one number to every sample. See resolve_threshold() for why the two
+  # are not the same claim. `.ovr_applied` accumulates the keys that actually
+  # matched, so an entry naming a sample this cohort does not contain is
+  # reported rather than silently ignored.
+  cfg_ovr <- cfg$sample_overrides %||% list()
+  .ovr_applied <- character(0)
+  # Fluorescence-minus-one controls, declared through the sample map rather than
+  # the config because which tube is a control is a property of the acquisition.
+  # Both are absent on a run that declares none, and nothing below changes.
+  .fmo_map <- NULL; .fmo_group <- NULL; .fmo_used <- list()
   # Every fig_*() call below defaults to `colors = fcs_colors()`, resolved as a
   # default ARGUMENT at call time -- setting the package's palette here is what
   # makes a --config `colors:` override reach every figure with no other change.
@@ -89,6 +117,19 @@ run_cyraven <- function(opt) {
   mad_k    <- cfg$gating$singlet_band$mad_k %||% opt$singlet_mad_k
 
   smap <- if (!is.null(opt$sample_map)) load_sample_map(opt$sample_map, fcs) else NULL
+  if (!is.null(smap)) {
+    .fmo_map <- parse_fmo_map(smap)
+    if (!is.null(.fmo_map)) {
+      .sid <- smap$sample_id %||% smap$well %||% smap$file
+      .fmo_group <- if ("control_group" %in% names(smap))
+        setNames(trimws(as.character(smap$control_group)), as.character(.sid)) else NULL
+      log_msg("fluorescence-minus-one control(s) declared for ",
+              length(unique(.fmo_map$marker)), " marker(s) across ",
+              length(unique(.fmo_map$sample_id)), " file(s): ",
+              paste(utils::head(sort(unique(.fmo_map$marker)), 8), collapse = ", "),
+              if (length(unique(.fmo_map$marker)) > 8) ", ..." else "")
+    }
+  }
 
   # ---- read -----------------------------------------------------------------
   log_step("STEP 1 - reading files and resolving markers")
@@ -111,6 +152,103 @@ run_cyraven <- function(opt) {
     reads[[rd$sample_id]] <- rd
   }
   fpr <- fingerprint_panels(reads)
+
+  # ---- bead calibration ------------------------------------------------------
+  # Applied here, before any cofactor or threshold is derived, because the point
+  # is to change the units everything downstream is expressed in. Applying it
+  # later would leave the thresholds on one scale and the medians on another.
+  if (!is.null(opt$calibration_beads)) {
+    .cal <- tryCatch({
+      if (is.null(opt$calibration_values))
+        stop("--calibration-beads needs --calibration-values", call. = FALSE)
+      bd <- read_fcs_resolved(opt$calibration_beads)
+      av <- read.csv(opt$calibration_values, stringsAsFactors = FALSE,
+                     check.names = FALSE)
+      fit_bead_calibration(bd$exprs, bd$marker_cols, av,
+                           min_r2 = opt$calibration_min_r2 %||% 0.98)
+    }, error = function(e) {
+      log_msg("WARNING bead calibration failed: ", conditionMessage(e),
+              ". The run continues in instrument units")
+      NULL
+    })
+    if (!is.null(.cal)) {
+      write.csv(.cal, file.path(opt$outdir, "calibration.csv"), row.names = FALSE)
+      .nok <- sum(grepl("^calibrated", .cal$verdict))
+      log_msg("wrote calibration.csv (", .nok, " of ", nrow(.cal),
+              " channel(s) converted to the assigned units)")
+      if (.nok < nrow(.cal))
+        log_msg("  NOTE ", nrow(.cal) - .nok, " channel(s) were NOT converted ",
+                "and remain in instrument units. Intensities from calibrated ",
+                "and uncalibrated channels are not on the same scale and must ",
+                "not be compared. See the verdict column")
+      if (.nok) {
+        for (s in names(reads)) {
+          ap <- apply_bead_calibration(reads[[s]]$exprs, reads[[s]]$marker_cols, .cal)
+          reads[[s]]$exprs <- ap$exprs
+        }
+        log_msg("  applied to ", length(reads), " sample(s); every intensity ",
+                "below is in the assigned units, not channel units")
+      }
+    }
+  }
+
+  # ---- acquisition-time stability -------------------------------------------
+  # Placed here, before any threshold is derived, because this is the last point
+  # at which excluding events is still a coherent operation: every cofactor,
+  # threshold and frequency below is computed from whatever events survive this
+  # step. Reporting is unconditional; removal is not.
+  .aqc <- NULL
+  if (!isTRUE(opt$no_acquisition_qc)) {
+    log_step("STEP 1b - acquisition-time stability")
+    .aqc <- tryCatch(
+      run_acquisition_qc(reads, n_bins = opt$acquisition_bins %||% 40L,
+                         mad_k = opt$acquisition_mad_k %||% 5),
+      error = function(e) {
+        log_msg("  WARNING acquisition QC failed: ", conditionMessage(e),
+                ", every other output is unaffected")
+        NULL
+      })
+    if (!is.null(.aqc)) {
+      write.csv(.aqc$summary, file.path(opt$outdir, "acquisition_qc.csv"),
+                row.names = FALSE)
+      n_un <- sum(.aqc$summary$verdict %in% c("unstable", "unstable, minor"))
+      log_msg("wrote acquisition_qc.csv (", n_un, " of ", nrow(.aqc$summary),
+              " sample(s) carry a flagged interval)")
+      if (!is.null(.aqc$bins))
+        write.csv(.aqc$bins, file.path(opt$outdir, "acquisition_qc_bins.csv"),
+                  row.names = FALSE)
+      # The FIGURE is deliberately not drawn here. Drawing it at this point
+      # changes the rendering of nine of the figures drawn later: the data
+      # behind them is provably unaffected -- every table is byte-identical
+      # either way -- but the pixels are not, through session state in the
+      # ggplot2 and grid stack that could not be reproduced outside a full run.
+      # A new diagnostic that silently re-renders every existing figure is
+      # exactly the kind of change this package treats as unacceptable, so the
+      # plot is drawn with the other figures instead, after them. See STEP 7c.
+      if (any(.aqc$summary$verdict == "no Time channel"))
+        log_msg("  NOTE ", sum(.aqc$summary$verdict == "no Time channel"),
+                " file(s) carry no Time channel, so acquisition stability ",
+                "cannot be assessed for them")
+
+      # Removal, when asked for. Done by rewriting the event matrix, so every
+      # stage below sees the cleaned file and nothing needs to know this
+      # happened. The counts change, which is exactly why it is opt-in.
+      if (isTRUE(opt$drop_unstable_events)) {
+        n_drop <- 0L; n_files <- 0L
+        for (s in names(.aqc$flagged)) {
+          fl <- .aqc$flagged[[s]]
+          if (is.null(fl) || !any(fl) || length(fl) != nrow(reads[[s]]$exprs)) next
+          reads[[s]]$exprs <- reads[[s]]$exprs[!fl, , drop = FALSE]
+          reads[[s]]$n_events <- nrow(reads[[s]]$exprs)
+          n_drop <- n_drop + sum(fl); n_files <- n_files + 1L
+        }
+        log_msg("--drop-unstable-events removed ", n_drop, " event(s) from ",
+                n_files, " file(s). Every count, threshold and frequency below ",
+                "is computed on the remaining events, and the decision is ",
+                "recorded in the run manifest")
+      }
+    }
+  }
 
   # ---- gate -----------------------------------------------------------------
   log_step("STEP 2 - deriving transform and gates")
@@ -172,7 +310,8 @@ run_cyraven <- function(opt) {
       g <- apply_gate_hierarchy(rd, cf, cfg_thr, control_ref = NULL,
                                 singlet_k = mad_k,
                                 viability_name = opt$viability_marker,
-                                transform = transforms[[p$name]])
+                                transform = transforms[[p$name]],
+                                overrides = cfg_ovr[[s]])
       v <- staining_verdict(g, declared, min_cd45 * 1,
                             force_include = isTRUE(opt$include_qc_failed))
       log_msg("  ", v$verdict)
@@ -282,12 +421,40 @@ run_cyraven <- function(opt) {
       cx <- if (!is.null(ctrl_s) && ctrl_s != s && m %in% names(reads[[ctrl_s]]$marker_cols))
         tr$fn(reads[[ctrl_s]]$exprs[gates[[ctrl_s]]$masks$single_cells,
                                     reads[[ctrl_s]]$marker_cols[[m]]], m) else NULL
-      rr <- resolve_threshold(m, tmat[g$masks$cd45_pos, m], cfg_thr[[m]]$threshold, cx)
+      .ov <- sample_override(cfg_ovr, s, m)
+      if (!is.null(.ov)) .ovr_applied <- c(.ovr_applied, paste0(s, "\r", m))
+      # An FMO, where one is declared for this marker and applies to this
+      # sample, is the better reference: it is the same panel with one reagent
+      # left out, so its distribution in this channel IS the negative population
+      # under the spreading the real samples experience. An unstained tube
+      # cannot show that, and a cut anchored to it sits too low. The arithmetic
+      # is the same either way; only the reference and the recorded source
+      # differ. See fmo.R.
+      .kind <- "control_q995"
+      .fs <- fmo_for_sample(.fmo_map, s, m, .fmo_group)
+      if (!is.na(.fs) && !is.null(reads[[.fs]]) &&
+          m %in% names(reads[[.fs]]$marker_cols)) {
+        cx <- tr$fn(reads[[.fs]]$exprs[gates[[.fs]]$masks$single_cells,
+                                       reads[[.fs]]$marker_cols[[m]]], m)
+        .kind <- "fmo_q995"
+        .fmo_used[[length(.fmo_used) + 1L]] <- data.frame(
+          sample_id = s, marker = m,
+          fmo_threshold = as.numeric(stats::quantile(cx, 0.995, na.rm = TRUE)),
+          fmo_sample = .fs, stringsAsFactors = FALSE)
+      }
+      rr <- resolve_threshold(m, tmat[g$masks$cd45_pos, m], cfg_thr[[m]]$threshold,
+                              cx, override = .ov, control_kind = .kind)
       thr[[m]] <- rr$threshold; tdet[[m]] <- rr
       qdens[[m]] <- tmat[g$masks$cd45_pos, m]
       thr_rows[[length(thr_rows) + 1L]] <- data.frame(
         sample_id = s, panel = pn, marker = m, threshold = rr$threshold,
         source = rr$source, needs_review = rr$needs_review, cofactor = cf,
+        # Carried on every row, but dropped again before the table is written
+        # unless the run actually declares an override. Two all-NA columns are
+        # still a change to a published file, and a run with no overrides must
+        # produce the table it always produced.
+        override_reason = rr$override_reason %||% NA_character_,
+        override_by = rr$override_by %||% NA_character_,
         stringsAsFactors = FALSE)
     }
     hi <- derive_intermediate_bounds(tmat, thr, g$masks$cd45_pos, spec)
@@ -354,6 +521,37 @@ run_cyraven <- function(opt) {
   # function seeds once at the top and STEP 6's cell selection draws from that one
   # stream, so a step that consumed draws here would change which cells are
   # embedded and quietly redraw every UMAP in the run.
+  # ---- what excluding the flagged intervals would cost ----------------------
+  # The quantity that turns a QC flag into a decision. Computed only when the
+  # events are still present: with --drop-unstable-events they are already gone
+  # and the difference is zero by construction.
+  if (!is.null(.aqc) && !is.null(.aqc$flagged) &&
+      !isTRUE(opt$drop_unstable_events)) {
+    .imp <- list()
+    for (s in names(.aqc$flagged)) {
+      fl <- .aqc$flagged[[s]]
+      P <- pops[[s]]; g <- gates[[s]]
+      if (is.null(P$tmat) || is.null(g) || is.null(fl)) next
+      if (length(fl) != nrow(P$tmat) || !any(fl)) next
+      d <- tryCatch(frequency_delta_if_cleaned(P$tmat, P$thresholds,
+                                               g$masks$cd45_pos, spec, !fl),
+                    error = function(e) NULL)
+      if (is.null(d)) next
+      d$sample_id <- s
+      .imp[[length(.imp) + 1L]] <- d
+    }
+    if (length(.imp)) {
+      .imp <- do.call(rbind, .imp)
+      write.csv(.imp, file.path(opt$outdir, "acquisition_qc_impact.csv"),
+                row.names = FALSE)
+      .worst <- max(abs(.imp$pct_delta_if_cleaned), na.rm = TRUE)
+      log_msg("wrote acquisition_qc_impact.csv (largest movement if the flagged ",
+              "intervals were excluded: ", round(.worst, 3), " percentage ",
+              "points). Compare against that population's u_pct_points before ",
+              "deciding the file needs re-acquiring")
+    }
+  }
+
   unc <- NULL
   if (!isTRUE(opt$no_uncertainty)) {
     log_step("STEP 4b - gate placement uncertainty")
@@ -479,17 +677,31 @@ run_cyraven <- function(opt) {
     navail <- vapply(inc, function(s) sum(gates[[s]]$masks$cd45_pos), integer(1))
     planned <- plan_subsample(setNames(navail, inc), cap = opt$cells_per_sample,
                               total_cap = opt$max_cells)
+    .rare <- identical(opt$subsample %||% "uniform", "rare")
     rows <- list()
     for (s in inc) {
       idx <- which(gates[[s]]$masks$cd45_pos)
-      take <- sort(sample(idx, min(length(idx), planned[[s]])))
       tm <- pops[[s]]$tmat
       keep <- intersect(feats, colnames(tm))
+      if (.rare) {
+        # Inverse-density draw. Changes WHICH cells are embedded and therefore
+        # every embedding figure, which is why it is opt-in. sampling_weight
+        # carries the reciprocal inclusion probability so anything computed from
+        # the embedded cells can be weighted back to the true composition.
+        dr <- draw_subsample_rare(idx, tm[idx, keep, drop = FALSE],
+                                  min(length(idx), planned[[s]]),
+                                  seed = opt$seed %||% 42L)
+        take <- dr$idx; wts <- dr$weight
+      } else {
+        take <- sort(sample(idx, min(length(idx), planned[[s]])))
+        wts <- NULL
+      }
       d <- as.data.frame(tm[take, keep, drop = FALSE])
       d$sample_id <- s
       d$population_label <- pops[[s]]$scored$labels[take]
       d$panel <- p$name
       d$event_index <- take
+      if (!is.null(wts)) d$sampling_weight <- round(wts, 5)
       rows[[s]] <- d
     }
     cells <- data.table::rbindlist(rows, use.names = TRUE, fill = TRUE)
@@ -785,6 +997,19 @@ run_cyraven <- function(opt) {
   # reference it is being judged against), scaled by the MAD of those others so
   # the tolerance adapts to how variable that marker legitimately is.
   thr_all <- do.call(rbind, thr_rows)
+  # The override columns exist on every row but only earn their place in the
+  # written table when the run declares at least one. A run with none must write
+  # the file it has always written.
+  if (!is.null(thr_all) && !length(cfg_ovr))
+    thr_all <- thr_all[, setdiff(names(thr_all), c("override_reason", "override_by")),
+                       drop = FALSE]
+  if (length(cfg_ovr)) {
+    report_unused_overrides(cfg_ovr, .ovr_applied)
+    if (length(.ovr_applied))
+      log_msg("applied ", length(.ovr_applied), " manual threshold override(s); ",
+              "they are recorded with their reason in thresholds_used.csv and ",
+              "listed in the run manifest")
+  }
   thr_all$scale_outlier <- FALSE
   thr_all$peer_median   <- NA_real_
   thr_all$robust_z      <- NA_real_
@@ -836,6 +1061,53 @@ run_cyraven <- function(opt) {
   }
   write.csv(thr_all, file.path(opt$outdir, "thresholds_used.csv"),
             row.names = FALSE)
+
+  # ---- spillover spreading ---------------------------------------------------
+  # Diagnostic only, and the explanation for a class of quantile_fallback this
+  # package could otherwise only report without a cause.
+  if (!isTRUE(opt$no_spreading)) {
+    .sp <- tryCatch(run_spreading_report(pops, gates, thr_all, fpr$assignment,
+                                         max_samples = opt$spreading_max_samples %||% 8L),
+                    error = function(e) NULL)
+    if (!is.null(.sp)) {
+      write.csv(.sp$pairs, file.path(opt$outdir, "spreading_pairs.csv"),
+                row.names = FALSE)
+      write.csv(.sp$receivers, file.path(opt$outdir, "spreading_receivers.csv"),
+                row.names = FALSE)
+      .nb <- sum(grepl("^unresolved and heavily spread", .sp$receivers$verdict))
+      log_msg("wrote spreading_pairs.csv and spreading_receivers.csv (",
+              sum(.sp$pairs$substantial, na.rm = TRUE), " of ", nrow(.sp$pairs),
+              " channel pair(s) widen the receiver's negative population by 25% ",
+              "or more)")
+      if (.nb)
+        log_msg("  NOTE ", .nb, " marker(s) both fail to resolve a density ",
+                "minimum in most samples AND receive substantial spreading. ",
+                "For those the cut is unresolved because of the panel, and no ",
+                "gating strategy recovers it. See spreading_receivers.csv")
+    }
+  }
+
+  # ---- derived cut against its FMO-anchored equivalent -----------------------
+  # The diagnostic the FMO feature exists for. Scaled by the threshold's own
+  # uncertainty where that is available, because a gap of 0.3 units means nothing
+  # until you know whether the cut moves by 0.05 or by 0.5 under resampling. Runs
+  # after thr_all is complete and after STEP 4b, so `unc` is populated.
+  if (length(.fmo_used)) {
+    .fa <- tryCatch(fmo_agreement(thr_all, do.call(rbind, .fmo_used),
+                                  unc = unc$thresholds),
+                    error = function(e) NULL)
+    if (!is.null(.fa) && nrow(.fa)) {
+      write.csv(.fa, file.path(opt$outdir, "fmo_agreement.csv"), row.names = FALSE)
+      .nd <- sum(grepl("^derived cut well", .fa$verdict))
+      log_msg("wrote fmo_agreement.csv (", nrow(.fa), " comparison(s), ",
+              .nd, " where the derived cut and the FMO disagree by more than ",
+              "the cut's own uncertainty can explain)")
+      if (.nd)
+        log_msg("  NOTE a derived cut far ABOVE its FMO is discarding real ",
+                "signal; far BELOW, it is calling spillover positive. See the ",
+                "verdict column")
+    }
+  }
 
   # Two DIFFERENT exclusion reasons are recorded separately, because conflating
   # them produces a false statement in every figure caption:
@@ -1323,6 +1595,15 @@ run_cyraven <- function(opt) {
                              file.path(opt$outdir, "uncertainty_budget.png"))
       fig_detection_limits(unc$frequencies,
                            file.path(opt$outdir, "detection_limits.png"))
+    })
+  }
+  # Drawn here rather than at STEP 1b, where it is computed, so that adding this
+  # diagnostic leaves every pre-existing figure byte-identical. See the note at
+  # STEP 1b.
+  if (!is.null(.aqc) && !is.null(.aqc$bins)) {
+    .ext_ok("acquisition QC figure", {
+      fig_acquisition_qc(.aqc$bins, file.path(opt$outdir, "acquisition_qc.png"),
+                         summary = .aqc$summary)
     })
   }
 
@@ -1822,6 +2103,16 @@ run_cyraven <- function(opt) {
       write_miflowcyt(file.path(opt$outdir, "miflowcyt.md"), reads, opt = opt,
                       spec = spec, transforms = transforms, fpr = fpr,
                       thresholds = thr_all)
+    })
+  }
+
+  # ---- run report ------------------------------------------------------------
+  # Written last so it can index everything the run actually produced, and
+  # written by default because the reading order is the part of this package a
+  # directory listing cannot convey.
+  if (!isTRUE(opt$no_report)) {
+    .ext_ok("run report", {
+      write_run_report(opt$outdir, opt = opt, verdicts = verdicts)
     })
   }
 

@@ -340,7 +340,11 @@ load_patient_table <- function(path, column_map = default_column_map(),
 #' Read and validate the sample map
 #'
 #' Schema (see README): file, well, sample_id, patient_id, timepoint,
-#' is_control, panel. Only `file` is required.
+#' is_control, panel, fmo_for, control_group. Only `file` is required.
+#'
+#' `fmo_for` names the markers a file is the fluorescence-minus-one control for,
+#' comma separated; `control_group` confines a control to the samples sharing its
+#' value. Both are optional and inert when absent. See [parse_fmo_map()].
 #' A supplied map that does not cover every input file is a FATAL error: guessing
 #' well->patient assignment from plate order would silently mislabel patients.
 #' @param path File path.

@@ -47,7 +47,7 @@ example on public data are in the
 docker run --rm \
   -v "$PWD/data:/data:ro" \
   -v "$PWD/results:/results" \
-  cyraven:0.3.0 \
+  cyraven:0.4.0 \
   --dir /data/fcs --recursive \
   --sample-map /data/sample_map.csv \
   --config /data/panel.yaml \
