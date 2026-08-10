@@ -1060,7 +1060,7 @@ subcluster_by_reference <- function(cells, markers, group_col = "cohort",
 #' column rather than an eyeball over 288 panels.
 #'
 #' Effect size is the median difference in asinh units plus Cliff's delta, which
-#' is bounded -1 to 1 and rank-based: at these per-subcluster n a difference in
+#' is bounded -1 to 1 and rank-based: at these per-subcluster n a difference in
 #' means is dominated by outliers, and these distributions are not normal.
 #' @param cells Embedded cell table: one row per cell, carrying `umap_1`/`umap_2`, `sample_id`, `population_label` and one column per marker.
 #' @param markers Character vector of marker names to use.

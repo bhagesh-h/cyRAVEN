@@ -101,6 +101,12 @@ build_option_list <- function() list(
               help = "include raw expression matrices in the saved session (large)"),
   optparse::make_option("--no-session", action = "store_true", default = FALSE,
               dest = "no_session", help = "skip writing session_state.RData"),
+  optparse::make_option("--no-miflowcyt", action = "store_true", default = FALSE,
+              dest = "no_miflowcyt",
+              help = paste("skip miflowcyt.md, the ISAC-structured report of",
+                           "the instrument configuration and the analysis.",
+                           "Written by default; the sections needing a human",
+                           "are marked outstanding rather than left out")),
 
   # ---- FlowJo hand-off (additive; changes nothing about the default run) ----
   # WHY a flag rather than always-on: the export writes one FCS per sample plus
@@ -306,6 +312,21 @@ build_option_list <- function() list(
               help = paste("events per replicate. The cut is a histogram feature",
                            "and stops moving well before the full parent gate is",
                            "used [default %default]")),
+  # The two clinical event-count conventions for rare populations. They are
+  # flags rather than constants because the denominator that makes them
+  # meaningful is set by the assay, not by this package.
+  optparse::make_option("--lod-events", type = "integer", default = 20L,
+              dest = "lod_events",
+              help = paste("events below which a population is reported as",
+                           "below the limit of detection. Expressed against the",
+                           "parent-gate events THIS run saw, so",
+                           "--max-events-per-file raises the limit in",
+                           "proportion [default %default]")),
+  optparse::make_option("--loq-events", type = "integer", default = 50L,
+              dest = "loq_events",
+              help = paste("events below which a population is detected but not",
+                           "quantified. Roughly a 14% counting CV; the default",
+                           "--lod-events of 20 is roughly 22% [default %default]")),
 
   # ---- conformance against an accepted baseline -----------------------------
   optparse::make_option("--write-baseline", type = "character", default = NULL,

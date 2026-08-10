@@ -55,7 +55,7 @@ the y axis at c(0, headroom) -- deliberately, since every quantity it was built
 for (percentages, concentrations, ratios) is non-negative. Arcsinh medians run
 negative for dim markers, and handing them to that scale would silently clip
 the bar to zero and draw a confident-looking panel of a value that is not
-there. pct_positive is bounded �0 to 100, is a genuine differential-state
+there. pct_positive is bounded 0 to 100, is a genuine differential-state
 measure, and is what a bimodal shift moves most. The median_asinh results are
 not discarded -- they carry the full test in the CSV and are the quantity the
 state heatmap in fig_population_marker_heatmap() draws, where a diverging scale handles sign correctly.

@@ -85,6 +85,84 @@ fig_frequency_uncertainty <- function(ufreq, outfile, group_of = NULL, dpi = 200
   invisible(fig)
 }
 
+#' How many samples each population is actually measurable in
+#'
+#' One bar per population, split by whether that population's event count in each
+#' sample was enough to quantify it, enough to detect it, or neither.
+#'
+#' WHY A COUNT RATHER THAN A SCATTER. The limit of detection depends only on how
+#' many parent-gate events a sample contributed, so it is a property of the
+#' sample and identical across the populations within it. Plotting frequencies
+#' against it would put every population on the same reference line and say
+#' nothing extra. What varies, and what decides whether a population is worth
+#' testing, is how many samples clear the limit at all.
+#'
+#' HOW TO READ IT. A population quantified in every sample is measurable in this
+#' cohort. One that is mostly below the limit of quantification is not, and no
+#' change to the gating strategy will fix it: the numerator is small because few
+#' cells were acquired, so the answer is a longer acquisition or a higher
+#' `--max-events-per-file`, not a different threshold. A population split between
+#' the two is the dangerous case, because its group difference can be driven
+#' entirely by which samples happened to clear the limit.
+#'
+#' @param ufreq the `frequencies` element of [run_gate_uncertainty()]
+#' @param outfile Path to write the figure to.
+#' @param dpi Resolution in dots per inch. Default `200`.
+#' @param colors Named list of colours; defaults to the package palette. Default `fcs_colors()`.
+#' @export
+fig_detection_limits <- function(ufreq, outfile, dpi = 200,
+                                 colors = fcs_colors()) {
+  if (is.null(ufreq) || !nrow(ufreq) || !"detection" %in% names(ufreq)) {
+    log_msg("[fig] no detection limits in the uncertainty table, figure skipped")
+    return(invisible(NULL))
+  }
+  d <- qc_pass_rows(ufreq)
+  d <- d[!is.na(d$detection), , drop = FALSE]
+  if (!nrow(d)) {
+    log_msg("[fig] no QC-passing samples, detection limits figure skipped")
+    return(invisible(NULL))
+  }
+
+  lv <- c("quantified", "detected, below LOQ", "below LOD")
+  d$detection <- factor(d$detection, levels = lv)
+  m <- as.data.frame(table(population = d$population, detection = d$detection),
+                     stringsAsFactors = FALSE)
+  names(m)[3] <- "n"
+  m$detection <- factor(m$detection, levels = lv)
+
+  # Order populations by how often they are quantifiable, worst at the top, so
+  # the populations a reader must not test read first.
+  q <- stats::aggregate(n ~ population, m[m$detection == "quantified", ], sum)
+  tot <- stats::aggregate(n ~ population, m, sum)
+  q <- merge(tot["population"], q, by = "population", all.x = TRUE)
+  q$n[is.na(q$n)] <- 0
+  m$population <- factor(m$population, levels = q$population[order(-q$n)])
+
+  n_never <- sum(q$n == 0)
+  n_pop <- nrow(q)
+  n_samp <- length(unique(d$sample_id))
+
+  fig <- ggplot(m, aes(x = n, y = population, fill = detection)) +
+    geom_col(width = 0.7, colour = colors$tile_border %||% "grey20",
+             linewidth = 0.2) +
+    scale_fill_viridis_d(name = NULL, option = colors$count_viridis %||% "D",
+                         direction = -1, drop = FALSE) +
+    labs(title = "Populations measurable at this acquisition depth",
+         subtitle = paste0(
+           "events behind each frequency, against the limits of detection and ",
+           "quantification set by that sample's parent gate\n",
+           n_never, " of ", n_pop, " population(s) are quantifiable in no ",
+           "sample; ", n_samp, " QC-passing sample(s)"),
+         x = "samples", y = NULL) +
+    theme_cyto(9, colors = colors) +
+    theme(panel.grid.major.y = element_blank())
+  safe_ggsave(outfile, plot = fig, width = 8.5,
+              height = max(3.5, 0.34 * nlevels(m$population) + 1.8), dpi = dpi,
+              limitsize = FALSE)
+  log_msg("[fig] wrote ", outfile)
+  invisible(fig)
+}
+
 #' Where each population's uncertainty comes from
 #'
 #' Stacked contribution per term, median across samples, in percentage points.

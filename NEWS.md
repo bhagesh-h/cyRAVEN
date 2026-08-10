@@ -1,3 +1,107 @@
+# cyRAVEN 0.3.0
+
+## Counting uncertainty and detection limits
+
+* Every frequency now carries a second uncertainty beside the gate one: what it
+  gets from the number of events behind it. The budget in 0.2.0 perturbed
+  thresholds and nothing else, so a population of twelve events and one of twelve
+  thousand, both sitting behind the same clean valley, were reported with the
+  same uncertainty. Displacing a well-separated cut moves neither of them much.
+  One of those numbers is worth acting on.
+* New `counting_uncertainty()`. The interval is Wilson rather than the textbook
+  `sqrt(p(1-p)/n)`, which goes to zero as p does and so claims perfect knowledge
+  of a population nobody observed. The two agree to three figures once a
+  population has a few hundred events, so nothing is given up in the common case
+  to fix the boundary.
+* `population_frequencies.csv` gains `n_parent_events`,
+  `u_counting_pct_points`, `u_total_pct_points`, `pct_lo_total`,
+  `pct_hi_total`, `lod_pct`, `loq_pct` and `detection`. `u_pct_points` still
+  means gate placement alone and still holds the value it held before, and
+  `pct_lo`/`pct_hi` are still built from it. Only the new columns are new.
+* `group_comparison_stats.csv` gains `total_u_pct_points` and
+  `difference_over_total_u`. `difference_over_gate_u` is untouched. The two
+  separate for a rare population, where the cut can be well placed and the
+  frequency still rest on too few events: the first ratio passes and the second
+  does not.
+* The limits follow the clinical event-count convention, `--lod-events` (20) and
+  `--loq-events` (50), against the parent-gate events THIS run saw. That means
+  `--max-events-per-file` raises every limit in proportion, which is the honest
+  reading: a population under the limit of a subsample may be well resolved in
+  the whole file, and the answer is to raise the cap rather than to believe the
+  limit.
+* New `detection_limits.png` counts, per population, how many samples clear each
+  limit. A population mostly below the limit of quantification cannot be fixed by
+  changing the gating, because the numerator is small for want of cells. One
+  split across the limit is the dangerous case, since its group difference can be
+  driven by which samples happened to clear it.
+* Counting is deliberately absent from `uncertainty_budget.csv`, which answers
+  which THRESHOLD a population's uncertainty comes from. Counting is not a
+  threshold, and adding a term to that table would have changed a published
+  figure to say something the file does not mean.
+* The two components are not strictly independent, since displacing a cut also
+  changes the count. Quadrature treats them as though they were, which is the
+  same approximation the GUM makes for the marker terms; it is stated in the
+  documentation rather than left to be discovered.
+
+## MIFlowCyt report
+
+* New `miflowcyt.md`, written by default beside the run manifest. MIFlowCyt is
+  the ISAC reporting standard and is checked at submission by Cytometry A, Nature
+  and PLOS. Its hardest section to write by hand is the one this package already
+  knows in full -- the gating specification, the transform and its derived
+  parameters, and how every threshold was obtained -- and its instrument section
+  was sitting unused in memory, because `read_fcs_resolved()` keeps the whole
+  keyword block and the pipeline read four keys out of it.
+* Sections 3 and 4, instrument and data analysis, are completed from the keyword
+  block and from the run: cytometer, serial, acquisition software, date, operator
+  and event counts per file, then per panel a detector table carrying `$PnN`,
+  `$PnS`, voltage, range and whether amplification was linear or logarithmic.
+* Sections 1 and 2, experiment intent and specimen biology, are marked
+  **TO BE COMPLETED** rather than omitted. An absent section reads as one that
+  did not apply; a marked one reads as work outstanding, which is what it is. The
+  same rule governs individual keywords: one the file does not carry is written
+  as "not recorded in the FCS file", because its absence is a fact about the
+  acquisition and is often the reason an analysis could not be done.
+* Compensation is reported as applied, absent, or mixed. Mixed is a real and
+  dangerous state -- some files carrying a `$SPILLOVER` matrix and others not --
+  and both of the other two answers would be false for it.
+* `--no-miflowcyt` skips it.
+
+## Per-marker batch drift
+
+* `--batch-column` now also writes `marker_batch_drift.csv` and
+  `threshold_batch_drift.csv`. iLISI says whether the batches mix in the shared
+  embedding, which is the right question and names nothing anyone can act on. A
+  flagged marker names a reagent lot, a detector voltage, or a laser that was
+  serviced between runs.
+* `threshold_batch_drift.csv` cost nothing to add: `stats_threshold_drift()` was
+  always generic in its grouping vector, and the pipeline had only ever handed it
+  the study group. It is the same test, grouped by batch.
+* `marker_batch_drift.csv` is the part that is new. A threshold is one number per
+  sample, so the test above only sees drift that moves the CUT. A marker can
+  change its spread, grow a tail, or lose the separation between its modes while
+  the density minimum between them stays exactly where it was, and no threshold
+  statistic can detect that. New `marker_batch_drift()` compares the
+  distributions themselves.
+* The statistic is the one-dimensional Earth Mover's distance, new `emd_1d()`:
+  the L1 distance between two empirical quantile functions. No binning choice, no
+  dependency, and it is in the units of the analysis scale, so it is reported as
+  a distance rather than as a score. Since those units differ per marker it is
+  also divided by the marker's own pooled MAD, which is what makes two markers
+  comparable; `emd_over_mad` at or above 0.5 is flagged.
+* Its subsampling borrows and returns the RNG stream, for the reason in 0.2.0.
+
+## Fixes
+
+* The RNG regression test was testing `withr`, not cyRAVEN. Its fixture used
+  `withr::local_seed()`, and withr 3.0.2 restores the generator's position but
+  not its state vector, so the fixture leaked a changed stream into a test whose
+  entire purpose is to prove nothing leaks. The fixture now saves and restores by
+  hand, the same way the package does. The package's own guard was correct
+  throughout and is unchanged; verified directly by calling
+  `threshold_uncertainty()` on a pre-computed vector and comparing
+  `.Random.seed` and the next five draws either side.
+
 # cyRAVEN 0.2.0
 
 Three additions. All three are additive in the strict sense: every file the
