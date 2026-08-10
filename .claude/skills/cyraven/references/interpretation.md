@@ -1,16 +1,14 @@
 # Reading a cyRAVEN result
 
-A default run writes 25 tables and 22 figures. The order below is not arbitrary —
-each stage can invalidate everything after it, so working backwards from the
-p-values wastes time on results that were already dead.
+The order below is not arbitrary: each stage can invalidate every stage after it,
+so working backwards from the p-values wastes time on results that were already
+dead.
 
 Sections 1 to 3 reject most compromised runs. Read them first, every time.
 
----
-
 ## 1. Did the gates land in the right place?
 
-**`recon_diagnostics.png`, `gating_qc.png`** — written unconditionally. Per
+**`recon_diagnostics.png`, `gating_qc.png`**: written unconditionally. Per
 sample: the scatter gate boundary, the singlet band, and every marker threshold
 drawn on the density it came from.
 
@@ -21,7 +19,7 @@ Stop here if the gates are wrong. Every number below inherits them.
 
 ## 2. Is the staining usable?
 
-**`staining_qc.csv`** — one verdict per sample. A sample with no resolvable CD45⁺
+**`staining_qc.csv`**: one verdict per sample. A sample with no resolvable CD45⁺
 mode has no usable parent gate. It is excluded and the exclusion reported, rather
 than contributing a spurious frequency to a group mean.
 
@@ -41,7 +39,7 @@ forced.
 
 ## 3. Do the populations express what they were declared to express?
 
-**`population_marker_heatmap.png`** — marker intensity against declared
+**`population_marker_heatmap.png`**: marker intensity against declared
 populations, z-scored across the run.
 
 In clustering-first analysis this figure *assigns* identity. Here identity is
@@ -56,9 +54,7 @@ diverge from the definitions being audited.
 cell count before partitioning by population, so unequal sample numbers or
 acquisition depth cannot generate the pattern.
 
----
-
-## 4. The four falsification checks
+## 4. The falsification checks
 
 ### 4.1 Threshold drift
 
@@ -82,13 +78,13 @@ Threshold drift asks whether a cut sits in a different place for one group than
 another. This asks the prior question: how well is it determined at all.
 
 Each cut is re-derived from resamples of the events it was computed on
-(`u_sampling`), and again across the settings that placed it — histogram
+(`u_sampling`), and again across the settings that placed it: histogram
 resolution, smoothing, how completely two modes must separate (`u_method`). The
 two combine in quadrature per the GUM convention.
 
 **Read `bootstrap_valley_rate` before `u_combined`.** A cut recovered in every
 resample marks a real boundary. One recovered in half of them was found by
-histogram noise that happened to clear the depth rule — and both are written to
+histogram noise that happened to clear the depth rule, and both are written to
 `thresholds_used.csv` in exactly the same way. Below about 0.8, treat the
 threshold as unresolved rather than imprecise.
 
@@ -115,7 +111,7 @@ al., 2021, *Methods Protoc* 4:24).
 ### 4.3 Cluster concordance
 
 **`cluster_gate_agreement_clusters.csv`**,
-**`cluster_gate_agreement_populations.csv`** — requires `--cluster`.
+**`cluster_gate_agreement_populations.csv`**: requires `--cluster`.
 
 A self-organising map clustering of the same cells, computed without reference to
 the specification, then cross-tabulated. Four configurations are diagnostic:
@@ -132,7 +128,7 @@ The last one is the diagnosis a frequency table structurally cannot deliver.
 ### 4.4 Gate geometry and transferability
 
 **`cluster_gate_proposals.csv`**, **`cluster_gate_polygons.csv`**,
-**`cluster_gate_strategy_<k>.png`** — requires `--explain-clusters`.
+**`cluster_gate_strategy_<k>.png`**: requires `--explain-clusters`.
 
 Converts "cluster 7 matches nothing" into gate geometry a cytometrist can draw:
 the two most discriminating markers, a convex polygon in that plane, then
@@ -147,7 +143,7 @@ events, so the gap between the two quantifies overfitting.
 Descriptive only. No p-value; scored frequencies and test results are identical
 whether it runs or not.
 
-**`gate_transferability.csv`**, **`gate_transferability_summary.csv`** — requires
+**`gate_transferability.csv`**, **`gate_transferability_summary.csv`**: requires
 `--external-labels`.
 
 Refits the whole strategy with one donor withheld and scores it on that donor,
@@ -160,19 +156,17 @@ excellent held-out F1 on *cells* and fail on the next patient. A gate scoring 0.
 on every donor and a gate scoring 1.0 on nine donors and 0.1 on one share a
 median and are not the same gate.
 
-`--transfer-max-donors` (8) and `--transfer-max-cells` (20000) bound the cost —
+`--transfer-max-donors` (8) and `--transfer-max-cells` (20000) bound the cost:
 every fold refits, so it is one fit per donor per label. The donor subset is
 drawn at random rather than taken as the largest donors, because a worst-donor
 statistic computed on the best-represented donors is optimistic in exactly the
 direction that matters. Both caps are logged when they bind.
 
----
-
 ## 5. The results
 
 ### 5.1 Abundance
 
-**`population_frequencies.csv`** — `pct_of_cd45_pos` per sample per population,
+**`population_frequencies.csv`**: `pct_of_cd45_pos` per sample per population,
 with `u_pct_points`, `pct_lo`, `pct_hi` from the gate uncertainty.
 
 **Report `pct_of_cd45_pos`. Never report `count`.** `count` is an event count. It
@@ -180,19 +174,19 @@ depends on acquisition duration and `--max-events-per-file`, so it is not
 comparable between samples and is not a cell number. `cells_per_ul` appears only
 when the patient table supplies `wbc_per_ul`.
 
-**`group_comparison_stats.csv`** — Wilcoxon rank-sum or Kruskal-Wallis,
+**`group_comparison_stats.csv`**. Wilcoxon rank-sum or Kruskal-Wallis,
 aggregated to one value per sample before testing so donors are the replicates,
 not cells.
 
 Read the columns in this order:
 
 1. **`p_adj`** (Benjamini-Hochberg, within test family). Not `p_value`.
-2. **`cliffs_delta`** — how large the difference is relative to between-donor
+2. **`cliffs_delta`**: how large the difference is relative to between-donor
    spread.
-3. **`difference_over_gate_u`** — how many multiples of the gate's own
+3. **`difference_over_gate_u`**: how many multiples of the gate's own
    uncertainty the difference amounts to. **Below 1, the groups differ by less
    than the distance the cut itself travels under resampling.**
-4. **`difference_over_total_u`** — the same against gate placement and counting
+4. **`difference_over_total_u`**: the same against gate placement and counting
    together. Always the smaller of the two, and the one to act on where they
    disagree.
 
@@ -216,7 +210,7 @@ for a population built on nine events.
 
 **`detection_limits.png`** counts, per population, how many samples clear each
 limit. A population mostly below the limit of quantification cannot be rescued by
-re-gating — the numerator is small because few cells were acquired, so the fix is
+re-gating. The numerator is small because few cells were acquired, so the fix is
 a longer acquisition or a higher `--max-events-per-file`. A population split
 across the limit is the dangerous one: its group difference can be produced
 entirely by which samples happened to clear it.
@@ -228,7 +222,7 @@ analysis actually performed, not of the files on disk.
 `--lod-events` (20) and `--loq-events` (50) change the conventions.
 
 `difference_over_gate_u` is a screen, not a test. The uncertainty is partly shared
-across the run — one panel, one transform, one placement rule — so it cancels in
+across the run (one panel, one transform, one placement rule), so it cancels in
 part when a difference is taken and the ratio is conservative. Below 1 is a
 reason to open `threshold_uncertainty.csv` before interpreting, not grounds to
 discard.
@@ -242,7 +236,7 @@ A genuine granulocyte expansion mechanically depresses every lymphocyte
 percentage, and those depressions test significant while absolute lymphocyte
 counts per microlitre are unchanged.
 
-Both parameterisations are tested — raw percentages and centred log-ratio — and
+Both parameterisations are tested, raw percentages and centred log-ratio, and
 each result is classified:
 
 | Class | Reading |
@@ -273,8 +267,6 @@ interpretation and changes sign without a change in biology.
 p-values, hypothesis-generating. Event counts are set by acquisition duration, so
 a test over pooled events derives its degrees of freedom from instrument time.
 
----
-
 ## 6. Confounding
 
 ### 6.1 Covariates
@@ -289,7 +281,7 @@ are reported, with a `confounder_risk` verdict.
 Adjustment is opt-in and deliberately separate. At single-digit *n* per group a
 model carrying group with age and sex spends most residual degrees of freedom on
 nuisance terms. Where age is strongly associated with group, the parameters are
-not separable at any sample size — there are no young controls from which the age
+not separable at any sample size: there are no young controls from which the age
 effect could be estimated independently, so the adjusted estimate extrapolates
 beyond the observed range and reports an interval that does not say so.
 
@@ -298,7 +290,7 @@ beyond the observed range and reports an interval that does not say so.
 
 ### 6.2 Batch
 
-**`batch_mixing_stats.csv`**, **`batch_group_confounding.csv`** — requires
+**`batch_mixing_stats.csv`**, **`batch_group_confounding.csv`**: requires
 `--batch-column`.
 
 Two quantities, both required:
@@ -315,7 +307,7 @@ distinguishable from the comparison of interest.
 no marker, so neither corresponds to an action at the bench.
 
 **`marker_batch_drift.csv`** compares each marker's distribution between batches
-by Earth Mover's distance. Read `emd_over_mad` — the distance divided by the
+by Earth Mover's distance. Read `emd_over_mad`, the distance divided by the
 marker's own pooled MAD, which is the form comparable across markers. At or above
 0.5 the marker is flagged; `worst_pair` names the two batches.
 
@@ -325,9 +317,9 @@ instead of by study group.
 Both are needed. A threshold is one number per sample, so it registers only drift
 that moves the cut. A marker can change its spread, grow a tail, or lose the
 separation between its modes while the density minimum between them stays exactly
-where it was — the distributional test sees that, the threshold test cannot.
+where it was. The distributional test sees that, the threshold test cannot.
 
-A flag in either is a statement about the assay, not the donors — **unless**
+A flag in either is a statement about the assay, not the donors, **unless**
 Cramér's *V* is high, in which case neither separates a reagent lot from biology.
 
 `--correct-batch` aligns each marker across batches by monotone quantile mapping;
@@ -340,13 +332,13 @@ the manifest.
 
 Correction applies to the shared embedding, the clustering and the gate-cluster
 concordance. Not to per-sample frequencies, marker medians or the differential
-tests — those come from per-sample thresholds and are batch-local by
+tests. Those come from per-sample thresholds and are batch-local by
 construction. The quantity a batch effect distorts is the single embedding
 computed across all samples.
 
 ## 7. Conformance across runs
 
-**`specification_conformance.csv`** — requires `--baseline`.
+**`specification_conformance.csv`**: requires `--baseline`.
 
 Every check above is internal to one run. `threshold_scale_qc.csv` compares each
 threshold against the other samples of the same panel, which finds a single
@@ -367,15 +359,15 @@ Two verdicts are withdrawals rather than measurements: a transform differing fro
 the baseline's puts thresholds on a different scale, and a redefined population is
 a different population. Both read `not comparable`.
 
-The baseline holds summaries and the specification text — no event-level or
-patient data — so it belongs in version control beside the config it describes.
+The baseline holds summaries and the specification text (no event-level or
+patient data), so it belongs in version control beside the config it describes.
 
 `--fail-on-drift` turns the verdict into an exit code, raised after every output
 has been written.
 
 ## 8. Provenance and reporting
 
-**`run_manifest.txt`** — R version, platform, the version of every package loaded
+**`run_manifest.txt`**. R version, platform, the version of every package loaded
 at run time, git commit and working-tree state where the code was a checkout, the
 full invocation, and every option in force.
 
@@ -383,13 +375,13 @@ Written before the expensive stages and rewritten at completion, so an
 interrupted run leaves `status: failed` rather than an absent or misleading
 record.
 
-**`miflowcyt.md`** — the same run restated against the ISAC MIFlowCyt checklist,
+**`miflowcyt.md`**: the same run restated against the ISAC MIFlowCyt checklist,
 which *Cytometry A*, *Nature* and PLOS check at submission.
 
 | Checklist section | Where it comes from |
 |---|---|
-| 1. Experiment overview | Marked `TO BE COMPLETED` — a run cannot know intent |
-| 2. Specimens and reagents | Marked `TO BE COMPLETED` — clone, vendor, lot |
+| 1. Experiment overview | Marked `TO BE COMPLETED`; a run cannot know intent |
+| 2. Specimens and reagents | Marked `TO BE COMPLETED`; clone, vendor, lot |
 | 3. Instrumentation | FCS keywords: `$CYT`, `$CYTSN`, `$SYS`, `$DATE`, `$OP`, `$TOT`, and a per-panel detector table from `$PnN`/`$PnS`/`$PnV`/`$PnR`/`$PnE` |
 | 4. Data analysis | The run itself: compensation state, transform and derived parameters, gate hierarchy, population spec, threshold source tally |
 
@@ -405,8 +397,6 @@ the results are used.
 
 `--no-miflowcyt` skips it.
 
----
-
 ## 9. cyRAVEN or cyCONDOR
 
 They answer different questions on the same files.
@@ -416,7 +406,7 @@ They answer different questions on the same files.
 | Question | What is in the data? | Did the declaration hold? |
 | Direction | Cluster, then name the clusters | Declare, then try to falsify |
 | Finds a population nobody expected | Yes, that is its purpose | Only through `--cluster` |
-| Says a gate is mis-specified | No prior definition to contradict | Five outputs exist for it |
+| Says a gate is mis-specified | No prior definition to contradict | Six outputs exist for it |
 | Per-sample thresholds | No | Yes, every one |
 | Uncertainty on a frequency | No | Yes |
 | Reads a FlowJo workspace | Yes | No |
