@@ -1,3 +1,130 @@
+# cyRAVEN 0.4.0
+
+Seven additions, completing the feature backlog in `TODO.md`. Every file the
+previous version wrote is still written with the same name, the same columns and
+the same values, verified by running both versions on the same cohort and
+comparing byte for byte: 34 of 35 outputs identical, none lost, and the one that
+differs is `miflowcyt.md`, differing only in its own generation timestamp.
+
+## Acquisition-time quality control
+
+* Every number a run reports for a sample is derived from that sample's pooled
+  events, which is correct only if the instrument was doing the same thing
+  throughout the acquisition. The Time channel was read and then discarded, so
+  nothing checked. A partial clog, a bubble or a drift in laser power makes a
+  file two instruments over its run, and one threshold then suits neither half.
+* New `acquisition_qc.csv`, `acquisition_qc_bins.csv` and `acquisition_qc.png`.
+  The Time channel is binned into equal-width intervals and two quantities are
+  tracked: the event rate, which a clog lowers and a bubble spikes, and each
+  channel's median, which catches a shift that leaves the rate untouched. Both
+  are judged by robust z against the file's own bins.
+* Bins are equal in TIME rather than equal in count. A bin defined to hold a
+  fixed number of events cannot show that the rate changed.
+* Nothing is removed. `acquisition_qc_impact.csv` states how far each population
+  would move if the flagged intervals were excluded, which is what turns a flag
+  into a decision: a file with a visible clog that moves no population by more
+  than its own gate uncertainty does not need re-acquiring.
+  `--drop-unstable-events` performs the removal and is recorded in the manifest.
+* The detector is written directly rather than wrapping PeacoQC, which would add
+  a Bioconductor dependency for a binned robust location test. Emmaneel et al.
+  2022, Cytometry A 101:325 is the reference for the approach.
+* The figure is drawn at the end of the run rather than where it is computed.
+  Drawing it early changed the rendering of nine existing figures; the data
+  behind them was provably identical either way, but a new diagnostic that
+  silently re-renders every published figure is not an addition.
+
+## Fluorescence-minus-one controls
+
+* Control handling was one unstained tube per panel, used as the reference for
+  every marker. That is the right control for where autofluorescence ends and
+  the wrong one for where a marker's background ends in a panel, because it
+  cannot show spillover. An FMO is the same panel with one reagent left out, so
+  its distribution in that channel is the negative population under the
+  spreading the real samples experience.
+* Two optional sample-map columns, `fmo_for` and `control_group`. The first
+  names the markers a file controls for; the second confines a control to the
+  batch it was acquired in, since a reagent lot changes between batches.
+* New threshold source `fmo_q995`, taking the same place in the resolution chain
+  as the unstained control and named apart from it because the two are different
+  experiments supporting different claims.
+* New `fmo_agreement.csv`, which is the reason to have the feature rather than
+  just the control. It reports the distance between the derived cut and its
+  FMO-anchored equivalent in units of that threshold's own uncertainty. Within
+  about one they agree to the precision either can claim, and the derived cut is
+  corroborated by an independent experiment. Beyond about three one of them is
+  wrong: far above the FMO the cut is discarding signal, far below it is calling
+  spillover positive.
+
+## Per-sample threshold overrides
+
+* `--config` could pin a threshold for the whole run, which corrects one tube by
+  applying one number to every sample and so reintroduces the fixed-coordinate
+  bias the package exists to remove. A `sample_overrides:` block now corrects one
+  sample and one marker.
+* New source `manual`, distinct from `config`: the first says a named person
+  moved this one cut for a stated reason, the second says the assay declares this
+  cut everywhere.
+* `thresholds_used.csv` gains `override_reason` and `override_by`, and the run
+  manifest lists every override. Both are absent on a run that declares none, so
+  that run writes the table it always wrote.
+* An override matching no sample or marker in the cohort is reported rather than
+  ignored. Silence there means the analyst believes a cut was corrected, the run
+  says nothing, and the uncorrected number is published.
+* `specification_conformance.csv` reports a hand-set marker as `manually set`
+  rather than as agreement. A marker made to match the baseline by hand did not
+  conform.
+
+## Spillover spreading
+
+* New `spreading_pairs.csv` and `spreading_receivers.csv`. Spreading is the one
+  optical effect that removes a density minimum without moving anything else, so
+  it is the most common reason a marker that should resolve does not, and the run
+  could previously only report `quantile_fallback` with no cause.
+* For each ordered channel pair, the spread of the receiver's negative population
+  is compared between cells negative and positive for the source. Restricting to
+  the receiver's own negatives is what makes it spreading rather than biology:
+  co-expression moves the positive cells, not the width of the negatives.
+* The actionable join is to the fallback rate. A marker that both fails to
+  resolve in most samples and receives substantial spreading is reported as a
+  panel design problem, which no gating strategy fixes. On the demonstration
+  cohort CD38 and CCR7 are both flagged that way.
+* This is a ranking from the samples in hand, not a spillover spreading matrix:
+  the published SSM is computed from single-stain controls, which this package is
+  not given.
+
+## Run report
+
+* New `report.html`, written by default. A run writes several dozen files and the
+  reading order is the product: each check can invalidate the ones after it, and
+  a directory listing presents a failed staining QC and a headline p-value as
+  equals. The report puts them in order, states what each section answers, and
+  links every claim to the file it came from. A run that excluded samples says so
+  above every result.
+* Written as HTML directly rather than through rmarkdown, which would need
+  pandoc: a report the documented execution path cannot produce would be worse
+  than none. Figures are referenced rather than embedded, so the report is read
+  in the results directory beside them.
+
+## Opt-in changes to reported numbers
+
+Both of these change existing numbers, so both default to the previous
+behaviour and are recorded in the manifest.
+
+* `--subsample rare` weights the embedding draw by inverse local density. A
+  population at 0.3% contributes about 60 cells out of 20,000 under a uniform
+  draw, which is enough to be a smudge and not enough to be a cluster, so the
+  unsupervised cross-check cannot recover it. That makes the sampling the binding
+  constraint on this package's own falsification claim for rare populations.
+  `cells_umap.csv` gains `sampling_weight` so anything computed from the embedded
+  cells can be weighted back to the true composition.
+* `--calibration-beads` with `--calibration-values` converts channel units to
+  MESF or ERF before any threshold is derived. Arbitrary units are comparable
+  within an instrument and never between two, which is the ceiling on what
+  `--baseline` can establish: it can say a cohort moved and not whether the assay
+  or the cytometer did. A channel whose fit does not hold is left in instrument
+  units and said to be, because a calibration nobody checked converts an honest
+  arbitrary number into a dishonest absolute one.
+
 # cyRAVEN 0.3.0
 
 ## Counting uncertainty and detection limits

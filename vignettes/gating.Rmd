@@ -107,6 +107,55 @@ Each marker a population reads contributes a term, as does the CD45 parent
 threshold, which enters every population because it fixes the denominator.
 The [diagnostics article](diagnostics.html) covers how to read the result.
 
+### 2.4a Reference controls
+
+`resolve_threshold()` falls back to a control distribution when no density
+minimum exists. Which control that is decides what the resulting cut means.
+
+An unstained tube, declared through `is_control`, shows where autofluorescence
+ends. It cannot show where a marker's background ends in a panel, because a
+stained sample's negative population sits wider than an unstained one under
+spillover from every other fluorochrome present.
+
+A fluorescence-minus-one control is the same panel with one reagent omitted, so
+its distribution in that channel is the negative population under the spreading
+the real samples experience. Declare one through two optional sample-map columns:
+`fmo_for`, naming the markers the file controls for, and `control_group`,
+confining it to the batch it was acquired in. The resulting `source` is
+`fmo_q995` rather than `control_q995`.
+
+`fmo_agreement.csv` is the reason to supply one rather than merely the means. It
+reports the distance between the derived cut and its FMO-anchored equivalent in
+units of that threshold's own uncertainty. Within about one, the two agree to the
+precision either can claim and the derived cut is corroborated by an independent
+experiment. Beyond about three they disagree by more than either can explain: a
+derived cut far above the FMO is discarding real signal, and one far below is
+calling spillover positive.
+
+### 2.4b Overriding one sample's cut
+
+A threshold flagged for review previously admitted two responses: accept it, or
+pin that marker for the whole run through `thresholds:`. The second corrects one
+tube by applying one number to every sample, which reintroduces the
+fixed-coordinate bias section 2.1 describes.
+
+A `sample_overrides:` block corrects one sample and one marker:
+
+```yaml
+sample_overrides:
+  D07:
+    CCR7:
+      threshold: 2.15
+      reason: "valley sat inside the negative mode, see gating_qc.png"
+      set_by: "initials"
+```
+
+The resulting `source` is `manual`, distinct from `config`: the first records
+that a named person moved one cut for a stated reason, the second that the assay
+declares this cut everywhere. `thresholds_used.csv` gains `override_reason` and
+`override_by`, and the run manifest lists every override. An entry matching no
+sample or marker in the cohort is reported rather than silently ignored.
+
 ### 2.5 Sufficiency
 
 Precision of placement and sufficiency of counting are separate guarantees, and a
@@ -280,3 +329,28 @@ twice is as damaging as omitting it.
 
 Matrix construction is out of scope. It belongs in acquisition software, where
 the single-stain controls can be inspected.
+
+### 5.1 What compensation cannot undo
+
+Subtracting a fluorochrome's expected contribution to another detector is correct
+on average. What the subtraction cannot remove is the photon-counting variance
+that came with the contribution, so a channel receiving spillover from a bright
+neighbour has a negative population that is correctly centred and abnormally
+wide. Two modes that were separable merge, the valley fills in, and section 2.3
+reports `quantile_fallback` with no indication of why.
+
+`spreading_receivers.csv` supplies the cause. For each ordered channel pair, the
+spread of the receiver's negative population is compared between cells negative
+and positive for the source; restricting to the receiver's own negatives is what
+makes this spreading rather than biology, since co-expression moves the positive
+cells and not the width of the negatives. `spreading_pairs.csv` holds the full
+pairwise ranking.
+
+The finding to act on is the join between the two: a marker that both falls back
+to a quantile in most samples and receives substantial spreading is reported as a
+panel design problem. No gating strategy recovers a cut that spreading has
+erased.
+
+This is a ranking computed from the samples in hand, not a spillover spreading
+matrix. The published SSM is derived from single-stain controls, which this
+package is not given, and the values here are not comparable with it.

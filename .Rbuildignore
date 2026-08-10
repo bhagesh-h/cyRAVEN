@@ -35,6 +35,12 @@
 # Docker build-context exclusions. Read by `docker build`, never by R, and
 # R CMD check reports any hidden top-level file as probably included in error.
 ^\.dockerignore$
+# The worked-example article and its 19 rendered figures. pkgdown builds articles
+# from this source tree, so the published site carries them; the tarball does
+# not, because self-contained HTML embeds every image and would add about 5 MB to
+# the installed package for documentation nobody reads from an R session.
+^vignettes/figures\.Rmd$
+^vignettes/figures$
 # Claude Code skill. Documentation for humans and agents, published through the
 # pkgdown article rather than shipped in the tarball.
 ^\.claude$

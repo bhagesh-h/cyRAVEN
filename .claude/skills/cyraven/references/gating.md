@@ -55,6 +55,26 @@ positive. The resolution order is fixed:
    unimodal markers.
 4. **`quantile_fallback`**: a fixed quantile, flagged `needs_review`.
 
+Two further sources exist. **`manual`** is a per-sample override declared in the
+config's `sample_overrides:` block, carrying `reason` and `set_by`; it outranks
+everything, and is distinct from `config` because `config` applies one number to
+every sample. **`fmo_q995`** takes the place of `control_q995` when a
+fluorescence-minus-one control is declared for that marker through the sample
+map's `fmo_for` column, which is the better reference because an FMO shows the
+negative population under the spillover the real samples experience.
+
+### When a marker never resolves
+
+`spreading_receivers.csv` says why. Spreading widens a channel's negative
+population without moving it, which fills in the valley a threshold would sit in.
+A marker that both falls back in most samples and receives substantial spreading
+is reported as a panel design problem, and no gating strategy recovers it.
+
+`fmo_agreement.csv` checks the cuts that did resolve: the distance between the
+derived cut and its FMO equivalent, in units of that cut's own uncertainty.
+Within about one they agree; beyond about three, a cut above the FMO is
+discarding signal and one below is calling spillover positive.
+
 ### Reading the result
 
 `thresholds_used.csv`, one row per sample per marker.

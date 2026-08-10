@@ -6,6 +6,27 @@ dead.
 
 Sections 1 to 3 reject most compromised runs. Read them first, every time.
 
+**`report.html`** indexes everything below in this order and is the fastest way
+in. It is written by default and read in the results directory.
+
+## 0. Was the acquisition stable?
+
+**`acquisition_qc.csv`**, **`acquisition_qc.png`**, **`acquisition_qc_impact.csv`**
+
+Every number for a sample is derived from its pooled events, which holds only if
+the instrument behaved the same way throughout. A clog, bubble or drift makes a
+file two instruments over its run and one threshold suits neither half.
+
+The Time channel is binned into equal-width intervals; a sustained trough is a
+clog, a spike a bubble, a step a settings change.
+
+**Nothing is removed.** Read `pct_delta_if_cleaned` in the impact table against
+`u_pct_points` for the same population: a visible anomaly that moves no
+population by more than its own gate uncertainty does not need re-acquiring.
+`--drop-unstable-events` performs the exclusion and changes every count.
+
+A file with no Time channel is reported as such, not as stable.
+
 ## 1. Did the gates land in the right place?
 
 **`recon_diagnostics.png`, `gating_qc.png`**: written unconditionally. Per

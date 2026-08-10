@@ -19,7 +19,7 @@ between samples does not remove that variance, it converts it into a bias that
 tracks staining intensity. cyRAVEN removes the analyst from threshold placement
 and quantifies what remains.
 
-Current version: 0.3.0.
+Current version: 0.4.0.
 
 ## Execute through Docker
 
@@ -42,7 +42,7 @@ docker images | grep cyraven
 From the package root, the directory holding `DESCRIPTION`:
 
 ```bash
-docker build -f inst/scripts/Dockerfile -t cyraven:0.3.0 .
+docker build -f inst/scripts/Dockerfile -t cyraven:0.4.0 .
 ```
 
 15 to 25 minutes on a first build. It ends by running `--help` and printing every
@@ -54,7 +54,7 @@ package version, so a broken image fails at build time.
 docker run --rm \
   -v "$PWD/data:/data:ro" \
   -v "$PWD/results:/results" \
-  cyraven:0.3.0 \
+  cyraven:0.4.0 \
   --dir /data/fcs \
   --sample-map /data/sample_map.csv \
   --config /data/panel.yaml \
@@ -73,7 +73,7 @@ When the user has no data to hand, or wants to see the output shape first:
 ```bash
 mkdir -p demo results
 docker run --rm -v "$PWD/demo:/demo" \
-  --entrypoint Rscript cyraven:0.3.0 \
+  --entrypoint Rscript cyraven:0.4.0 \
   /opt/cyraven/src/inst/scripts/demo_data.R /demo
 ```
 
@@ -91,7 +91,7 @@ a rebuild.
 
 ```bash
 docker run --rm -v "$PWD:/src:ro" -v "$PWD/results:/results" \
-  -e CYRAVEN_SOURCE=/src cyraven:0.3.0 --dir /data/fcs --outdir /results
+  -e CYRAVEN_SOURCE=/src cyraven:0.4.0 --dir /data/fcs --outdir /results
 ```
 
 Full build detail, resource tuning, Windows path handling and container-specific
@@ -159,11 +159,22 @@ number are opt-in. That rule is deliberate and worth preserving in any change.
 --correct-batch            # correct it, subject to the confounding refusal
 --lod-events 20            # events below which a population is not detected
 --loq-events 50            # events below which it is detected but not quantified
+--drop-unstable-events     # exclude flagged acquisition intervals; changes counts
+--subsample rare           # inverse-density draw; changes every UMAP
+--calibration-beads b.fcs  # convert to MESF/ERF; changes every intensity
 --no-uncertainty           # skip the gate uncertainty analysis
+--no-acquisition-qc        # skip the acquisition stability check
+--no-spreading             # skip the spillover spreading report
 --no-miflowcyt             # skip the ISAC-structured report
+--no-report                # skip report.html
 --max-events-per-file N    # bound memory; also raises every detection limit
 --include-qc-failed        # keep samples that failed staining QC
 ```
+
+Three of these change numbers the previous run reported and default to off:
+`--drop-unstable-events` changes every count in an affected file,
+`--subsample rare` changes which cells are embedded, and `--calibration-beads`
+changes the units every intensity is expressed in. Say so when you use them.
 
 `--cluster` is the only output that can find a population the specification does
 not describe. It is off by default because it costs runtime, not because it is

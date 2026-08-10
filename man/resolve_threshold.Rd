@@ -10,7 +10,9 @@ resolve_threshold(
   cfg_value = NULL,
   control_x = NULL,
   control_q = 0.995,
-  fallback_q = 0.9
+  fallback_q = 0.9,
+  override = NULL,
+  control_kind = c("control_q995", "fmo_q995")
 )
 }
 \arguments{
@@ -25,15 +27,41 @@ resolve_threshold(
 \item{control_q}{The control q. Default \code{0.995}.}
 
 \item{fallback_q}{The fallback q. Default \code{0.9}.}
+
+\item{override}{Optional list for THIS sample and marker carrying
+\code{threshold}, and optionally \code{reason} and \code{set_by}. See
+\code{\link[=sample_override]{sample_override()}}.}
+
+\item{control_kind}{What \code{control_x} is, which decides the \code{source} string
+recorded. \code{"control_q995"} for an unstained tube, \code{"fmo_q995"} for a
+fluorescence-minus-one control. The arithmetic is identical; the two are
+named apart because they are different experiments and support different
+claims. See \code{\link[=parse_fmo_map]{parse_fmo_map()}}.}
 }
 \description{
 Priority (per the agreed contract):
+0. per-sample manual override     -- wins over everything, and is recorded
 \enumerate{
-\item explicit config value          -- always wins
+\item explicit config value          -- applies to every sample
 \item density valley within parent   -- bimodal markers
 \item unstained-control quantile     -- unimodal markers with a control present
 \item quantile fallback              -- flagged needs_review
 A valley falling BELOW the control-derived value is rejected: it lies inside
 the background distribution and would call noise positive.
 }
+}
+\details{
+WHY LEVEL 0 EXISTS AND WHY IT IS DISTINCT FROM LEVEL 1. When this package
+flags a threshold for review, the only previous responses were to accept it or
+to pin that marker across the whole run through \verb{thresholds:}. Pinning is the
+worse of the two: it applies one number to every sample and so reintroduces
+exactly the fixed-coordinate bias described in README section 1, in order to
+correct one tube. A per-sample override corrects the tube.
+
+It is a separate \code{source} value rather than reusing \code{config} because the two
+are different claims. \code{config} says the assay declares this cut; \code{manual} says
+a named person moved this one sample's cut for a stated reason on a stated
+run. An override that is recorded and attributed is more defensible than an
+automated cut nobody was permitted to correct, and less defensible than one
+nobody needed to.
 }

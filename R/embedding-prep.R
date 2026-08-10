@@ -98,3 +98,124 @@ draw_subsample <- function(gated_idx, n_take, seed = 1L) {
 }
 
 # =============================================================================
+# 2b. DENSITY-AWARE SUBSAMPLING
+# =============================================================================
+#
+# WHY AN ALTERNATIVE TO UNIFORM DRAWING EXISTS. The uniform draw above is correct
+# for the question "what does this sample look like": it reproduces the
+# composition, so the embedding shows the cohort in the proportions it actually
+# has. It is the wrong draw for the question `--cluster` asks.
+#
+# A population at 0.3% contributes about 60 cells out of 20,000. That is enough
+# to be a smudge and not enough to be a cluster, so the unsupervised cross-check
+# cannot recover it, and `cluster_gate_agreement()` cannot report a population
+# the specification missed. README section 4.6 names finding exactly that as the
+# purpose of the check, which makes the sampling the binding constraint on the
+# package's own falsification claim for rare populations.
+#
+# WHAT THIS DOES INSTEAD. Each cell is weighted by the inverse of the local
+# density of the cells around it in marker space, so cells in sparse regions are
+# more likely to be drawn. This is the principle behind geometric sketching (Hie
+# et al. 2019, Cell Syst 8:483) and density-dependent downsampling as SPADE uses
+# it, implemented here by a distance-to-k-th-neighbour estimate rather than by
+# adding a dependency.
+#
+# WHAT IT COSTS, AND WHY IT IS OPT-IN. The embedded set is no longer a random
+# sample of the sample, so any quantity computed from `cells_umap.csv` without
+# reweighting is biased toward rare populations. The frequencies, the MFI tables
+# and every test are unaffected, because none of them read the embedded subset:
+# they are computed per sample from all gated events. What changes is which cells
+# appear in the UMAP, and therefore every embedding figure. `sampling_weight` is
+# written alongside so anything derived from the embedded cells can be weighted
+# back to the true composition.
+
+#' Inverse-density sampling weights in marker space
+#'
+#' The weight is the distance to the k-th nearest neighbour, which is a standard
+#' non-parametric density estimate: large in sparse regions, small in dense ones.
+#' Distances are computed on a bounded random reference subset rather than
+#' between all pairs, which makes the cost linear in cells rather than quadratic.
+#'
+#' @param X numeric matrix of features, one row per cell
+#' @param k neighbour rank used for the density estimate
+#' @param n_ref reference cells the distances are measured against
+#' @param seed seed for the local RNG stream, which is restored on exit
+#' @return numeric vector of non-negative weights, one per row of `X`
+#' @export
+density_weights <- function(X, k = 20L, n_ref = 2000L, seed = 1L) {
+  if (is.null(X) || !nrow(X)) return(numeric(0))
+  n <- nrow(X)
+  if (n <= k + 1L) return(rep(1, n))
+
+  had <- exists(".Random.seed", .GlobalEnv)
+  old <- if (had) get(".Random.seed", .GlobalEnv) else NULL
+  on.exit({
+    if (had) assign(".Random.seed", old, .GlobalEnv)
+    else if (exists(".Random.seed", .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv)
+  }, add = TRUE)
+  set.seed(seed)
+
+  # Scale each feature to unit MAD so one wide channel does not define the
+  # geometry on its own, which is the same reason the embedding standardises.
+  X <- as.matrix(X)
+  s <- apply(X, 2, function(v) max(stats::mad(v, na.rm = TRUE), 1e-6))
+  X <- sweep(X, 2, s, "/")
+  X[!is.finite(X)] <- 0
+
+  ref <- X[sample.int(n, min(n, as.integer(n_ref))), , drop = FALSE]
+  kk <- min(as.integer(k), nrow(ref))
+
+  # Blocked, because an n x n_ref distance matrix at 200,000 cells is 3 GB.
+  w <- numeric(n)
+  step <- max(1L, floor(2e6 / max(1L, nrow(ref))))
+  for (from in seq(1L, n, by = step)) {
+    to <- min(n, from + step - 1L)
+    d <- as.matrix(stats::dist(rbind(X[from:to, , drop = FALSE], ref)))
+    m <- nrow(X[from:to, , drop = FALSE])
+    d <- d[seq_len(m), (m + 1L):(m + nrow(ref)), drop = FALSE]
+    w[from:to] <- apply(d, 1, function(r) sort(r, partial = kk)[kk])
+  }
+  w[!is.finite(w) | w < 0] <- 0
+  w
+}
+
+#' Draw a subsample that preserves sparse regions of marker space
+#'
+#' @param gated_idx Integer indices of gated cells.
+#' @param X feature matrix for those cells, in the same row order
+#' @param n_take Number of cells to draw.
+#' @param seed Random seed. The stream is restored afterwards.
+#' @param k neighbour rank for [density_weights()]
+#' @return list(idx = drawn indices, weight = sampling weight per drawn cell)
+#' @export
+draw_subsample_rare <- function(gated_idx, X, n_take, seed = 1L, k = 20L) {
+  if (length(gated_idx) <= n_take)
+    return(list(idx = gated_idx, weight = rep(1, length(gated_idx))))
+
+  had <- exists(".Random.seed", .GlobalEnv)
+  old <- if (had) get(".Random.seed", .GlobalEnv) else NULL
+  on.exit({
+    if (had) assign(".Random.seed", old, .GlobalEnv)
+    else if (exists(".Random.seed", .GlobalEnv)) rm(".Random.seed", envir = .GlobalEnv)
+  }, add = TRUE)
+  set.seed(seed)
+
+  w <- density_weights(X, k = k, seed = seed)
+  if (!length(w) || all(w <= 0)) {
+    idx <- sort(sample(gated_idx, n_take))
+    return(list(idx = idx, weight = rep(1, length(idx))))
+  }
+  # A floor on the probability, so no cell is unreachable and the draw remains a
+  # sample of the whole gate rather than of its outskirts only.
+  p <- w + stats::quantile(w[w > 0], 0.05, names = FALSE)
+  pick <- sample(seq_along(gated_idx), n_take, replace = FALSE, prob = p)
+  ord <- order(gated_idx[pick])
+  pick <- pick[ord]
+  # The weight to reweight BY is the reciprocal of the inclusion probability,
+  # normalised so an unbiased draw would give 1 throughout.
+  pr <- p[pick] / sum(p)
+  wt <- (1 / pr); wt <- wt / stats::median(wt)
+  list(idx = gated_idx[pick], weight = wt)
+}
+
+# =============================================================================
