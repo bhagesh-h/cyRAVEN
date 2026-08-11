@@ -65,7 +65,7 @@ The first build compiles the dependency stack and takes 15 to 25 minutes. It
 finishes by running `--help` and printing every package version, so a broken
 image fails at build time rather than during an analysis.
 
-### 2.2 Fetch the demonstration cohort
+### 2.2 Prepare the demonstration cohort
 
 ```bash
 mkdir -p demo results
@@ -74,17 +74,36 @@ docker run --rm -v "$PWD/demo:/demo" \
   /opt/cyraven/src/inst/scripts/demo_data.R /demo
 ```
 
-This downloads two CytoTrol control acquisitions from RGLab's
-[flowWorkspaceData](https://github.com/RGLab/flowWorkspaceData) repository
-(Artistic-2.0, no account required), partitions each at random into four
-pseudo-samples, and writes `sample_map.csv` and `panel.yaml` beside them.
+This writes the graft-versus-host disease cohort distributed with flowCore
+(Brinkman et al., 2007, *Biol Blood Marrow Transplant* 13:691; Artistic-2.0)
+together with `sample_map.csv` and `panel.yaml`. Nothing is downloaded: the data
+ship inside a package cyRAVEN already depends on, so the example is reproducible
+offline and cannot break when a repository moves or a certificate expires.
 
-The `cohort` column it writes is randomised. Every pseudo-sample originates from
-the same tube, so the true between-group difference is zero by construction. The
-example is therefore a calibration check: the correct outcome is that no
-population differs significantly, and any result reported as significant is a
-false positive. It cannot demonstrate sensitivity, because no real effect is
-present.
+| | |
+|---|---|
+| Samples | 35 |
+| Patients | 5 |
+| Acquisition batches | 7 successive visits |
+| Groups | GvHD grade 1 against grade 3 |
+| Panel | CD15, CD45, CD14, CD33, with forward and side scatter and a Time channel |
+| Events per file | 2,205 to 66,105, median 12,666 |
+
+Both groups are transplant recipients, so the contrast is disease severity rather
+than disease against health, and the grades are unbalanced across patients. Read
+`confounding_diagnostics.csv` before interpreting any between-group difference.
+
+The acquisition recorded pulse height and no area, and names its fluorescence
+channels `FL1-H` through `FL4-H` with the marker in `$PnS`. cyRAVEN resolves both
+without intervention: the reading stage falls back to height when a file contains
+no area channel, and says so, because height and area are different measurements
+and thresholds derived from one are not interchangeable with the other.
+
+The `panel.yaml` it writes declares five populations, two `functional_blocks:`
+reading marker intensity within a gate rather than using it to define one, and
+one entry under `ratios:`. Each section is annotated in the file itself and the
+syntax is set out in the
+[Gating article](https://bhagesh-h.github.io/cyRAVEN/articles/gating.html).
 
 ### 2.3 Run the pipeline
 
@@ -96,13 +115,17 @@ docker run --rm \
   --dir /data/fcs \
   --sample-map /data/sample_map.csv \
   --config /data/panel.yaml \
-  --group-column cohort --reference-group GroupA \
+  --group-column cohort --reference-group "GvHD grade 1" \
+  --batch-column visit --cluster \
   --outdir /results
 ```
 
-Runtime is about three minutes for these eight samples on four cores. Every path
-inside a flag is a path inside the container, and `--outdir` must fall within a
-mounted volume or the output is discarded when the container exits.
+`--batch-column visit` turns on the batch diagnostics, and `--cluster` adds the
+unsupervised check that can contradict the declared populations. Both are
+optional; without them the run is faster and writes fewer outputs.
+
+Every path inside a flag is a path inside the container, and `--outdir` must fall
+within a mounted volume or the output is discarded when the container exits.
 
 On Windows PowerShell, substitute `${PWD}` for `$PWD`.
 
@@ -170,42 +193,55 @@ existing quantity are opt-in.
   --no-uncertainty          # skip the gate uncertainty analysis
 ```
 
-`docker run --rm cyraven:0.4.0 --help` lists every option.
+`docker run --rm cyraven:0.4.0 --help` lists every option at the installed
+version. All 83 are documented with their defaults and consequences in the
+[Options reference](https://bhagesh-h.github.io/cyRAVEN/articles/options.html),
+which also sets out the convention governing which are on by default: additive
+analyses are, and the five that change numbers the previous run reported are not.
 
 ## 5. Output
 
-The run in [section 2](#2-quick-start) writes 16 tables and 18 figures, together
-with `run_manifest.txt`, `miflowcyt.md` and `session_state.RData`. The count
-varies with the panel and the flags in force: outputs whose inputs are absent are
-skipped and the omission is logged.
+The run in [section 2](#2-quick-start) writes 30 tables and 22 figures, together
+with `run_manifest.txt`, `miflowcyt.md`, `report.html` and `session_state.RData`.
+The count varies with the panel and the flags in force: outputs whose inputs are
+absent are skipped and the omission is logged.
 
-The figures below are the unmodified output of that run. Two properties of the
-demonstration panel affect how they read. It carries no CD45 and no viability
-dye, so the parent gate is scatter and singlets rather than live leukocytes,
-while the axis label and the `pct_of_cd45_pos` column retain the CD45 naming. And
-the group labels are randomised, so the correct result is that nothing differs.
+The figures below are the unmodified output of that run. All 22, with what each
+measures and what this run shows, are in the
+[worked example](https://bhagesh-h.github.io/cyRAVEN/articles/figures.html),
+which also covers the two further figures the package writes and the volumetric
+counting input they require.
+
+Four properties of the cohort govern how they read. Both groups are transplant
+recipients, so the contrast is GvHD grade rather than disease against health. The
+groups are unbalanced, 7 against 28, and grade is a property of the patient, so
+between-group differences are partly between-donor differences. The acquisition
+recorded pulse height and no area, so cyRAVEN falls back to height and the
+singlet gate is skipped. And 8 of 35 samples fail staining QC and are excluded
+from every test.
 
 ### 5.1 Gate inspection
 
-Per sample: the scatter gate boundary, the singlet band, and every marker
-threshold drawn on the density it was derived from. Read before any quantity
-derived from it, because a threshold placed on a shoulder rather than a minimum
-appears here and in no table.
+Per sample: the scatter gate boundary and every marker threshold drawn on the
+density it was derived from. Read before any quantity derived from it, because a
+threshold placed on a shoulder rather than a minimum appears here and in no
+table.
 
 <img src="man/figures/demo_gating_qc.png" alt="Per-sample marker densities with the derived threshold marked on each" width="100%"/>
+
+Of 175 sample-and-marker thresholds, 103 resolved a density minimum and 72 fell
+back to a quantile. Section 5.7 gives the reason for most of them.
 
 ### 5.2 Abundance and its uncertainty
 
 Each per-sample frequency carries the standard uncertainty propagated from the
 thresholds behind it.
 
-In this run 7 of 10 populations have an uncertainty as wide as the spread between
-samples, which is the expected result here: the pseudo-samples are drawn from one
-tube, so the between-sample spread is close to zero and gate placement is the
-larger term. On a real cohort the same reading identifies populations whose
-apparent variation is the cut moving rather than the biology.
-
 <img src="man/figures/demo_frequency_uncertainty.png" alt="Population frequencies per sample with gate placement uncertainty as horizontal bars" width="100%"/>
+
+None of the five populations has a gate uncertainty as wide as its between-sample
+spread. The donors differ from each other by more than the cuts move, which is
+the condition under which a between-group comparison is worth attempting.
 
 ### 5.3 Measurability at this acquisition depth
 
@@ -214,20 +250,19 @@ through a wide empty gap is well determined however few events lie beyond it, so
 each population is also classified against the limits of detection and
 quantification set by its own parent gate.
 
-All ten populations clear both limits in all eight samples here, at roughly
-30,000 events per sample. The figure is diagnostic when they do not: a population
-mostly below the limit of quantification cannot be recovered by re-gating,
-because the numerator is small for want of acquired cells.
-
 <img src="man/figures/demo_detection_limits.png" alt="Populations counted by whether their event count clears the limits of detection and quantification" width="100%"/>
+
+Of 135 population-and-sample values, 104 are quantified, 5 are detected but below
+the limit of quantification, and 26 are below the limit of detection. Those 26
+cannot be recovered by re-gating: the numerator is small for want of acquired
+cells.
 
 ### 5.4 Phenotype concordance
 
 Marker intensity against the declared populations, z-scored across the run.
 Identity is declared rather than inferred, so this figure serves the inverse
-function of its equivalent in clustering-first analysis: a column labelled CD4 T
-cells that does not show elevated CD4 and depressed CD8 falsifies the gate that
-produced it.
+function of its equivalent in clustering-first analysis: a population that does
+not show the markers its definition requires falsifies the gate that produced it.
 
 <img src="man/figures/demo_population_marker_heatmap.png" alt="Heatmap of marker intensity against declared populations" width="100%"/>
 
@@ -238,47 +273,58 @@ comparison is meaningful.
 
 <img src="man/figures/demo_umap_overview.png" alt="Shared UMAP embedding coloured by population, sample and group" width="100%"/>
 
-### 5.6 Calibration of this run
+With `--cluster`, a self-organising map over 22,702 cells found 12 metaclusters
+and no undescribed one, so the specification accounts for every phenotype
+present. It also showed that Lymphocytes and Myeloid marker negative both
+dominate the same cluster, at 36.9% and 35.8% purity: in this panel the two
+definitions select largely the same cells and are not independent readouts. That
+is a gating result a frequency table cannot deliver.
 
-Because the group labels are randomised, the number of significant results is a
-measurement of the false-positive rate rather than a finding. Of 10 populations
-tested, 1 reached raw *p* < 0.05 and none survived Benjamini-Hochberg correction,
-which is what a correctly calibrated test returns at this number of comparisons.
-`compositional_concordance.csv` classifies that one as significant on raw
-percentages only, the configuration produced by the compositional constraint
-rather than by an independent change.
-
-### 5.7 Was the acquisition stable?
+### 5.6 Was the acquisition stable?
 
 Events recorded in each equal-width slice of the acquisition. A sustained trough
-is a partial clog, a spike is usually a bubble, and a step is a settings change
-part-way through the tube.
+is a partial clog, a spike is usually a bubble, a step is a settings change.
 
-Six of the eight pseudo-samples carry a flagged slice here, which is inherited
-rather than introduced: they are thinned in place, so each keeps its source
-acquisition's rate profile. The number that decides what to do about it is in
-`acquisition_qc_impact.csv`, which states that excluding every flagged slice
-would move the largest population by 0.195 percentage points, against gate
-uncertainties of one to two points for the same populations. Nothing is removed
-unless `--drop-unstable-events` is given.
+<img src="man/figures/demo_acquisition_qc.png" alt="Event rate across each acquisition with flagged intervals marked" width="100%"/>
 
-### 5.8 Why a threshold did not resolve
+Only 14 of 35 samples are stable; 11 are minor and 10 are unstable. Excluding
+every flagged slice would move the largest population by 5.749 percentage points,
+an order of magnitude more than the gate uncertainty on the same populations. On
+this cohort acquisition instability rather than gate placement is the dominant
+technical term. Nothing is removed unless `--drop-unstable-events` is given.
+
+### 5.7 Why a threshold did not resolve
 
 `spreading_receivers.csv` reports, per marker, how much wider its negative
-population becomes when another channel is bright. On this panel CD38 and CCR7
-resolve no density minimum in any sample and receive 2.2-fold and 3.0-fold
-widening from CD45RA and CD3 respectively. Spreading fills in the valley a
-threshold would sit in, so those cuts are unresolved because of the panel and no
-gating strategy recovers them.
+population becomes when another channel is bright. CD15's negatives are 3.06
+times wider when CD33 is bright, and CD15 falls back to a quantile in 40% of
+samples: spreading fills in the valley a threshold would sit in, and no gating
+strategy recovers that.
 
-### 5.9 Every figure, with its interpretation
+CD14 is the counter-case. It has the highest fallback rate at 57% and receives
+almost no spreading, so its failure to resolve has a different cause. Separating
+those two is what the table is for.
 
-The [worked example
-article](https://bhagesh-h.github.io/cyRAVEN/articles/figures.html) shows all 19
-figures from this run, with what each measures and what this particular run
-shows.
+### 5.8 Reading the result
 
-### 5.10 Principal tables
+Of five populations, none reaches raw *p* < 0.05 and none survives correction.
+
+The largest effect is instructive. Myeloid marker negative has a Cliff's delta of
+-0.254 and a `difference_over_gate_u` of 11.29: the difference between group
+medians is eleven times the distance the gate itself moves, so it is not an
+artefact of threshold placement. It is still not significant, because with seven
+samples in one group and 28 in the other drawn from five donors, between-donor
+variation swamps it. A run that stopped at "much larger than the gate
+uncertainty" would have called this a finding; testing on donors rather than
+cells is what prevents that.
+
+Batch structure is real and separable: iLISI 3.982 against a null of 5.625
+(*p* = 0.048), all four markers differing between visits by at least 1.1 times
+their own spread, and Cramér's *V* between visit and grade of 0.26, reported as
+low. Correction is permitted here. Had the grades been acquired in distinct
+periods, *V* would approach one and `--correct-batch` would refuse.
+
+### 5.9 Principal tables
 
 | File | Content |
 |---|---|
@@ -288,8 +334,13 @@ shows.
 | `thresholds_used.csv` | Every threshold, its derivation and its outlier status |
 | `threshold_uncertainty.csv` | Sampling and method components of each threshold, and how often resampling recovered it |
 | `uncertainty_budget.csv` | Which threshold each population's uncertainty comes from |
+| `functional_markers.csv` | Marker intensity read within a population rather than used to define one, scoped by `functional_blocks:` |
+| `population_ratios.csv` | Ratios of declared populations, from the config's `ratios:` block |
+| `acquisition_qc_impact.csv` | How far each population would move if the flagged intervals were excluded |
+| `spreading_receivers.csv` | Per marker, how much wider its negative population becomes under spillover, with its fallback rate |
 | `specification_conformance.csv` | This run against an accepted baseline, written by `--baseline` |
 | `marker_batch_drift.csv` | Per-marker distributional distance between batches, written by `--batch-column` |
+| `batch_group_confounding.csv` | Whether batch and study group are separable, which decides whether correction is permitted |
 | `gate_transferability.csv` | Held-out-donor performance of a learned gate, written by `--external-labels` |
 | `cluster_gate_agreement_*.csv` | Declared labels against unsupervised clusters |
 | `run_manifest.txt` | Package versions, git commit, invocation, options |
@@ -369,7 +420,8 @@ unchanged.
 | [Output](https://bhagesh-h.github.io/cyRAVEN/articles/outputs.html) | Every file the pipeline writes, its columns, the flag producing it, and why event counts are not cell counts |
 | [Statistics](https://bhagesh-h.github.io/cyRAVEN/articles/statistics.html) | Sample-level aggregation; rank tests against moderated *t* and the sample size at which the trade reverses; the compositional constraint; covariate diagnosis against adjustment; multiplicity within test families; differences expressed in units of uncertainty |
 | [Interoperability](https://bhagesh-h.github.io/cyRAVEN/articles/with-cycondor.html) | Method selection by question type; handing a cyCONDOR clustering to cyRAVEN to obtain an executable gate with held-out-donor performance; the four sources of divergence between their embeddings |
-| [Worked example](https://bhagesh-h.github.io/cyRAVEN/articles/figures.html) | All 19 figures from a run on public data, each with what it measures and what that run shows |
+| [Worked example](https://bhagesh-h.github.io/cyRAVEN/articles/figures.html) | Every figure from a run on public data, each with what it measures and what that run shows |
+| [Options reference](https://bhagesh-h.github.io/cyRAVEN/articles/options.html) | All 83 command-line options with defaults and consequences, and the convention deciding which are on by default |
 | [Claude skill](https://bhagesh-h.github.io/cyRAVEN/articles/claude-skill.html) | Installing and using the bundled Claude Code skill, which executes through Docker by default |
 | [Scope](https://bhagesh-h.github.io/cyRAVEN/articles/scope.html) | Nine excluded methods with the reasoning and the condition under which each becomes appropriate |
 

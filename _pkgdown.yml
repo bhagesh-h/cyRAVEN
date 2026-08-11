@@ -220,15 +220,30 @@ reference:
   - set_reference_group
 
 articles:
-- title: Get started
-  navbar: ~
+- title: Start here
+  navbar: Start here
+  desc: >
+    What the pipeline is for, where its boundaries are, and every figure a run
+    produces on the demonstration cohort.
   contents:
   - cyRAVEN
+  - scope
   - figures
+
+- title: Setting up a run
+  navbar: Setting up a run
+  desc: >
+    Declaring the populations to be scored, and the command-line reference for
+    every flag that changes what a run does.
+  contents:
   - gating
+  - options
 
 - title: Reading a run
   navbar: Reading a run
+  desc: >
+    The order the outputs must be read in, what every file contains, and how a
+    difference between groups is tested and qualified.
   contents:
   - diagnostics
   - outputs
@@ -236,7 +251,13 @@ articles:
 
 - title: Going further
   navbar: Going further
+  desc: >
+    Driving the pipeline from Claude Code, and combining it with cyCONDOR.
   contents:
-  - with-cycondor
   - claude-skill
-  - scope
+  - with-cycondor
+
+navbar:
+  structure:
+    left:  [intro, articles, reference, news]
+    right: [search, github, lightswitch]

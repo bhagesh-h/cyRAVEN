@@ -14,26 +14,39 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", echo = FALSE,
                       out.width = "100%")
 ```
 
-Every figure a default run writes, shown as the unmodified output of the
-demonstration cohort in [README section
-2](https://github.com/bhagesh-h/cyRAVEN#2-quick-start), with what it measures and
-what this particular run shows.
+All 22 figures the demonstration cohort in [README section
+2](https://github.com/bhagesh-h/cyRAVEN#2-quick-start) produces, shown as
+unmodified output, with what each measures and what this particular run shows.
+The two further figures the package can write, and why this cohort cannot produce
+them, are at the end.
 
-The cohort is two CytoTrol control acquisitions partitioned at random into eight
-pseudo-samples. Three properties of it govern how every figure below reads:
+The cohort is the graft-versus-host disease dataset distributed with flowCore
+(Brinkman et al., 2007, *Biol Blood Marrow Transplant* 13:691): peripheral blood
+from five allogeneic transplant recipients, drawn at up to seven successive
+visits and stained with a four-colour myeloid panel. It was run with
 
-**The group labels are randomised.** Every pseudo-sample comes from the same
-tube, so the true between-group difference is zero. Anything reported as
-significant is a false positive, and counting them measures calibration rather
-than sensitivity.
+```
+--group-column cohort --reference-group "GvHD grade 1" --batch-column visit --cluster
+```
 
-**The panel carries no CD45 and no viability dye.** The parent gate is therefore
-scatter and singlets rather than live leukocytes, while the axis labels and the
-`pct_of_cd45_pos` column retain the CD45 naming.
+Four properties of the cohort govern how the figures below read.
 
-**The pseudo-samples are thinned in place.** Each retains its events' original
-acquisition times, so the rate profile of the source file survives into all four
-of its children.
+**The contrast is disease severity, not disease against health.** Both groups are
+transplant recipients; the comparison is GvHD grade 1 against grade 3. There is
+no healthy arm.
+
+**The groups are unbalanced and confounded with donor.** Seven samples are grade
+1 and 28 are grade 3, and grade is a property of the patient rather than of the
+visit, so between-group differences are partly between-donor differences. Section
+7 is where that shows.
+
+**The acquisition recorded pulse height and no area.** cyRAVEN falls back to
+height and says so. Height understates a bright wide event, so thresholds here
+are not interchangeable with those from an area acquisition of the same panel.
+The singlet gate is skipped, since it needs FSC-H and FSC-A to be distinct.
+
+**Eight of 35 samples fail staining QC** and are excluded from every test. Twenty-
+seven remain.
 
 Which file each figure comes from, and which flag produces it, is in the
 [Output article](outputs.html). The order to read them in is in the
@@ -43,39 +56,38 @@ Which file each figure comes from, and which flag produces it, is in the
 
 ## recon_diagnostics.png
 
-The scatter gate and singlet band per sample, drawn on the distributions they
-were derived from.
+The scatter gate per sample, drawn on the distribution it was derived from.
 
-```{r}
+```{r, fig.alt="Forward-scatter density per sample with the derived scatter gate boundary marked"}
 knitr::include_graphics("figures/demo_recon_diagnostics.png")
 ```
 
 **What to look for.** The scatter boundary should sit in the trough between the
-debris mode and the intact-cell mode, and the singlet band should follow the
-diagonal of FSC-H against FSC-A rather than cutting across it.
+debris mode and the intact-cell mode.
 
-**This run.** All eight panels place the boundary in the same position on
-distributions of the same shape, which is expected: they are four thinned copies
-each of two files. A cohort of genuinely different donors would not look this
-uniform, and uniformity here is a property of the example rather than a result.
+**This run.** The log carries `no FSC-A density valley found; using the 60th
+percentile`. On this instrument the forward-scatter distribution has no clean
+debris shoulder, so the boundary is a quantile rather than a minimum. That is a
+fallback, and it is the reason the figure has to be read before anything derived
+from it: every population below sits inside a parent gate whose lower edge was
+placed by convention rather than by the data.
 
 ## gating_qc.png
 
-Every marker threshold superimposed on the density it was derived from, per
-sample.
+Every marker threshold superimposed on the density it was derived from.
 
-```{r}
+```{r, fig.alt="Per-sample marker densities with each derived threshold drawn on the distribution it came from"}
 knitr::include_graphics("figures/demo_gating_qc.png")
 ```
 
 **What to look for.** A cut in the trough between two modes is well placed. A cut
-on the flank of a single mode is a quantile fallback, and the frequency behind it
-carries no evidence of separation. This is the only place a shoulder-placed
-threshold is visible; it appears in no table.
+on the flank of a single mode is a quantile fallback and carries no evidence of
+separation.
 
-**This run.** CD3, CD4, CD8 and CD45RA resolve a minimum in every sample. CCR7
-and CD38 do not resolve one in any, and their cuts sit on the flank of a single
-mode. Section 5 gives the reason.
+**This run.** Of 175 sample-and-marker thresholds, **103 resolved a density
+minimum and 72 fell back to a quantile**. The fallbacks are not spread evenly:
+`spreading_receivers.csv` in section 5 shows which markers they concentrate in
+and why.
 
 # 2. Placement precision and counting sufficiency
 
@@ -84,217 +96,188 @@ mode. Section 5 gives the reason.
 Each population's per-sample frequency with the standard uncertainty propagated
 from the thresholds behind it.
 
-```{r}
+```{r, fig.alt="Population frequency per sample with gate placement uncertainty as an interval"}
 knitr::include_graphics("figures/demo_frequency_uncertainty.png")
 ```
 
-**What to look for.** Whether the bar within a sample is narrower than the
-scatter between samples. Where it is not, the variation on display is the cut
-moving rather than the biology.
+**What to look for.** Whether the bar within a sample is narrower than the scatter
+between samples. Where it is not, the variation on display is the cut moving.
 
-**This run.** Seven of ten populations have an uncertainty as wide as the
-between-sample spread. That is the correct result here and not a warning: the
-pseudo-samples come from one tube, so the between-sample spread is close to zero
-by construction and gate placement is necessarily the larger term. On a real
-cohort the same reading identifies populations not worth testing.
+**This run.** None of the five populations has a gate uncertainty as wide as its
+between-sample spread. The donors genuinely differ from each other by more than
+the cuts move, which is the configuration in which a between-group comparison is
+worth attempting at all.
 
 ## uncertainty_budget.png
 
-Which threshold each population's uncertainty comes from, as a median
-contribution per term.
+Which threshold each population's uncertainty comes from.
 
-```{r}
+```{r, fig.alt="Stacked contribution of each marker threshold to every population's uncertainty"}
 knitr::include_graphics("figures/demo_uncertainty_budget.png")
 ```
 
 **What to look for.** Which gate to fix. A population dominated by one marker has
-one threshold worth inspecting; a cohort dominated by the parent term has a
-parent-gate problem that no attention to the downstream markers will improve.
-
-**This run.** The parent term enters every population because it sets the
-denominator they are all expressed against, which is the concentration the
-operator-variability literature reports for manually gated data as well.
+one threshold worth inspecting.
 
 ## detection_limits.png
 
 How many samples each population clears the limits of detection and
 quantification in.
 
-```{r}
+```{r, fig.alt="Populations counted by whether their event count clears the limits of detection and quantification"}
 knitr::include_graphics("figures/demo_detection_limits.png")
 ```
 
-**What to look for.** A population mostly below the limit of quantification
-cannot be recovered by re-gating: its numerator is small for want of acquired
-cells, so the remedies are a longer acquisition or a higher
-`--max-events-per-file`. A population split across the limit is the dangerous
-case, because a group difference in it can be produced entirely by which samples
-happened to clear it.
+**What to look for.** A population mostly below the limit of quantification cannot
+be recovered by re-gating: the numerator is small for want of acquired cells.
 
-**This run.** All ten populations clear both limits in all eight samples, at
-roughly 30,000 events each. This is what a well-powered run looks like; the
-figure earns its place when it does not.
+**This run.** Of 135 population-and-sample values, **104 are quantified, 5 are
+detected but below the limit of quantification, and 26 are below the limit of
+detection**. The below-limit values are concentrated in the smaller populations
+and in the samples with the fewest events, which range from 2,205 upward. Those
+26 values should not carry a group comparison on their own.
 
 # 3. Are the populations what they were declared to be
 
 ## population_marker_heatmap.png
 
-Measured marker intensity against the declared populations, z-scored across the
-run.
+Measured marker intensity against the declared populations, z-scored.
 
-```{r}
+```{r, fig.alt="Heatmap of z-scored marker intensity across the declared populations"}
 knitr::include_graphics("figures/demo_population_marker_heatmap.png")
 ```
 
-**What to look for.** In clustering-first analysis this figure assigns identity.
-Here identity is declared before the data are examined, so the figure serves the
-inverse function: a column labelled CD4 T cells that does not show elevated CD4
-and depressed CD8 falsifies the gate that produced it.
-
-**This run.** The CD4 and CD8 T cell columns separate on CD4 and CD8 in the
-directions the specification declares, and the memory subsets separate on CCR7
-and CD45RA. The specification is not contradicted by the data it was applied to.
+**What to look for.** Identity is declared here before the data are examined, so
+this figure serves the inverse function of its equivalent in clustering-first
+analysis: a population that does not show the markers its definition requires
+falsifies the gate that produced it.
 
 ## population_frequencies.png
 
 The pooled composition across samples.
 
-```{r}
+```{r, fig.alt="Pooled population composition across all samples"}
 knitr::include_graphics("figures/demo_population_frequencies.png")
 ```
-
-**What to look for.** Whether the composition is biologically plausible for the
-material. An implausible composition is usually a specification error rather than
-a finding.
-
-**This run.** CD4 T cells at roughly 46% and CD8 T cells at roughly 21% of the
-parent are ordinary values for peripheral blood T cells, which is what these
-control samples are.
 
 ## cohort_composition_heatmap.png
 
 Each group's share of every population, after normalising the groups to a common
 notional cell count.
 
-```{r}
+```{r, fig.alt="Heatmap of each group's share of every population after normalising to a common cell count"}
 knitr::include_graphics("figures/demo_cohort_composition_heatmap.png")
 ```
 
-**What to look for.** An even split is 50%. Normalising first is what stops
-unequal sample numbers or acquisition depth from generating the pattern.
-
-**This run.** Every population sits within a few points of 50%, which is the
-expected result when the group labels are randomised. The largest departure,
-Activated T cells at 59/41, is the one comparison that reaches nominal
-significance in section 6 and does not survive correction.
+**What to look for.** An even split is 50%. Normalising first is what stops the
+7-against-28 sample imbalance from generating the pattern.
 
 # 4. The shared embedding
 
 ## umap_overview.png
 
-One UMAP per marker panel, computed across all samples, coloured by population
-and by sample.
+One UMAP per marker panel, computed across all samples.
 
-```{r}
+```{r, fig.alt="Shared UMAP embedding coloured by population, sample and group"}
 knitr::include_graphics("figures/demo_umap_overview.png")
 ```
 
-**What to look for.** Whether the declared populations occupy coherent regions,
-and whether the sample panel shows samples overlapping rather than separating. A
-sample that occupies its own territory is a batch effect or a failed
-acquisition, not a biological finding.
-
-**This run.** The samples overlap completely, as they must: they are thinned
-copies of two files. The population colouring separates the T cell subsets from
-the non-T cells.
+**This run.** The panel resolves four markers, and the log records
+`fewer than 2 preferred lineage markers present; falling back to all 4 eligible
+markers`. The embedding is therefore driven by CD15, CD45, CD14 and CD33 rather
+than by a curated lineage set, which is the correct behaviour for a four-colour
+panel and a limitation of the panel rather than of the run.
 
 ## umap_overview_by_group.png
 
-The same embedding split by study group.
+The same embedding split by GvHD grade.
 
-```{r}
+```{r, fig.alt="Shared UMAP embedding split into one panel per GvHD grade"}
 knitr::include_graphics("figures/demo_umap_overview_by_group.png")
 ```
-
-**This run.** The two groups occupy the same regions in the same proportions,
-which is the correct appearance for randomised labels and the visual counterpart
-of the calibration result in section 6.
 
 ## umap_markers.png
 
 The embedding coloured by each marker's intensity in turn.
 
-```{r}
+```{r, fig.alt="Shared UMAP embedding coloured by each marker's intensity in turn"}
 knitr::include_graphics("figures/demo_umap_markers.png")
 ```
-
-**What to look for.** Whether the regions the populations occupy are the regions
-that are bright for the markers defining them. This is the same audit as the
-phenotype heatmap, per cell rather than per population.
-
-**This run.** CD4 and CD8 are bright in mutually exclusive regions, and CD3 is
-bright across both and dark over the non-T region.
 
 ## umap_density.png and umap_density_by_group.png
 
 Where cells are concentrated, overall and by group.
 
-```{r}
+```{r, fig.alt="Cell density across the shared UMAP embedding"}
 knitr::include_graphics("figures/demo_umap_density.png")
 ```
 
-```{r}
+```{r, fig.alt="Cell density across the shared UMAP embedding, split by GvHD grade"}
 knitr::include_graphics("figures/demo_umap_density_by_group.png")
 ```
-
-**What to look for.** Density differences between groups that the population
-frequencies do not capture, which can indicate structure the specification does
-not describe. `--cluster` is the test for that; this figure is the reason to run
-it.
-
-**This run.** The two group densities are indistinguishable.
 
 ## umap_multigraph_overlay.png
 
 Subclusters within each declared population, drawn on the shared embedding.
 
-```{r}
+```{r, fig.alt="Subclusters within each declared population drawn on the shared embedding"}
 knitr::include_graphics("figures/demo_umap_multigraph_overlay.png")
 ```
 
-**What to look for.** A declared population that splits into subclusters
-responding differently is one whose aggregate frequency can report no change
-while its parts move in opposite directions.
+## unsupervised_clusters.png
+
+A self-organising map clustering of the same cells, computed without reference to
+the specification.
+
+```{r, fig.alt="Self-organising map metaclusters on the shared embedding, with their declared-label composition"}
+knitr::include_graphics("figures/demo_unsupervised_clusters.png")
+```
+
+**What to look for.** A cluster dominated by the unassigned label is a population
+the specification does not describe. A declared population holding far fewer
+cells than the cluster it dominates is a misplaced threshold.
+
+**This run.** Twelve metaclusters over 22,702 cells, and no undescribed cluster:
+the specification accounts for every phenotype the data contain. Two findings
+follow that a frequency table cannot deliver.
+
+Two populations are flagged **suspect threshold**. Lymphocytes and Myeloid marker
+negative both have their dominant cluster in cluster 1, and both sit at an
+effective cluster count near one (1.30 and 1.54), meaning each is a single
+phenotype. But cluster 1 holds 11,724 cells and is 36.9% Lymphocytes against
+35.8% Myeloid marker negative. The two definitions, CD45+ SSC-A low CD33− CD14−
+and CD45+ CD14− CD15− CD33−, select largely the same cells in this panel. They
+are not independent readouts, and section 6 tests them as though they were.
+
+Three populations are flagged **fragmented**: Granulocytes spans an effective
+6.13 clusters, CD33 positive myeloid 5.91, Monocytes 3.39. Each label covers
+several distinct phenotypes that a four-colour panel cannot separate.
 
 # 5. Why a threshold did not resolve
 
 ## acquisition_qc.png
 
-Events recorded in each equal-width slice of the acquisition, one panel per
-sample, with the flagged slices marked.
+Events recorded in each equal-width slice of the acquisition, with the flagged
+slices marked.
 
-```{r}
+```{r, fig.alt="Event rate across each acquisition with the flagged intervals marked"}
 knitr::include_graphics("figures/demo_acquisition_qc.png")
 ```
 
-**What to look for.** A flat line is a steady acquisition. A sustained trough is
-a partial clog, a spike is usually a bubble, and a step is a settings change
-part-way through the tube.
+**What to look for.** A flat line is a steady acquisition. A sustained trough is a
+partial clog, a spike is usually a bubble, a step is a settings change.
 
-**This run.** Six of eight samples carry at least one flagged slice, from 2.2% to
-9.0% of their events. This is inherited rather than introduced: the
-pseudo-samples are thinned in place, so the rate profile of each source
-acquisition survives into all four of its children, and `donor02_rep3` and
-`donor02_rep4` being the only stable pair reflects where the thinning happened to
-fall.
+**This run, and the most consequential finding in it.** Only **14 of 35 samples
+are stable**; 11 are minor and **10 are unstable**. Excluding every flagged slice
+would move the largest population by **5.749 percentage points**.
 
-The number that decides what to do about it is in `acquisition_qc_impact.csv`,
-not in this figure. Excluding every flagged slice would move the largest
-population by **0.195 percentage points**, against gate uncertainties of one to
-two points for the same populations. The instability is real, and it is smaller
-than the uncertainty already reported on the numbers it would affect, so no file
-here needs re-acquiring. Nothing is removed unless `--drop-unstable-events` is
-given.
+That number is what makes the flag actionable. It is an order of magnitude larger
+than the gate uncertainty on the same populations, so unlike a cosmetic
+instability this one would materially change the reported frequencies. On this
+cohort the honest reading is that acquisition instability, not gate placement, is
+the dominant technical term, and the files carrying it deserve inspection before
+any frequency from them is published. Nothing is removed unless
+`--drop-unstable-events` is given.
 
 ## Spillover spreading
 
@@ -302,20 +285,22 @@ given.
 ranked tables. They belong here because they answer the question section 1 left
 open.
 
-Thirteen of forty ordered channel pairs widen the receiver's negative population
-by 25% or more. Two markers are flagged as a panel design problem rather than a
-gating one:
-
 | Receiver | Worst source | Widening | Fallback rate |
 |---|---|---|---|
-| CD38 | CD45RA | 2.21x | 1.00 |
-| CCR7 | CD3 | 3.03x | 1.00 |
+| CD15 | CD33 | 3.06x | 0.40 |
+| CD45 | CD15 | 1.51x | 0.40 |
+| SSC-A | CD15 | 1.38x | 0.26 |
+| CD14 | CD45 | 1.10x | 0.57 |
+| CD33 | CD14 | 0.99x | 0.43 |
 
-These are the two markers that resolved no density minimum in any sample in
-`gating_qc.png`. Their negative populations are two and three times wider when
-the source channel is bright, which fills in the valley a threshold would have
-been placed in. No gating strategy recovers a cut that spreading has erased; the
-remedy is the panel.
+CD15's negative population is three times wider when CD33 is bright, and CD15
+falls back to a quantile in 40% of samples. Spreading fills in the valley a
+threshold would sit in, so those cuts are unresolved for an optical reason that
+no gating strategy recovers.
+
+CD14 is the instructive counter-case: it has the **highest** fallback rate at 57%
+and receives almost no spreading. Its failure to resolve has a different cause,
+and the table is what separates the two.
 
 # 6. The results
 
@@ -323,46 +308,73 @@ remedy is the panel.
 
 Per-population abundance between groups, as per-sample distributions.
 
-```{r}
+```{r, fig.alt="Per-population abundance between GvHD grades as per-sample distributions"}
 knitr::include_graphics("figures/demo_group_comparison.png")
 ```
 
-**What to look for.** The reading order is adjusted p, then Cliff's delta, then
-`difference_over_gate_u`, then `difference_over_total_u`. A result surviving all
-four is one the run supports; the brackets on the figure show only the first.
+**What to look for.** Adjusted p, then Cliff's delta, then
+`difference_over_gate_u`, then `difference_over_total_u`.
 
-**This run.** Of ten populations, one reaches raw *p* < 0.05 and none survives
-Benjamini-Hochberg correction. Since the group labels are randomised, that is a
-measurement of the false-positive rate and it is the value a correctly calibrated
-test returns at ten comparisons.
+**This run.** Of five populations, **none reaches raw *p* < 0.05** and none
+survives correction. The largest effect, Myeloid marker negative, has a Cliff's
+delta of -0.254 and *p* = 0.37.
 
-The one nominal hit is instructive twice over. `compositional_concordance.csv`
-classifies it as significant on raw percentages only, which is the configuration
-the compositional constraint produces rather than an independent change. And in
-`group_comparison_stats.csv` the Non-T cells comparison has
-`difference_over_gate_u` of 2.91 against `difference_over_total_u` of 0.95:
-judged on gate placement alone the difference looks resolvable, and once the
-events behind it are counted it is not.
+That population is worth dwelling on, because it is exactly the case the four-way
+reading order exists for. Its `difference_over_gate_u` is **11.29**: the
+difference between group medians is eleven times the distance the gate itself
+moves, so it is not an artefact of threshold placement. And it is still not
+significant, because with seven samples in one group and 28 in the other, drawn
+from five donors, the between-donor variation swamps it. A run that stopped at
+"the difference is much larger than the gate uncertainty" would have called this
+a finding. The donor-level test is what prevents that.
 
 ## marker_state.png
 
 Differential state per population and marker, on per-sample values.
 
-```{r}
+```{r, fig.alt="Percent positive per population and marker, compared between GvHD grades"}
 knitr::include_graphics("figures/demo_marker_state.png")
 ```
 
-**This run.** 140 tests, none reaching raw *p* < 0.05. Marker expression within
-populations is unchanged between the randomised groups, as it must be.
+**This run.** 50 tests, none reaching raw *p* < 0.05.
 
 ## functional_markers.png
 
-The same comparison restricted to the functional marker blocks declared in the
-config.
+Marker intensity read within an already-defined population, rather than used to
+define one, scoped by the `functional_blocks:` section of the configuration.
 
-```{r}
+```{r, fig.alt="Marker intensity within scoped populations, compared between GvHD grades"}
 knitr::include_graphics("figures/demo_functional_markers.png")
 ```
+
+**What to look for.** Whether the marker is one of the definers of the population
+it is being read in. Testing CD15 inside a CD15-positive gate returns 100% in
+every sample: zero variance, an undefined p-value, and a result that measures the
+definition rather than the biology. Scoping exists to prevent that, and the demo
+configuration splits its two blocks precisely so no marker is reported inside a
+gate its own threshold helped draw.
+
+**This run.** Four tests across two blocks. CD33 on gated granulocytes has the
+largest effect, Cliff's delta -0.333 at *p* = 0.24. CD14 and CD15 within CD33
+positive cells both return a Cliff's delta of exactly 0.000 at *p* = 1.0, which
+is a real null and not a degenerate one: the values span 14.2% to 97.7% and 0.4%
+to 100% respectively, and the two grade groups interleave exactly.
+
+## population_ratios.png
+
+Ratios of declared populations, from the `ratios:` section, tested with the same
+statistics as any abundance.
+
+```{r, fig.alt="Declared population ratios compared between GvHD grades"}
+knitr::include_graphics("figures/demo_population_ratios.png")
+```
+
+**What to look for.** A ratio is not recoverable from either frequency alone when
+both are percentages of the same parent, which is why it is declared rather than
+derived after the fact.
+
+**This run.** One ratio, granulocyte to lymphocyte, a conventional inflammatory
+index. Cliff's delta 0.271 at *p* = 0.39.
 
 # 7. Is the contrast confounded
 
@@ -370,22 +382,65 @@ knitr::include_graphics("figures/demo_functional_markers.png")
 
 Whether each marker's per-sample thresholds separate by study group.
 
-```{r}
+```{r, fig.alt="Per-sample thresholds per marker, checked for separation by study group"}
 knitr::include_graphics("figures/demo_threshold_drift.png")
 ```
 
-**What to look for.** A flagged marker means the populations defined by it are
-not identically specified across the comparison, so part of any abundance
-difference is definitional rather than biological. No clustering method has an
-equivalent output, because none carries a prior definition capable of drifting.
+**This run.** Five markers tested, none flagged. The thresholds do not track GvHD
+grade, so no part of a between-group difference here is definitional.
 
-**This run.** Seven markers tested, none flagged. The thresholds do not know
-which group a sample was assigned to, which is the expected result when the
-assignment is random.
+## batch_diagnostic.png
 
-# What this example cannot show
+Batch structure in the shared embedding, against a permutation null.
 
-The cohort has no real effect in it, so nothing here demonstrates that cyRAVEN
-detects one. Every figure above is a calibration or a mechanism check. Read it
-for output shape, for the reading order, and for what a correctly behaving run
-looks like when the answer is nothing.
+```{r, fig.alt="Batch mixing in the shared embedding against a permutation null"}
+knitr::include_graphics("figures/demo_batch_diagnostic.png")
+```
+
+**This run.** iLISI **3.982 against a null of 5.625**, *p* = 0.048: substantial
+batch structure, meaning cells sit next to cells from the same visit more often
+than chance allows.
+
+`marker_batch_drift.csv` names the channels responsible. **All four markers differ
+between visits by at least 1.1 times their own spread**, the worst being CD14 at
+1.24 MAD between visit 4 and visit 7.
+
+The question that decides what may be done about it is separability, and
+`batch_group_confounding.csv` answers it: Cramér's *V* between visit and grade is
+**0.26**, reported as *low, batch and group are largely separable*. Correction is
+therefore permitted here. Had the grades been acquired in distinct periods, *V*
+would approach one and `--correct-batch` would refuse, because removing the batch
+and removing the finding would be the same operation.
+
+# The two figures this cohort cannot produce
+
+Twenty-two figures is everything the GvHD cohort supports. The package writes two
+more, and both need an input no public FCS archive carries.
+
+`absolute_counts.png` and `absolute_counts_qc.png` are written by
+`--absolute-counts`, which takes a table of measured cells per microlitre per
+sample and population, from bead-based or volumetric counting on the instrument.
+A frequency is a proportion of a parent gate, so it moves when any other
+population moves; an absolute count does not. The QC figure compares the supplied
+counts against the frequencies cyRAVEN measured, which is how a transcription
+error or a sample-name mismatch is caught.
+
+They are absent here because the cohort has no volumetric measurement, and a
+count invented to fill the gap would be indistinguishable in the rendered figure
+from a measured one. The input format is documented in the
+[Output article](outputs.html).
+
+# What this example does and does not show
+
+It shows a pipeline behaving correctly on real, imperfect clinical data: a
+scatter gate that had to fall back, 72 thresholds that could not resolve with an
+optical explanation for most of them, acquisition instability large enough to
+matter, two declared populations that the unsupervised check shows are largely
+the same cells, real batch structure that is nonetheless separable from the
+contrast, and a difference eleven times the gate uncertainty that is still not a
+finding once donors rather than cells are the replicates.
+
+It does not show sensitivity. The group contrast is unbalanced, confounded with
+donor, and null at this sample size. Nothing here establishes that cyRAVEN
+detects a real biological effect; it establishes what the diagnostics report when
+the data are genuinely difficult.

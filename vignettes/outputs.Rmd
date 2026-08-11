@@ -240,10 +240,44 @@ is what cyRAVEN resolves from `$PnS`.
 | `miflowcyt.md` | The same run against the ISAC reporting checklist |
 | `report.html` | Every output above, in the order this documentation says to read them |
 | `patient_metadata_english.csv` | Patient table after column mapping and value translation |
-| `absolute_counts*.csv`, `.png` | Written by `--absolute-counts` |
+| `absolute_counts.csv`, `absolute_counts.png` | Measured cells per microlitre per sample and population, written by `--absolute-counts` |
+| `absolute_counts_qc.csv`, `absolute_counts_qc.png` | The supplied counts against the frequencies this run measured, same flag |
 | `flowjo/` | UMAP-annotated FCS, written by `--flowjo-export` |
 | `config_derived.yaml` | Derived parameters, written by `--write-config` |
 | `sample_map_template.csv` | Written by `--write-sample-map` |
+
+### The `--absolute-counts` input
+
+A frequency is a proportion of a parent gate, so it moves when any other
+population moves. An absolute concentration does not, which is why bead-based or
+volumetric counts are worth carrying through the run when the laboratory measured
+them.
+
+The flag takes a CSV or Excel sheet laid out as the counting instrument exports
+it: the first row is a header, the first column identifies the sample, and every
+further column whose header is non-empty and whose body is numeric is read as a
+population. Blank rows are skipped, so cohort separators do not need removing.
+
+```
+sample,        Granulocytes, Monocytes, Lymphocytes
+HC-13;2.fcs,           3810,       420,        1650
+HC-14;1.fcs,           2990,       395,        1880
+```
+
+Units come from any header cell that is not itself a population column. A label
+containing microlitre, `uL` or `µL` is read as cells per microlitre; one
+containing `mL` or millilitre is converted by dividing by 1000. When no unit
+label is present the values are assumed to be cells per microlitre already and
+the log says so; verify that before trusting the figure.
+
+Each row is matched to a `sample_id` by `patient_id` first and then by
+acquisition filename, both insensitive to case, surrounding whitespace, a `.fcs`
+extension and a trailing ` copy`. The filename match is a suffix match with a
+delimiter required immediately before it, because export sheets routinely omit
+the batch prefix the acquisition filename carries. A key matching more than one
+file is treated as no match rather than guessed at, and every unmatched row is
+named in the log. `--absolute-counts` needs `--sample-map`, since that is where
+the join key lives.
 
 `miflowcyt.md` completes the two checklist sections a run can establish. The
 instrument section comes from the FCS keyword block: cytometer, serial,

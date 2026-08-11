@@ -1,10 +1,79 @@
 # cyRAVEN 0.4.0
 
-Seven additions, completing the feature backlog in `TODO.md`. Every file the
+Seven additions, completing the feature backlog in `dev/TODO.md`. Every file the
 previous version wrote is still written with the same name, the same columns and
 the same values, verified by running both versions on the same cohort and
 comparing byte for byte: 34 of 35 outputs identical, none lost, and the one that
 differs is `miflowcyt.md`, differing only in its own generation timestamp.
+
+## Height-only acquisitions
+
+* The reading stage kept area channels only, because a marker recorded as both
+  area and height would otherwise be counted twice in the embedding. Applied to a
+  file that records height and no area, which older instruments and several
+  clinical archives do, that rule resolved zero markers. The run then failed
+  several stages later with every population reported UNAVAILABLE, which points
+  at the specification rather than at the panel.
+* `read_fcs_resolved()` now falls back to pulse height when a file contains no
+  area channel, and says so. The rule exists to avoid double-weighting a marker
+  that appears twice; where nothing appears twice there is nothing to avoid. The
+  substitution is announced rather than silent because height understates a
+  bright wide event, so thresholds derived from such a file are not
+  interchangeable with those from an area acquisition of the same panel.
+* The scatter gate is defined on area and stops without it, so a height channel
+  now stands in there too. That alone would have made `derive_singlet_band()`
+  divide a channel by itself: a ratio identically one, a MAD of zero, a band of
+  zero width, and every event discarded. The singlet gate now requires FSC-H and
+  FSC-A to be distinct columns and skips with a log line when they are not.
+
+## Demonstration cohort
+
+* The worked example now uses the graft-versus-host disease dataset distributed
+  with flowCore (Brinkman et al. 2007, Biol Blood Marrow Transplant 13:691),
+  replacing two CytoTrol control acquisitions partitioned into pseudo-samples
+  with randomised group labels.
+* The previous cohort could demonstrate calibration and nothing else: its groups
+  were randomised, so the correct answer was always that nothing differs, and its
+  panel carried neither CD45 nor a viability dye. The replacement has five
+  patients, seven visits as genuine acquisition batches, a real clinical contrast
+  between GvHD grades, CD45 in the panel, a Time channel, and 2,205 to 66,105
+  events per file.
+* It requires no download. The data ship inside a package cyRAVEN already depends
+  on, so the example is reproducible offline and cannot break when a repository
+  moves or a certificate expires.
+* Both groups are transplant recipients, so the contrast is disease severity
+  rather than disease against health, and the grades are unbalanced across
+  patients. `inst/scripts/demo_data.R` states both, and the confounding
+  diagnostic is the check to read before interpreting the contrast.
+
+## Documentation
+
+* The demonstration configuration now declares two `functional_blocks:` and one
+  entry under `ratios:` in addition to its five populations, so a default run
+  writes all 22 figures the package can produce from a cohort with no volumetric
+  counting, rather than the 20 that the `populations:` block alone reaches.
+  `absolute_counts.png` and `absolute_counts_qc.png` are the two it cannot, and
+  the worked example says why and documents the measurement they need instead of
+  filling the gap with invented counts.
+* `functional_blocks:` and `ratios:` had no syntax reference. Both are now
+  documented in the Gating article and in the skill, including the requirement
+  that decides whether a block is meaningful: a marker must not be read inside a
+  gate its own threshold helped draw, because a percent positive pinned at 100 in
+  every sample has zero variance and measures the definition rather than the
+  biology.
+* The `--absolute-counts` input format is documented in the Output article: the
+  sheet layout, how the unit label is read, and the two-key sample matching with
+  its ambiguity rule.
+* The worked example carries every figure the run produces, each with what it
+  measures and what this cohort shows, and each with alt text.
+* New `options.Rmd`, a reference for all 83 command-line options with their
+  defaults and consequences. An audit found 26 of them documented nowhere in the
+  README, the articles or the skill. It also states the convention that decides
+  which options are on by default: analyses that only add output are, and the
+  five that change numbers a previous run reported are not.
+* Maintainer working files moved to `dev/`, which is excluded from the build, the
+  container context and version control. `dev/README.md` records which documents
+  are authoritative where they disagree.
 
 ## Acquisition-time quality control
 

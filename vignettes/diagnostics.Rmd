@@ -53,6 +53,29 @@ recorded in the manifest.
 
 A file carrying no Time channel is reported as such rather than as stable.
 
+## 1b. Why a threshold did not resolve
+
+Section 1 shows *that* a cut fell back to a quantile. `spreading_receivers.csv`
+and `spreading_pairs.csv` are what distinguish the two reasons it can have.
+
+Compensation removes the mean contribution of one fluorochrome to another
+detector. It cannot remove the photon-counting variance that came with it, so a
+receiver channel's negative population is wider wherever a spilling source is
+bright. A widened negative fills the density valley a threshold would sit in, and
+no gating strategy recovers a minimum that the optics erased.
+
+`spreading_pairs.csv` reports, for every ordered source and receiver pair, the
+ratio of the receiver's negative spread when the source is bright to its spread
+when the source is dim. `spreading_receivers.csv` ranks receivers by their worst
+source and pairs that against how often the marker actually fell back.
+
+Read the two columns together. A marker with a high fallback rate and substantial
+spreading is failing for a panel design reason, and the fix is a different
+fluorochrome assignment rather than a different threshold method. A marker with a
+high fallback rate and no spreading is failing for some other reason: too few
+positive events, a titration problem, or a genuinely continuous distribution.
+Reporting the fallback rate alone cannot tell those apart.
+
 ## 2. Staining QC
 
 `staining_qc.csv` records a per-sample verdict. A sample with no resolvable

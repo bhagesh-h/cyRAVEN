@@ -130,9 +130,9 @@ wherever the patient table supplies a leukocyte count.
 
 Age and sex are diagnosed rather than adjusted.
 
-With eight samples per group, a model estimating age and sex effects alongside
-the group term consumes the residual degrees of freedom required for the
-comparison of interest. Where the covariate is strongly associated with group,
+At the sample sizes cytometry cohorts reach, commonly under ten donors per group,
+a model estimating age and sex effects alongside the group term consumes the
+residual degrees of freedom required for the comparison of interest. Where the covariate is strongly associated with group,
 the parameters are not separable at any sample size, because the design contains
 no observations at the covariate levels required to estimate the effects
 independently.

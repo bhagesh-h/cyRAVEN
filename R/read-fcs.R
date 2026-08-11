@@ -63,9 +63,41 @@ read_fcs_resolved <- function(path, sample_id = NULL, max_events = 0L) {
     hit <- which(grepl(scatter[[k]], nm) | grepl(scatter[[k]], desc))
     if (length(hit)) sc_cols[k] <- hit[1]
   }
+
+  # HEIGHT-ONLY ACQUISITIONS. The area rule above assumes the instrument recorded
+  # both, which older cytometers and some clinical archives did not: they write
+  # FSC-H, SSC-H and FL1-H with no area channel anywhere. Applying the rule
+  # unchanged to such a file resolves ZERO markers, and the run then fails several
+  # stages later with an empty population table that blames the specification.
+  #
+  # The rule exists to avoid double-weighting a marker that appears twice. Where
+  # nothing appears twice there is nothing to avoid, so height is used and the
+  # substitution is announced. It is announced rather than silent because pulse
+  # height and pulse area are not the same measurement: height understates a
+  # bright wide event, so thresholds derived here are not interchangeable with
+  # those from an area acquisition of the same panel.
+  fluor <- !grepl("^FSC|^SSC|^Time|Time.Stamp", nm, ignore.case = TRUE) &
+           !grepl("^FSC|^SSC|^Time", sym, ignore.case = TRUE)
+  height_only <- !any(is_area & fluor) && any(fluor)
+  if (height_only) {
+    is_h <- grepl("(^|[^A-Za-z])H$|\\.H$|-H$|Height$", nm) |
+            grepl("- Height$", desc)
+    if (any(is_h & fluor)) {
+      is_area <- is_area | is_h
+      log_msg("  no area channel in this file; using pulse HEIGHT for ",
+              sum(is_h & fluor), " marker(s). Height and area are different ",
+              "measurements, so thresholds from this file are not comparable ",
+              "with an area acquisition of the same panel")
+    }
+  }
+  # The scatter gate is defined on area. Where the file has only height, the
+  # height channel stands in for it, under the same caveat.
+  for (k in c("FSC", "SSC"))
+    if (!paste0(k, "-A") %in% names(sc_cols) && paste0(k, "-H") %in% names(sc_cols))
+      sc_cols[paste0(k, "-A")] <- sc_cols[[paste0(k, "-H")]]
+
   # fluorescence markers = area channels that are not scatter/time
-  keep <- which(is_area & !grepl("^FSC|^SSC|^Time|Time.Stamp", nm, ignore.case = TRUE) &
-                          !grepl("^FSC|^SSC|^Time", sym, ignore.case = TRUE))
+  keep <- which(is_area & fluor)
   marker_cols <- setNames(keep, sym[keep])
   # collapse duplicate symbols to the first occurrence
   marker_cols <- marker_cols[!duplicated(names(marker_cols))]

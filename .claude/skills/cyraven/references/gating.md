@@ -175,6 +175,48 @@ mode-finding machinery.
 file structure. Replace its populations with those of the panel in use; it is a
 worked example for one myeloid-lymphoid panel, not a default.
 
+### Markers read inside a population, and ratios between populations
+
+Two further blocks live in the same `--config` file. Both are opt-in.
+
+`functional_blocks:` reports a marker's intensity and percent positive *within*
+an already-defined population, rather than using it to define one, and
+`functional_markers_stats.csv` tests those values between groups.
+
+```yaml
+functional_blocks:
+  CD33 on gated myeloid subsets:
+    markers: [CD33]
+    populations: [Granulocytes, Monocytes]
+  activation:
+    markers: [CD69, HLA-DR, CD25]
+    require: CD3          # populations whose definition has CD3: above
+  exhaustion:
+    markers: [LAG-3, TIM-3, PD-1]
+    exclude: [Classical monocytes]   # everything else
+```
+
+Scope resolves in order: explicit `populations:`, then `require:`, then all
+populations minus `exclude:`. When authoring one, check that no marker is scoped
+to a population its own threshold helped define. CD15 read inside a
+CD15-positive gate is 100 percent in every sample: zero variance, undefined
+p-value, and a result that measures the definition rather than the biology.
+Declaring this block replaces the built-in blocks rather than adding to them.
+
+`ratios:` declares a ratio of two populations, written to
+`population_ratios.csv` and tested like any abundance.
+
+```yaml
+ratios:
+  gran_lymph:
+    label: "Granulocyte:lymphocyte ratio"
+    numerator: Granulocytes
+    denominator: Lymphocytes
+```
+
+There is no default, because a ratio naming populations a panel does not contain
+would be silently meaningless.
+
 ### Do not fit the specification to the data
 
 A specification fitted to the samples it is then tested against cannot be
