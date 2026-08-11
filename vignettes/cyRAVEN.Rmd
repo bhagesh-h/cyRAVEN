@@ -8,363 +8,137 @@ vignette: >
 ---
 
 ```{r, include = FALSE}
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
-set.seed(1)
-library(cyRAVEN)
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
 ```
 
-## 1. Scope
+# What cyRAVEN does
 
-cyRAVEN quantifies populations declared in advance across a batch of FCS files
-and evaluates whether the declaration held. The pipeline is a single call; every
-stage is also an exported function callable in isolation, so a step can be
-replaced without forking the package.
+A directory of FCS files becomes population frequencies, marker expression, a
+shared UMAP and between-group statistics. Populations are declared in advance;
+every marker threshold is derived inside the sample it applies to; and the
+declaration is then tested against unsupervised structure recovered from the same
+cells.
 
-One constraint governs the design and is stated before the stages.
+The design addresses one failure mode. Manual gating is the dominant source of
+technical variance in multi-sample immunophenotyping: operators gating identical
+files report population sizes differing by about 32%, and analyst subjectivity
+accounts for up to 78% of technical variability once more than one person is
+involved (Cadwell et al., 2021, *PDA J Pharm Sci Technol* 75:33). Transferring
+fixed gate coordinates between samples does not remove that variance; it converts
+it into a bias that tracks staining intensity.
+
+cyRAVEN removes the analyst from threshold placement and quantifies what remains.
+Each cut is resampled from the events it was derived from and re-derived across
+the settings that placed it, and the resulting spread is propagated to every
+population that reads it, so a frequency separated by a clean gap and one sitting
+on a shoulder are not reported to the same apparent precision.
+
+One constraint governs everything below.
 
 > The unit of replication is the donor, not the event.
 
-Event counts are set by acquisition duration rather than by study design.
-Inference over events sets the degrees of freedom from instrument time and allows
-one deeply acquired donor to determine a group result. Every test aggregates to
-one value per sample before estimation. Quantities that cannot be aggregated are
-reported with effect sizes and no p-value.
+Event counts are set by acquisition duration rather than by study design. Every
+test aggregates to one value per sample before estimation; quantities that cannot
+be aggregated are reported with effect sizes and no p-value.
 
-## 2. Invocation
+# Setup
 
-The supported execution path is the container. `uwot` is a stochastic embedder
-whose output varies with its own version and with the BLAS beneath it, and every
-gate is placed at a kernel density minimum, so a different density implementation
-moves thresholds and the frequencies derived from them. The image pins R 4.4.3, a
-dated CRAN snapshot and Bioconductor 3.20.
+Docker is the supported path, for a numerical reason rather than convenience:
+`uwot` is a stochastic embedder whose output varies with its own version and with
+the BLAS beneath it, and every gate is placed at a kernel density minimum, so a
+different density implementation moves thresholds and therefore the frequencies
+that would be published. The image pins R 4.4.3, a dated CRAN snapshot and
+Bioconductor 3.20.
 
-A run takes the FCS files, one sample sheet and one config. Both files are
-described in the [Inputs article](inputs.html).
-
-### 2.1 First run on a new cohort
-
-The sequence, in order. Each step is cheap and catches what the next one would
-otherwise waste time on.
-
-```sh
-# 0. build the image once
+```bash
+git clone https://github.com/bhagesh-h/cyRAVEN.git
+cd cyRAVEN
 docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
+```
 
-mkdir -p data results
+The build context is the repository root, the directory holding `DESCRIPTION`.
+The first build compiles the dependency stack and takes 15 to 25 minutes. It ends
+by running `--help` and printing every package version, so a broken image fails
+at build time rather than during an analysis.
 
-# 1. a sheet covering every file in the directory
-docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
-  --dir /data/fcs --recursive --write-samples /data/samples.csv
+Local installation, for development or where Docker is unavailable, is in the
+[README](https://github.com/bhagesh-h/cyRAVEN#installation-without-docker).
 
-# 2. edit data/samples.csv: patient_id, cohort, and any study variable
+# A complete run in five minutes
 
-# 3. start the config from the shipped template
-docker run --rm --entrypoint sh cyraven:1.0.0 -c \
-  'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml' \
-  > data/analysis.yaml
+No data of your own required, and nothing downloaded: the demonstration cohort
+ships inside a package cyRAVEN already depends on.
 
-# 4. validate both files against the FCS headers, in seconds
-docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs --recursive \
-  --samples /data/samples.csv --config /data/analysis.yaml \
-  --outdir /results --check
+```bash
+mkdir -p demo results
 
-# 5. edit populations: in the config until --check reports no problems,
-#    then run
-docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs --recursive \
-  --samples /data/samples.csv --config /data/analysis.yaml \
-  --group-column cohort --reference-group "Healthy controls" \
-  --outdir /results
+# 1. write the cohort, its sample sheet and its config
+docker run --rm -v "$PWD/demo:/demo" \
+  --entrypoint Rscript cyraven:1.0.0 \
+  /opt/cyraven/src/inst/scripts/demo_data.R /demo
 
-# 6. read results/report.html
+# 2. validate the inputs, in seconds, without analysing anything
+docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
+  cyraven:1.0.0 --dir /data/fcs \
+  --samples /data/samples.csv --config /data/panel.yaml \
+  --group-column cohort --reference-group "GvHD grade 1" \
+  --batch-column visit --outdir /results --check
+
+# 3. run
+docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
+  cyraven:1.0.0 --dir /data/fcs \
+  --samples /data/samples.csv --config /data/panel.yaml \
+  --group-column cohort --reference-group "GvHD grade 1" \
+  --batch-column visit --cluster --outdir /results
+
+# 4. open results/report.html
 ```
 
 On Windows PowerShell substitute `${PWD}` for `$PWD`; on Git Bash prefix with
-`MSYS_NO_PATHCONV=1`, or the shell rewrites `/data` into a Windows path.
+`MSYS_NO_PATHCONV=1`.
 
-### 2.2 The full analysis
+This writes 22 figures and 31 tables from 35 samples across five allogeneic
+transplant recipients. `report.html` carries all of them embedded in one
+self-contained file, in the order they have to be read.
 
-Batch diagnostics and the unsupervised check are opt-in because each adds
-outputs and runtime.
+# Your own data
 
-```sh
-docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 \
-  --dir /data/fcs --recursive \
-  --samples /data/samples.csv --config /data/analysis.yaml \
-  --group-column cohort --reference-group "Healthy controls" \
-  --batch-column acquisition_date --cluster \
-  --covariates age,sex --reference-date 2025-01-01 \
-  --no-session \
-  --outdir /results
+Two files besides the FCS directory: one CSV with a row per file, and one YAML
+declaring what to score.
+
+```bash
+# a sheet with a row for every file, which you then fill in
+docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
+  --dir /data/fcs --recursive --write-samples /data/samples.csv
+
+# the config template
+docker run --rm --entrypoint sh cyraven:1.0.0 -c \
+  'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml' \
+  > data/analysis.yaml
 ```
 
-`--no-session` is worth adding on a large cohort: `session_state.RData` can reach
-several hundred MB and dominate the runtime, and no result depends on it.
+Then `--check` until it reports no problems, then run. The full sequence, and
+every option with the situation it is for, is in
+[Running cyRAVEN](usage.html).
 
-### 2.3 A large cohort that must fit in memory
+# Where to go next
 
-Peak memory is set by the events held at once, not by the number of files.
+**Code and setup**
 
-```sh
-docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 \
-  --dir /data --recursive \
-  --samples /data/samples.csv --config /data/analysis.yaml \
-  --max-events-per-file 300000 \
-  --cells-per-sample 6000 --max-cells 150000 \
-  --no-session --outdir /results
-```
+- [Running cyRAVEN](usage.html): every command in Docker and R, which option to
+  use when, and the complete option reference.
+- [Inputs](inputs.html): the sample sheet, the config, and the templates.
+- [Gating specification](gating.html): declaring populations, functional blocks
+  and ratios.
 
-Subsampling raises every detection limit in proportion, because it lowers the
-parent-gate count each frequency is a fraction of.
+**Science and output**
 
-Run one analysis at a time. Peak memory is dominated by the embedding, which
-holds `--max-cells` cells across every marker, and two concurrent runs at these
-settings will exhaust a workstation. The stages are already multi-threaded, so
-nothing is gained by running containers in parallel. A run killed by the
-out-of-memory killer exits 137 and writes no report, because SIGKILL runs no
-handler; that combination is the signature to look for.
-
-### 2.4 Comparing a run against an accepted one
-
-```sh
-# once, on the run being adopted as the reference
-docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
-  --config /data/analysis.yaml --outdir /results \
-  --write-baseline /results/baseline.rds
-
-# on every later run
-docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results2:/results" \
-  -v "$PWD/results/baseline.rds:/baseline.rds:ro" \
-  cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
-  --config /data/analysis.yaml --outdir /results \
-  --baseline /baseline.rds --fail-on-drift
-```
-
-`--fail-on-drift` exits non-zero after every output has been written, so it can
-gate a pipeline without costing the diagnostics that explain the failure.
-
-### 2.5 From an R session
-
-Where the package is installed locally and bit-level reproducibility against the
-pinned environment is not required:
-
-```r
-library(cyRAVEN)
-
-run_cyraven(list(
-  dir                 = "data/fcs",
-  recursive           = TRUE,
-  outdir              = "results/",
-  samples             = "data/samples.csv",
-  config              = "data/analysis.yaml",
-  group_column        = "cohort",
-  reference_group     = "Healthy controls",
-  max_events_per_file = 300000,
-  seed                = 42
-))
-```
-
-Validate first, exactly as `--check` does from the command line:
-
-```r
-run_cyraven(list(dir = "data/fcs", samples = "data/samples.csv",
-                 config = "data/analysis.yaml", outdir = "results/",
-                 check_only = TRUE))
-```
-
-Both forms call the same `run_cyraven()`. The command-line front end resolves to
-`system.file("scripts", "cyraven.R", package = "cyRAVEN")` and is what the
-container entrypoint executes.
-
-Progress is emitted through `message()` and directed to stderr:
-
-```r
-options(cyRAVEN.verbose = "none")     # or "inform" (default), or "debug"
-```
-
-A run that stops on an error still writes `report.html`, carrying the error, the
-stage it reached, the log leading up to it, what the message means for the data,
-the next action, and every output produced before the failure.
-
-## 3. Stages
-
-### 3.1 Read
-
-`read_fcs_resolved()` resolves channels to marker symbols from `$PnS` with
-fallback to `$PnN`, and applies the acquisition spillover matrix where the file
-carries one. Spectral instruments write unmixed data with no matrix, so
-`maybe_compensate()` detects and reports rather than assuming; applying
-compensation twice is as damaging as omitting it.
-
-### 3.2 Transform
-
-```{r cofactor}
-set.seed(42)
-ex <- matrix(abs(rnorm(20000 * 4, 0, 250)), ncol = 4,
-             dimnames = list(NULL, c("CD3", "CD4", "CD8", "CD19")))
-cf <- derive_cofactor(ex, setNames(1:4, colnames(ex)))
-round(as.numeric(cf), 1)
-```
-
-The arcsinh cofactor governs the width of the quasi-linear region near zero. The
-conventional value of 5 derives from mass cytometry and over-expands the
-background band on spectrally unmixed fluorescence data. Each marker is bisected
-until the interquartile range of its background distribution reaches a target,
-and the panel adopts the median. `derive_cofactor_pooled()` estimates across
-samples so that a single weakly stained file does not set the scale on which
-every threshold in the run is computed.
-
-### 3.3 Gate
-
-```{r valley}
-x <- c(rnorm(8000, 0, 0.4), rnorm(2000, 4, 0.5))   # bimodal marker
-round(density_valley(x), 2)
-```
-
-Thresholds are placed at the density minimum within each sample.
-`density_valley()` returns `NA` for unimodal distributions, after which
-`resolve_threshold()` attempts a declared unstained control and falls back to a
-flagged quantile. Derivation is recorded per threshold in `thresholds_used.csv`.
-
-Per-sample thresholding accommodates staining variation but permits the
-definition of a population to differ between groups, which
-`stats_threshold_drift()` exists to detect.
-
-### 3.4 Score
-
-```{r spec}
-str(default_population_spec()[["CD3 pos CD4 pos"]])
-```
-
-Populations are evaluated as Boolean conjunctions of marker directions read from
-YAML. Editing the specification changes the analysis without modifying R code.
-
-### 3.5 Quantify the uncertainty
-
-```{r unc, eval = FALSE}
-u <- threshold_uncertainty(x_parent, source = "valley", B = 100)
-c(u$u_sampling, u$u_method, u$u_combined)
-```
-
-Each cut is re-derived from resamples of its own events, and again across the
-settings that placed it. The two spreads combine in quadrature and propagate to
-every population reading that marker, alongside the CD45 parent term, which
-enters all of them because it fixes the denominator.
-
-The reported threshold is unchanged: the perturbation runs on copies. Every entry
-point saves and restores `.Random.seed`, so the cell selection in the next stage
-draws from the same stream position whether this runs or not.
-
-### 3.6 Embed
-
-```{r umap, eval = FALSE}
-emb <- run_umap(mat, n_neighbors = 30, min_dist = 0.3, seed = 42)
-```
-
-`select_umap_features()` excludes scatter, viability, time and the height and
-width duplicates of area channels; retaining these was the principal cause of
-uninformative embeddings in the precursor implementation. `plan_subsample()`
-draws equal cell numbers per sample so that acquisition depth does not determine
-the manifold.
-
-`ret_model = TRUE` retains the model for projection of later batches through
-`project_umap()`, which holds coordinates fixed between runs. Model retention
-alters the embedding; see `?run_umap`.
-
-### 3.7 Test
-
-```{r stats}
-freq <- data.frame(
-  sample_id = rep(sprintf("S%02d", 1:12), each = 2),
-  population = rep(c("CD4 T cells", "B cells"), 12),
-  pct_of_cd45_pos = c(rbind(rnorm(12, 25, 4), rnorm(12, 10, 2))),
-  is_control = FALSE, qc_status = "pass")
-grp <- setNames(rep(c("HC", "Patient"), each = 12)[1:12], sprintf("S%02d", 1:12))
-
-res <- stats_group_comparison(freq, grp, reference = "HC")
-res[, c("population", "comparison_group", "n_reference", "cliffs_delta", "p_value")]
-```
-
-`stats_marker_state()` applies the same treatment to marker expression within a
-population, testing median intensity and percent positive separately because a
-shift confined to a subset moves one and not the other.
-
-### 3.8 Diagnose
-
-Six outputs constrain interpretation of the preceding stages: threshold drift,
-gate and counting uncertainty, phenotype concordance, gate against cluster
-concordance, learned gate geometry, and conformance against a baseline. The
-[diagnostics article](diagnostics.html) covers each in full.
-
-`batch_mixing_report()` quantifies batch structure in the embedding against a
-permutation null and reports Cramér's *V* between batch and group. Correction
-through `--correct-batch` is refused above a configurable *V*, where batch and
-biological effect are not separable.
-
-`stats_threshold_drift()` tests whether marker thresholds separate by group,
-which would render an abundance difference partly definitional.
-
-`stats_confounding()` reports whether a covariate both differs across groups and
-associates with the outcome, the two conditions jointly defining a confounder.
-
-`cluster_gate_agreement()` cross-tabulates declared labels against unsupervised
-clusters and is the only output capable of identifying a population absent from
-the specification, or a threshold rejecting events that belong to its population.
-
-`run_gate_uncertainty()` reports how far each threshold moves under resampling and
-propagates that to every population reading it, so a difference smaller than its
-own gate's movement is identifiable as such.
-
-### 3.9 Explain
-
-`cluster_gate_agreement()` identifies a cluster matching no declared population
-but cannot characterise it, leaving a cluster index and a cell count.
-
-`explain_cluster()` inverts the gating stage. Given labelled events it selects
-the two most discriminating markers, fits a convex polygon in that plane, retains
-the enclosed events and recurses, producing the topology of a manual gating
-strategy.
-
-```r
-st <- explain_cluster(marker_matrix, cluster_id == 7)
-st$summary               # marker pair and metrics per level
-st$levels[[1]]$polygon   # vertices, in arcsinh units
-```
-
-Convex polygons rather than thresholds: a conjunction of one-dimensional cuts is
-an axis-aligned rectangle, and an oblique boundary constrained to a rectangle
-must admit contaminants or exclude genuine events. `derive_singlet_band()` is a
-hand-written instance of the same geometry.
-
-Metrics are computed on held-out events with the resubstitution value alongside,
-since eight free half-planes can memorise a few thousand events. The stage is
-descriptive: it carries no p-value and scored frequencies are identical whether
-it runs or not.
-
-`--external-labels` supplies the labels from elsewhere, a cyCONDOR clustering for
-instance, and `gate_transferability()` then refits the strategy with one donor
-withheld and scores it on that donor. Held-out events come from the same donors
-and overstate how well a gate travels; the per-donor minimum does not.
-`--export-gates` writes the result as Gating-ML 2.0 in the units the FCS file
-stores.
-
-### 3.10 Report
-
-Figures, tables, and `write_run_manifest()`, which records R version, package
-versions, git commit and working-tree state, the full invocation, and every input
-file with size and modification time. The manifest is written before the
-expensive stages and rewritten at completion, so an interrupted run records
-`status: failed`.
-
-## 4. Further reading
-
-- [Gating](gating.html), for threshold derivation and specification syntax.
-- [Diagnostics](diagnostics.html), for the outputs that falsify a specification.
-- [Statistics](statistics.html), for test selection and its assumptions.
-- [Interoperability](with-cycondor.html), for combined use with cyCONDOR.
-- `?run_cyraven` for the option list;
-  `system.file("examples", package = "cyRAVEN")` for metadata templates.
+- [How it works](pipeline.html): the ten stages and the function implementing
+  each.
+- [Diagnostics](diagnostics.html): the checks that can invalidate a result, in
+  the order they have to be read.
+- [Output files](outputs.html): every file a run writes, with its columns.
+- [Statistics](statistics.html): test selection and its assumptions.
+- [Worked example](figures.html): every figure from the demonstration cohort,
+  with its interpretation.
+- [Scope](scope.html): what cyRAVEN does not do, and what to use instead.

@@ -145,7 +145,7 @@ default when omitted, and the default in force is stated in the run log.
 
 Populations, functional blocks and ratios are covered in the
 [Gating article](gating.html); thresholds, colours and metadata dictionaries in
-the [Options reference](options.html). One section belongs here, because it is
+the [Running cyRAVEN](usage.html). One section belongs here, because it is
 about the sheet:
 
 ```yaml
@@ -183,7 +183,14 @@ Which to use:
 # 5. Worked example
 
 ```bash
+# 0. the image, once. The Dockerfile refers to paths inside the package, so the
+#    build context is the repository root.
+git clone https://github.com/bhagesh-h/cyRAVEN.git
+cd cyRAVEN
+docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
+
 mkdir -p data results
+# put the FCS files in data/fcs/
 
 # 1. a sheet covering every file
 docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
