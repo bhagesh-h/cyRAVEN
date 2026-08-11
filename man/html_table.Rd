@@ -2,7 +2,7 @@
 % Please edit documentation in R/report.R
 \name{html_table}
 \alias{html_table}
-\title{Render a data.frame as an HTML table}
+\title{Legacy HTML table renderer}
 \usage{
 html_table(d, max_rows = 20L)
 }
@@ -12,6 +12,8 @@ html_table(d, max_rows = 20L)
 \item{max_rows}{rows beyond which the table is truncated, with a note}
 }
 \description{
-Render a data.frame as an HTML table
+Retained because the interactive tables are rendered from JSON in the
+browser; this is the static fallback used when a table is too small for
+searching to be worth the controls.
 }
 \keyword{internal}

@@ -2,19 +2,40 @@
 % Please edit documentation in R/report.R
 \name{report_section}
 \alias{report_section}
-\title{One report section: a question, its evidence, and where the numbers live}
+\title{Build one report section, embedding its figures and tables}
 \usage{
 report_section(
   outdir,
+  id,
   title,
-  question,
+  description,
   figures = character(0),
   tables = character(0),
   body = NULL,
-  max_rows = 20L
+  open = FALSE
 )
 }
+\arguments{
+\item{outdir}{the results directory.}
+
+\item{id}{anchor id, unique per section.}
+
+\item{title}{section heading, stated as what the section reports.}
+
+\item{description}{what the figures and tables below show and how to read them.}
+
+\item{figures}{figure filenames, embedded when present.}
+
+\item{tables}{table filenames, embedded when present.}
+
+\item{body}{optional raw HTML inserted before the figures.}
+
+\item{open}{whether the section starts expanded.}
+}
+\value{
+list(html, nav, n_fig, n_tab, bytes, used)
+}
 \description{
-One report section: a question, its evidence, and where the numbers live
+Build one report section, embedding its figures and tables
 }
 \keyword{internal}

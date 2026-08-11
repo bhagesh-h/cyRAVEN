@@ -17,7 +17,29 @@ across the batch, and it can fail in ways that a frequency table cannot express.
 The outputs below exist to detect those failures.
 
 Sections 1 to 3 are sufficient to reject most compromised runs and should be read
-first.
+first. `report.html` presents all of them in this order, embedded in one
+self-contained file.
+
+## 0. Before the run: `--check`
+
+Every check below is applied to a run that has already happened. Some failures
+are knowable before it starts, from the FCS headers alone: a file the sample
+sheet has no row for, a specification naming markers the panel does not contain,
+a group column that does not exist or has one level, a subject whose rows
+disagree about that subject.
+
+```bash
+docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
+  cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
+  --config /data/analysis.yaml --outdir /results --check
+```
+
+It reads keyword blocks rather than events, so it costs seconds regardless of
+cohort size, and writes nothing. A marker name that does not match `$PnS`
+exactly is the most common cause of an empty frequency table, and it is the
+first thing `--check` reports.
+
+Run it after every edit to either input file.
 
 ## 1. Gate inspection
 

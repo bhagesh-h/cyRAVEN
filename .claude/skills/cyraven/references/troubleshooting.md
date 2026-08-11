@@ -3,6 +3,93 @@
 Symptom, cause, fix. Everything here is a failure mode the code raises or guards
 against, not a hypothetical.
 
+## Start with the two things that answer most of this file
+
+**Before a run**, `--check` validates the inputs from FCS headers alone in
+seconds and writes nothing:
+
+```bash
+docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
+  cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
+  --config /data/analysis.yaml --outdir /results --check
+```
+
+It reports every marker resolved from the files, every specification entry
+matching none of them, whether the sheet covers every file, the group levels and
+their sizes, and the study variables available. Most of the sections below
+describe things `--check` catches first.
+
+**After a failed run**, `results/report.html` exists and carries the diagnosis:
+the error, the stage reached, the log leading up to it, what the message means
+for the data, the next action, and every output written before the failure. Ask
+for that file rather than for the terminal output, which the user may not have
+kept.
+
+## The sample sheet
+
+### "the sample sheet gives conflicting values for the same subject"
+
+The sheet has one row per FILE, so a subject with several acquisitions repeats
+that subject's attributes. Two of those copies disagree. cyRAVEN stops and names
+every conflict as `subject / column: value vs value`, because there is no
+defensible way to choose one.
+
+Fix the source data. Do not delete rows to make it pass: a deleted row is a
+dropped acquisition. A blank is not a conflict and is filled from the rows that
+carry a value.
+
+### "these input files are not in the sample sheet"
+
+The sheet has no row for a file that was discovered. Identifiers are never
+guessed from filename order, because a wrong guess mislabels a patient and
+nothing downstream reveals it.
+
+Regenerate a sheet covering everything, then merge your columns into it:
+
+```bash
+docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
+  --dir /data/fcs --recursive --write-samples /data/samples_new.csv
+```
+
+Matching is on basename, so a file moved between subdirectories still matches.
+
+### "--samples supersedes --sample-map, --patient-table"
+
+The unified sheet was combined with a flag it replaces. Keep `--samples` and
+drop the others; it carries all three. Two sources of truth for one fact is what
+the format removes.
+
+## The run was killed rather than failing
+
+### Exit code 137, no error message, no report
+
+The process was terminated from outside rather than stopping on an error. Confirm
+it:
+
+```bash
+docker inspect -f '{{.State.ExitCode}} {{.State.OOMKilled}}' <container>
+```
+
+`137 true` is the out-of-memory killer. **No report is written in this case, and
+none can be**: SIGKILL runs no handler, so R never reaches the code that would
+write one. An empty or half-filled results directory with no `report.html` is the
+signature.
+
+Two causes, in order of likelihood:
+
+1. **Two runs at once.** Peak memory is set by the events held at once, and the
+   embedding stage holds `--max-cells` cells across every marker. Two containers
+   each embedding 150,000 cells will exhaust a workstation. Run cyRAVEN analyses
+   **one at a time**; they are already multi-threaded and gain nothing from being
+   parallelised at the container level.
+2. **One run too large for the host.** Lower `--max-events-per-file` first, which
+   bounds the reading and gating stages, then `--cells-per-sample` and
+   `--max-cells`, which bound the embedding. Raise the Docker Desktop memory
+   limit if the host has the headroom.
+
+Steps 4b (gate placement uncertainty) and 6 (embedding) are where it will die:
+4b bootstraps every threshold, 6 holds the full cell matrix.
+
 ## Input discovery
 
 ### Fewer samples analysed than exist in the directory

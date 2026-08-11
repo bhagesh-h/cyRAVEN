@@ -113,6 +113,17 @@ for (i in seq_along(gv)) {
     stringsAsFactors = FALSE)
 }
 smap <- do.call(rbind, rows)
+
+# The unified sample sheet, which is the standard input: one row per FCS file
+# carrying its identity, its subject's attributes and its study variables. Column
+# order is chosen for reading rather than for the parser, which recognises them
+# by name.
+sheet <- smap[, c("file", "sample_id", "patient_id", "is_control",
+                  "cohort", "visit", "days")]
+write.csv(sheet, file.path(OUT, "samples.csv"), row.names = FALSE)
+
+# The same facts in the earlier three-file form, kept so the two routes can be
+# compared on identical data and so the older documented invocation still runs.
 write.csv(smap, file.path(OUT, "sample_map.csv"), row.names = FALSE)
 
 # ---- population specification ----------------------------------------------
@@ -176,7 +187,7 @@ writeLines(c(
 ), file.path(OUT, "panel.yaml"))
 
 say("wrote ", nrow(smap), " sample(s) to ", normalizePath(FCS))
-say("wrote sample_map.csv and panel.yaml to ", normalizePath(OUT))
+say("wrote samples.csv, panel.yaml and sample_map.csv to ", normalizePath(OUT))
 message("")
 message("cohort: ", paste(sprintf("%s n=%d", names(table(smap$cohort)),
                                   table(smap$cohort)), collapse = "; "))

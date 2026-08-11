@@ -238,7 +238,7 @@ is what cyRAVEN resolves from `$PnS`.
 |---|---|
 | `run_manifest.txt` | R and package versions, git commit, invocation, options, run status |
 | `miflowcyt.md` | The same run against the ISAC reporting checklist |
-| `report.html` | Every output above, in the order this documentation says to read them |
+| `report.html` | Every output above embedded in one self-contained file, in the order this documentation says to read them. Written for failed runs too, with a diagnosis |
 | `patient_metadata_english.csv` | Patient table after column mapping and value translation |
 | `absolute_counts.csv`, `absolute_counts.png` | Measured cells per microlitre per sample and population, written by `--absolute-counts` |
 | `absolute_counts_qc.csv`, `absolute_counts_qc.png` | The supplied counts against the frequencies this run measured, same flag |
@@ -293,14 +293,43 @@ keyword the file does not carry is written as `not recorded in the FCS file`
 rather than dropped. Both follow the same rule: an absent line reads as a line
 that did not apply, and neither of those is true here.
 
-`report.html` is the reading order made navigable: each section states the
-question it answers, shows the figures behind it, and links the tables. A run
-that excluded samples says so above every result. It references the figures
-beside it rather than embedding them, so it is read in the results directory.
+### `report.html`
 
-`--no-miflowcyt` and `--no-report` skip those two. `--write-config` and
-`--write-sample-map` terminate after writing and cannot be combined with a full
-run.
+The reading order made navigable, and the one file worth sending to someone
+else. Each section states what it reports and how to read the outputs under it,
+and a run that excluded samples says so above every result.
+
+It is **self-contained**. Every figure is embedded at full resolution and every
+table in full, so it can be moved, attached to an email or archived on its own;
+it references no other file, loads no font or script from a network, and works
+from a `file://` path. A report whose images live beside it becomes a page of
+broken icons the moment it is moved, and a result that cannot survive being
+moved is not a record.
+
+| Feature | Behaviour |
+|---|---|
+| Sections | Collapsible, with a sidebar indexing every section, figure and table, and expand/collapse-all |
+| Figures | Uniform display box whatever the native aspect ratio; click to zoom, with keyboard `+`/`-` and Escape; download the original PNG at full resolution |
+| Tables | Searchable across all columns, sortable by clicking a heading, shown 10, 50, 100 or all rows, scrollable with a sticky header |
+| Export | Any table exports to CSV exactly as filtered and sorted, so what you export is what you were looking at |
+| Completeness | Every figure and table the run wrote appears; anything no section names is collected under "Further outputs" rather than omitted |
+
+Its size is the sum of the figures it carries, which on a full run is tens of
+megabytes. A table larger than 8 MB is named with its row count instead of being
+embedded, which in practice means only the per-cell exports; the limit is
+`options(cyRAVEN.report_table_max_mb = )`.
+
+**A run that fails writes it too.** The diagnosis comes first: the error, the
+stage the run reached, the log leading up to it, what the message means for the
+data rather than for R, and the next action. Everything produced before the
+failure is embedded below, because that partial output is usually where the
+evidence is. A `gating_qc.png` written before the failure often shows the cause
+directly.
+
+`--no-miflowcyt` and `--no-report` skip those two. `--write-config`,
+`--write-samples` and `--write-sample-map` terminate after writing and cannot be
+combined with a full run, and `--check` validates the inputs and exits without
+writing anything.
 
 The FlowJo export writes one pooled file, one per sample and one per group. Open
 `_ALL_SAMPLES.fcs`, plot UMAP-1 against UMAP-2, and decode the Population,
