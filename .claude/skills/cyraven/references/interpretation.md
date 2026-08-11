@@ -288,6 +288,22 @@ interpretation and changes sign without a change in biology.
 p-values, hypothesis-generating. Event counts are set by acquisition duration, so
 a test over pooled events derives its degrees of freedom from instrument time.
 
+**`functional_markers_stats.csv`** is the same measure restricted to the
+`functional_blocks:` scoping in the config, which is what makes it interpretable:
+a marker is reported only where it means something. Before reading a row, check
+that its marker is not one of the definers of its population. A percent positive
+pinned at 100 or 0 in every sample, with zero variance and an NA or 1.0 p-value,
+is that mistake and not a null result. Say so rather than reporting the null.
+
+### 5.4 Declared ratios
+
+**`population_ratios_stats.csv`**
+
+A ratio of two declared populations, tested exactly as abundance is. It is worth
+reading separately when both populations are percentages of the same parent,
+because then a shift in either one moves both frequencies and the ratio is the
+only quantity that isolates their relative change.
+
 ## 6. Confounding
 
 ### 6.1 Covariates

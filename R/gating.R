@@ -51,8 +51,15 @@ derive_scatter_gate <- function(ex, sc, fsc_hi_q = 0.999,
 #' @param k Neighbourhood size, or number of clusters, depending on the function. Default `3`.
 #' @keywords internal
 derive_singlet_band <- function(ex, sc, parent_mask, k = 3) {
-  if (!all(c("FSC-H", "FSC-A") %in% names(sc))) {
-    log_msg("  FSC-H absent, singlet gate skipped (all parent events retained)")
+  # The two must be present AND be different columns. On a height-only
+  # acquisition the reading stage points FSC-A at the height channel so the
+  # scatter gate can run, which would otherwise make this ratio identically 1:
+  # a MAD of zero, a band of zero width, and every event discarded.
+  have_both <- all(c("FSC-H", "FSC-A") %in% names(sc)) &&
+               !identical(unname(sc[["FSC-H"]]), unname(sc[["FSC-A"]]))
+  if (!have_both) {
+    log_msg("  no distinct FSC-H and FSC-A, singlet gate skipped ",
+            "(all parent events retained)")
     return(list(lo = NA_real_, hi = NA_real_, ratio = NULL,
                 mask = parent_mask, skipped = TRUE))
   }

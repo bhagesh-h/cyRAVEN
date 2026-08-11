@@ -1,0 +1,188 @@
+---
+title: "Options reference"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Options reference}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+Every command-line option, its default, and what it changes. The same names are
+the element names of the list passed to `run_cyraven()`, with hyphens replaced by
+underscores: `--group-column` on the command line is `group_column = ` in R.
+
+`docker run --rm cyraven:0.4.0 --help` prints the same list at the version
+installed.
+
+## The governing convention
+
+Options divide into three classes, and the class determines the default.
+
+**Additive.** Produces a new output and alters nothing that existed. On by
+default, because an analysis that has to be requested is one that is not run. The
+`--no-*` flags switch these off.
+
+**Parametric.** Changes how an existing quantity is computed. Defaults are the
+values the pipeline was validated with; changing one changes results and is the
+user's decision to record.
+
+**Consequential.** Changes numbers the previous run reported, by design. Off by
+default without exception, and recorded in `run_manifest.txt` when used. There
+are five: `--transform`, `--correct-batch`, `--drop-unstable-events`,
+`--subsample rare` and `--calibration-beads`.
+
+## 1. Input
+
+| Option | Default | Effect |
+|---|---|---|
+| `--files` | none | Comma-separated paths, or a glob in quotes |
+| `--dir` | none | Directory to search for `.fcs`. Alternative to `--files` |
+| `--recursive` | off | Search `--dir` recursively, for cohorts in subdirectories |
+| `--pattern` | `[.]fcs$` | Regex for filenames under `--dir`. Any file containing `.fcs` that fails the pattern is listed as a warning rather than silently skipped |
+| `--exclude` | compensation controls | Regex; matching paths are dropped after discovery. The default removes single-stain setup files, which carry no CD45 population and form a spurious panel group. `--exclude ''` keeps everything |
+| `--max-events-per-file` | 0, meaning all | Read at most N events per file, sampled evenly through the acquisition rather than taken from the start. Bounds peak memory, and raises every detection limit in proportion because it lowers the parent-gate count |
+| `--outdir` | `results` | Output directory |
+
+## 2. Metadata
+
+| Option | Default | Effect |
+|---|---|---|
+| `--sample-map` | none | CSV linking each filename to a sample, patient, group and control status. Only `file` is required. Also carries `fmo_for` and `control_group` |
+| `--patient-table` | none | Clinical covariates keyed on patient identifier. Supplies `wbc_per_ul` for absolute concentrations |
+| `--absolute-counts` | none | Externally measured absolute counts, wide format. Requires `--sample-map` |
+| `--reference-date` | today | `YYYY-MM-DD` used to derive age from date of birth and to place two-digit years. Set it to a fixed study date so ages do not change between runs |
+| `--group-column` | resolved `cohort` | Column defining the comparison groups. Enables the between-group figure and tests |
+| `--reference-group` | first alphabetically | The group every other is tested against. Drawn unfilled and leftmost |
+| `--write-sample-map` | none | Write a template and exit |
+| `--write-config` | none | Derive everything, write the resulting YAML, and exit. Shows what the pipeline detected before time is spent |
+| `--config` | built-in spec | YAML carrying the population specification, threshold overrides, `sample_overrides`, colours and metadata translations |
+
+## 3. Transformation and gating
+
+| Option | Default | Effect |
+|---|---|---|
+| `--transform` | `arcsinh` | `arcsinh`, `logicle` or `none`. **Consequential**: it moves every threshold. For dim markers it decides whether a stable threshold exists at all |
+| `--cofactor` | derived per panel | Fixed arcsinh cofactor. The conventional value of 5 comes from mass cytometry and over-expands the background band on unmixed fluorescence, which is why it is estimated rather than assumed |
+| `--cofactor-from-first-sample` | off | Derive the cofactor from the first file only, as before pooling was introduced |
+| `--logicle-m` | 4.5 | Decades on the logicle display scale |
+| `--singlet-mad-k` | 3 | Singlet band half-width in MADs of the FSC-H:FSC-A ratio. The gate is skipped, with a log line, when the two are not distinct channels |
+| `--viability-marker` | auto-detect | Name the dye where the pattern is ambiguous |
+| `--min-cd45-pct` | 5 | Staining QC floor, percent CD45<sup>+</sup> of live |
+| `--include-qc-failed` | off | Keep declared samples that failed staining QC. Their percentages carry no evidence; `staining_qc.csv` records which were forced in |
+
+## 4. Uncertainty and detection limits
+
+| Option | Default | Effect |
+|---|---|---|
+| `--no-uncertainty` | on | Skip the gate placement uncertainty analysis. With it off the previous output is reproduced byte for byte |
+| `--uncertainty-boot` | 100 | Bootstrap replicates per threshold. Below about 50 the standard uncertainty is itself noisy |
+| `--uncertainty-max-events` | 20000 | Events per replicate. The cut is a histogram feature and stops moving well before the whole parent gate is used |
+| `--lod-events` | 20 | Events below which a population is reported below the limit of detection |
+| `--loq-events` | 50 | Events below which it is detected but not quantified. Roughly a 14% counting CV, against 22% at the detection limit |
+
+## 5. Acquisition and panel quality
+
+| Option | Default | Effect |
+|---|---|---|
+| `--no-acquisition-qc` | on | Skip the acquisition stability check |
+| `--acquisition-bins` | 40 | Equal-width Time intervals per file. More bins resolve a shorter disturbance and make each interval's median noisier |
+| `--acquisition-mad-k` | 5 | Robust z above which an interval is flagged |
+| `--drop-unstable-events` | off | **Consequential**: exclude the flagged intervals, which changes every count, threshold and frequency in the affected files. Read `acquisition_qc_impact.csv` first |
+| `--no-spreading` | on | Skip the spillover spreading report |
+| `--spreading-max-samples` | 8 | Samples contributing to the spreading ranking, which stabilises well before a whole cohort is used |
+
+## 6. Embedding
+
+| Option | Default | Effect |
+|---|---|---|
+| `--cells-per-sample` | 20000 | Cells drawn per sample for the embedding |
+| `--max-cells` | 200000 | Overall ceiling per embedding. The per-sample allowance is reduced proportionally if the total would exceed it |
+| `--subsample` | `uniform` | `uniform` reproduces the sample's composition; `rare` weights by inverse local density so a population too small to form a cluster can be recovered. **Consequential**: it changes which cells are embedded and adds `sampling_weight` to `cells_umap.csv` |
+| `--umap-markers` | built-in lineage list | Comma-separated features. Override this where the default list matches fewer than two markers, rather than relying on the all-eligible fallback |
+| `--umap-markers-all` | off | Use every eligible marker instead of preferring lineage markers |
+| `--n-neighbors` | 30 | UMAP neighbourhood size. Larger values favour global structure |
+| `--min-dist` | 0.3 | UMAP minimum distance. Smaller values pack clusters more tightly |
+| `--save-umap-model` | none | Persist the trained model so a later batch can be projected into the same embedding |
+| `--umap-model` | none | Project into a saved model instead of embedding fresh. Right for more of the same kind of sample, wrong for a new panel or cell type |
+| `--threads` | 0, meaning all cores | UMAP threads |
+
+## 7. Clustering and learned gates
+
+| Option | Default | Effect |
+|---|---|---|
+| `--cluster` | off | Self-organising map clustering and the cross-check against the specification. The only output that can find a population the specification does not describe |
+| `--cluster-k` | 12 | Metaclusters |
+| `--cluster-grid` | 10 | SOM grid side; the map has grid<sup>2</sup> nodes |
+| `--auto-subcluster-k` | off | Choose the subcluster count per population by mean silhouette. Changes the subcluster lettering, so it is opt-in |
+| `--explain-clusters` | off | Learn a two-marker gating strategy for each cluster the specification does not describe. Requires `--cluster`. Descriptive: it proposes gates and never changes a scored one |
+| `--explain-max-clusters` | 4 | Ceiling on strategies derived. The largest qualifying clusters are taken and the number skipped is logged |
+| `--explain-max-depth` | 4 | Maximum gates in a strategy. More levels raise precision and cost recall; the search stops early when another gate does not earn its place |
+
+## 8. External labels and gate export
+
+| Option | Default | Effect |
+|---|---|---|
+| `--external-labels` | none | CSV of cell labels from another tool. Learns a gating strategy per label and measures whether it holds on donors it was not fitted to |
+| `--external-max-labels` | 6 | Ceiling on labels gated; the largest are taken and the number skipped is logged |
+| `--transfer-max-donors` | 8 | Leave-one-donor-out folds. Every fold refits, so cost is one fit per donor per label. The subset is drawn at random rather than taken as the largest donors, because a worst-donor score computed on the best-represented donors is optimistic |
+| `--transfer-max-cells` | 20000 | Training cells per fold, stratified by label. The held-out donor is always scored in full |
+| `--export-gates` | off | Write learned gates as ISAC Gating-ML 2.0 and as a vertex table, in the linear units the FCS file stores |
+| `--flowjo-export` | off | Also write UMAP-annotated FCS for interactive inspection |
+| `--flowjo-outdir` | `<outdir>/flowjo` | Directory for that export |
+| `--flowjo-no-concat` | off | Skip the concatenated `_ALL_SAMPLES.fcs` |
+| `--flowjo-no-groups` | off | Skip the per-group files |
+
+## 9. Statistics
+
+| Option | Default | Effect |
+|---|---|---|
+| `--p-adjust-display` | `raw` | Which p-value the figure brackets show, `raw` or `BH`. Both are always written to the CSV |
+| `--no-differential-state` | on | Skip the sample-level differential-state tests |
+| `--no-compositional` | on | Skip the centred log-ratio re-test and its concordance table |
+| `--no-confounding` | on | Skip the age and sex confounding diagnostic |
+| `--covariates` | `age,sex` | Patient-table columns screened as confounders |
+| `--rank-ancova` | off | Additionally fit an exploratory covariate-adjusted rank ANCOVA. At single-digit n per group the adjustment is usually extrapolation; read `confounding_diagnostics.csv` first |
+| `--paired-column` | none | Column identifying the pairing unit, for example donor. Requires `--condition-column`. Pairing cannot be inferred, so nothing paired runs without it |
+| `--condition-column` | none | Column naming the condition within a pair, for example timepoint |
+| `--no-threshold-drift` | on | Skip the check for thresholds that differ systematically between groups |
+| `--no-heatmaps` | on | Skip the phenotype and cohort composition heatmaps |
+| `--other` | off | Draw the `Other CD45+` catch-all on the UMAP figures. A display choice only: those cells are always gated, counted and tabulated |
+
+## 10. Batch structure
+
+| Option | Default | Effect |
+|---|---|---|
+| `--batch-column` | `$DATE` where it varies | Column identifying the acquisition batch. Enables iLISI, Cramér's *V*, per-marker distributional drift and the threshold test grouped by batch |
+| `--correct-batch` | off | **Consequential**: align each marker across batches by monotone quantile mapping. Applied to the embedding and clustering, not to per-sample thresholds, which are batch-local by construction |
+| `--batch-max-cramers-v` | 0.6 | Refuse correction above this association between batch and group. Above it, removing the batch and removing the finding are the same operation |
+| `--force-batch-correction` | off | Correct anyway. Recorded in the manifest, and the finding cannot then be attributed to biology |
+
+## 11. Calibration
+
+| Option | Default | Effect |
+|---|---|---|
+| `--calibration-beads` | none | **Consequential**: FCS of calibration beads acquired on the same instrument and settings. Converts channel units to the assigned units before any threshold is derived, so every intensity in the run changes |
+| `--calibration-values` | none | CSV of assigned bead values, wide or long. Supplied by the manufacturer for that lot |
+| `--calibration-min-r2` | 0.98 | Fit quality below which a channel is left in instrument units rather than converted on a fit that does not hold |
+
+## 12. Conformance across runs
+
+| Option | Default | Effect |
+|---|---|---|
+| `--write-baseline` | none | Record where this run placed each threshold, how variable it was, how often it needed the fallback, and what the populations came out at. Does not end the run |
+| `--baseline` | none | Test this run against a baseline written earlier. Catches drift that moved a whole cohort, which the within-run peer check cannot see |
+| `--fail-on-drift` | off | Exit non-zero when any marker or population fails conformance. Raised after every output has been written |
+
+## 13. Reporting and session
+
+| Option | Default | Effect |
+|---|---|---|
+| `--no-report` | on | Skip `report.html`, which indexes every output in the documented reading order |
+| `--no-miflowcyt` | on | Skip `miflowcyt.md`, the ISAC-structured record of the instrument and the analysis |
+| `--no-session` | on | Skip `session_state.RData` |
+| `--keep-exprs` | off | Include raw expression matrices in the saved session. Large |
+| `--seed` | 42 | RNG seed. Seeded once per run; every stage that consumes draws restores the stream so the embedding cannot shift |

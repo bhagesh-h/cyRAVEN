@@ -77,11 +77,26 @@ docker run --rm -v "$PWD/demo:/demo" \
   /opt/cyraven/src/inst/scripts/demo_data.R /demo
 ```
 
-This fetches two public CytoTrol acquisitions and partitions them into eight
-pseudo-samples. **The `cohort` column it writes is randomised**: every
-pseudo-sample comes from the same tube, so the true group difference is zero and
-any significant result is a false positive. State that whenever you present
-numbers from it. It is a calibration check, not a demonstration of sensitivity.
+No download is needed: this writes 35 samples from the graft-versus-host disease
+cohort that ships with flowCore, five allogeneic transplant recipients across
+seven visits stained with a four-colour myeloid panel, together with
+`sample_map.csv` and `panel.yaml`. Run it with
+
+```
+--group-column cohort --reference-group "GvHD grade 1" --batch-column visit --cluster
+```
+
+Three properties constrain what may be said about the result, and you should
+state them whenever you present numbers from it. Both groups are transplant
+recipients, so the contrast is GvHD grade 1 against grade 3 and not disease
+against health. The groups are unbalanced, 7 samples against 28, and grade is a
+property of the patient, so a between-group difference is partly a between-donor
+difference. And the acquisition carries pulse height with no area, so cyRAVEN
+falls back to height and the singlet gate is skipped.
+
+The group contrast on this cohort is null after correction. It demonstrates the
+diagnostics on genuinely imperfect clinical data, not sensitivity to a known
+effect.
 
 ### Iterating on the code
 

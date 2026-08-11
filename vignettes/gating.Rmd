@@ -256,7 +256,62 @@ receptor chains. A T cell panel of CD3, CD4, CD8, CD38, HLA-DR, CCR7 and CD45RA
 intersects it in three populations of fifteen. It is a worked example, not a
 default suitable for arbitrary panels.
 
-### 3.5 Provenance
+### 3.5 Markers read inside a population
+
+A marker can be used to define a population or measured inside one. The two are
+different questions, and the second is declared in `functional_blocks:`.
+
+```yaml
+functional_blocks:
+  CD33 on gated myeloid subsets:
+    markers: [CD33]
+    populations: [Granulocytes, Monocytes]
+  activation:
+    markers: [CD69, HLA-DR, CD25]
+    require: CD3
+  exhaustion:
+    markers: [LAG-3, TIM-3, PD-1]
+    exclude: [Classical monocytes, Non-classical monocytes]
+```
+
+Each block reports its markers' median intensity and percent positive within the
+populations it is scoped to, and `functional_markers_stats.csv` tests them
+between groups exactly as abundance is tested. Scope is resolved in one of three
+ways, in this order of precedence: an explicit `populations:` list; `require:`, a
+marker whose direction must be `above` in a population's definition for that
+population to be included; or `exclude:`, a list omitted from an otherwise
+complete set. Expressing scope as a rule means adding a population to
+`populations:` scores it under the right blocks with no further edit.
+
+`population_marker_mfi.csv` already reports every marker in every population.
+The point of a block is the scoping, and it has one requirement that matters: a
+marker must not be read inside a gate its own threshold helped draw. Testing CD15
+within a CD15-positive population returns 100 percent in every sample, so the
+result has zero variance and an undefined p-value, and it measures the definition
+rather than the biology. Declaring `functional_blocks:` in the config replaces
+the built-in blocks entirely rather than adding to them; see
+`?default_functional_blocks` for what those are.
+
+### 3.6 Ratios between populations
+
+```yaml
+ratios:
+  gran_lymph:
+    label: "Granulocyte:lymphocyte ratio"
+    numerator: Granulocytes
+    denominator: Lymphocytes
+```
+
+A ratio of two declared populations is written to `population_ratios.csv` and
+tested with the same statistics as any abundance. It is declared rather than
+computed after the fact because when both populations are percentages of the same
+parent, the ratio is not recoverable from either frequency on its own once the
+parent has changed between samples.
+
+There is no default. A ratio hard-coded to population names that a given panel
+does not contain would be silently meaningless, so the block is opt-in.
+
+### 3.7 Provenance
 
 The specification is not estimated from the data. A specification fitted to the
 samples against which it is subsequently tested cannot be falsified by them, and
