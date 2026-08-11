@@ -39,9 +39,13 @@ docker images | grep cyraven
 
 ### Build
 
-From the package root, the directory holding `DESCRIPTION`:
+The Dockerfile refers to paths inside the package, so the build context is the
+repository root, the directory holding `DESCRIPTION`. If the user does not
+already have a checkout:
 
 ```bash
+git clone https://github.com/bhagesh-h/cyRAVEN.git
+cd cyRAVEN
 docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
 ```
 
