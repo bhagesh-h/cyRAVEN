@@ -19,7 +19,7 @@ between samples does not remove that variance, it converts it into a bias that
 tracks staining intensity. cyRAVEN removes the analyst from threshold placement
 and quantifies what remains.
 
-Current version: 0.4.0.
+Current version: 1.0.0.
 
 ## Execute through Docker
 
@@ -42,29 +42,94 @@ docker images | grep cyraven
 From the package root, the directory holding `DESCRIPTION`:
 
 ```bash
-docker build -f inst/scripts/Dockerfile -t cyraven:0.4.0 .
+docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
 ```
 
 15 to 25 minutes on a first build. It ends by running `--help` and printing every
 package version, so a broken image fails at build time.
 
+### The two inputs
+
+A run takes the FCS directory, **one CSV** and **one YAML**.
+
+- `--samples samples.csv` — one row per FCS file: what it is (`file`,
+  `sample_id`, `is_control`, `panel`, `fmo_for`), whose it is (`patient_id`,
+  `cohort`, `sex`, `age_years`, …), any study variable under its own name, and
+  externally measured counts in `count.<Population>` columns.
+- `--config analysis.yaml` — the analysis: `populations:`,
+  `functional_blocks:`, `ratios:`, `sample_overrides:`, `colors:`, `metadata:`,
+  and a `samples:` section naming which column is the group and which the batch.
+
+Anything varying per sample goes in the CSV; anything that is one decision for
+the whole study goes in the YAML.
+
+`--sample-map`, `--patient-table` and `--absolute-counts` still work and are not
+deprecated, but **cannot be combined with `--samples`**. Prefer `--samples` for
+new work; leave existing three-file invocations alone.
+
 ### Run
 
+Never hand-author the sheet, and never run before checking. This sequence:
+
 ```bash
+# 1. a sheet with a row for every file
+docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
+  --dir /data/fcs --recursive --write-samples /data/samples.csv
+
+# 2. user fills in patient_id, cohort and any study variable
+
+# 3. validate against the FCS headers, seconds, writes nothing
+docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
+  cyraven:1.0.0 --dir /data/fcs --recursive \
+  --samples /data/samples.csv --config /data/analysis.yaml \
+  --outdir /results --check
+
+# 4. run
 docker run --rm \
   -v "$PWD/data:/data:ro" \
   -v "$PWD/results:/results" \
-  cyraven:0.4.0 \
-  --dir /data/fcs \
-  --sample-map /data/sample_map.csv \
-  --config /data/panel.yaml \
+  cyraven:1.0.0 \
+  --dir /data/fcs --recursive \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
   --group-column cohort --reference-group "Healthy controls" \
+  --batch-column acquisition_date --cluster \
+  --no-session \
   --outdir /results
 ```
 
+**Always run `--check` first and show the user its output.** It reports the
+markers resolved from the files, any specification entry matching none of them,
+whether the sheet covers every file, the group levels and their sizes, and the
+available study variables. A marker-name mismatch caught there costs a second;
+caught during a run it costs the run. It is the single highest-value habit when
+driving this tool.
+
+`--no-session` is worth adding on any large cohort: `session_state.RData` can
+reach several hundred MB and dominate the runtime, and no result depends on it.
+
 Every path inside a flag is a container path. `--outdir` must fall inside a
 mounted volume or the output is lost when the container exits. On Windows
-PowerShell use `${PWD}`.
+PowerShell use `${PWD}`; on Git Bash prefix with `MSYS_NO_PATHCONV=1`.
+
+Annotated templates for both files:
+
+```bash
+docker run --rm --entrypoint sh cyraven:1.0.0 -c \
+  'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml'
+docker run --rm --entrypoint sh cyraven:1.0.0 -c \
+  'cat /usr/local/lib/R/site-library/cyRAVEN/examples/samples_template.csv'
+```
+
+### The one hazard of the single sheet
+
+Subject attributes repeat on every row of that subject, so two rows of one
+patient can disagree about that patient's sex. cyRAVEN **stops** and names every
+conflict as `subject / column: value vs value` rather than picking one. When
+assembling a sheet from several sources, expect this and fix the source data; do
+not work around it by deleting rows.
+
+A blank is not a disagreement; it is filled from the rows that have a value.
 
 ### Demonstration data
 
@@ -73,7 +138,7 @@ When the user has no data to hand, or wants to see the output shape first:
 ```bash
 mkdir -p demo results
 docker run --rm -v "$PWD/demo:/demo" \
-  --entrypoint Rscript cyraven:0.4.0 \
+  --entrypoint Rscript cyraven:1.0.0 \
   /opt/cyraven/src/inst/scripts/demo_data.R /demo
 ```
 
@@ -106,7 +171,7 @@ a rebuild.
 
 ```bash
 docker run --rm -v "$PWD:/src:ro" -v "$PWD/results:/results" \
-  -e CYRAVEN_SOURCE=/src cyraven:0.4.0 --dir /data/fcs --outdir /results
+  -e CYRAVEN_SOURCE=/src cyraven:1.0.0 --dir /data/fcs --outdir /results
 ```
 
 Full build detail, resource tuning, Windows path handling and container-specific
@@ -117,7 +182,8 @@ failures are in `references/docker.md`.
 | The task | Go to |
 |---|---|
 | Run it on a batch of files | The commands above, then `references/docker.md` |
-| Write the population YAML or sample map | `references/gating.md` §3 |
+| Build or fix the sample sheet | The Inputs section below |
+| Write the population YAML | `references/gating.md` §3 |
 | Decide arcsinh against logicle | `references/gating.md` §4 |
 | Read the outputs | `references/interpretation.md`, in its order |
 | A run failed, or the numbers look wrong | `references/troubleshooting.md` |
@@ -133,18 +199,35 @@ conclude.
    setup files with no CD45 population and form their own spurious panel group if
    admitted. `--exclude ''` keeps everything.
 
-2. **Sample map** (`--sample-map`). Only `file` is required.
+   Watch the filename pattern. Files named `*.fcs copy` (a common artefact of
+   copying on macOS and Windows) do not match the default `[.]fcs$` and are
+   listed as skipped rather than silently dropped. The log states the fix:
+   `--pattern '[.]fcs( copy)?$'`.
+
+2. **Sample sheet** (`--samples`). Only `file` is required.
 
    ```csv
-   file,sample_id,patient_id,timepoint,is_control
-   donor01.fcs,D01,P01,baseline,FALSE
-   unstained.fcs,UNS,,,TRUE
+   file,sample_id,patient_id,is_control,cohort,sex,age_years,batch,count.Granulocytes
+   donor01.fcs,D01,P01,FALSE,Patients,male,41,2025-03-11,5120
+   donor01_v2.fcs,D01v2,P01,FALSE,Patients,male,41,2025-06-02,4380
+   unstained.fcs,UNS,,TRUE,,,,2025-03-11,
    ```
 
-   `is_control = TRUE` marks an unstained control tube. Those samples are
-   excluded from testing without being recorded as QC failures, and their 99.5th
-   percentile can anchor a threshold for a marker with no resolvable density
-   minimum. `--write-sample-map` emits a template.
+   Reserved acquisition columns: `file`, `sample_id`, `well`, `patient_id`,
+   `panel`, `timepoint`, `is_control`, `fmo_for`, `control_group`.
+   Reserved subject columns: `patient_id`, `cohort`, `sex`, `age_years`,
+   `date_of_birth`, `height_cm`, `weight_kg`, `infection_focus`, `wbc_per_ul`.
+   Anything else is a study variable usable as `--group-column` or
+   `--batch-column`. Anything prefixed `count.` is an absolute count.
+
+   `is_control = TRUE` marks a control tube. Those samples are excluded from
+   testing without being recorded as QC failures, and their 99.5th percentile can
+   anchor a threshold for a marker with no resolvable density minimum.
+   `fmo_for` names the markers a file is the fluorescence-minus-one control for.
+
+   Headers resolve through an alias map covering English and German spellings, so
+   `Patient ID` and `Geschlecht` work unchanged. `--write-samples` emits a
+   template covering every file in the directory; use it rather than writing one.
 
 3. **Population spec** (`--config`). See `references/gating.md` §3. Without it the
    built-in specification is used, which is a worked example for one
@@ -162,6 +245,8 @@ Analyses that only add output are on by default. Analyses that change an existin
 number are opt-in. That rule is deliberate and worth preserving in any change.
 
 ```bash
+--check                    # validate inputs from FCS headers, exit; run this first
+--write-samples s.csv      # template covering every input file, then exit
 --transform logicle        # instead of arcsinh; changes every threshold
 --cluster                  # SOM clustering, then cross-check against the spec
 --explain-clusters         # learn gate geometry for undescribed clusters
@@ -182,9 +267,15 @@ number are opt-in. That rule is deliberate and worth preserving in any change.
 --no-spreading             # skip the spillover spreading report
 --no-miflowcyt             # skip the ISAC-structured report
 --no-report                # skip report.html
+--no-session               # skip session_state.RData; often most of the runtime
 --max-events-per-file N    # bound memory; also raises every detection limit
 --include-qc-failed        # keep samples that failed staining QC
 ```
+
+`--include-qc-failed` admits QC-failed samples to **every** stage, not only the
+embedding; there is no embedding-only form. Under it `qc_status` reads `pass`
+for all samples and only the `verdict` column still records that the sample had
+no usable parent gate. Say both things whenever you use it.
 
 Three of these change numbers the previous run reported and default to off:
 `--drop-unstable-events` changes every count in an affected file,
@@ -194,6 +285,30 @@ changes the units every intensity is expressed in. Say so when you use them.
 `--cluster` is the only output that can find a population the specification does
 not describe. It is off by default because it costs runtime, not because it is
 peripheral to the argument the package makes.
+
+## The report
+
+`report.html` is the one file to point the user at. It is **self-contained**:
+every figure embedded at full resolution, every table embedded in full, no
+external reference of any kind. It can be emailed or archived on its own.
+
+Sections are collapsible with a sidebar index. Figures share one display box
+whatever their aspect ratio, zoom on click, and download at full resolution.
+Tables are searchable, sortable, paged at 10/50/100/all rows, and export to CSV
+exactly as filtered and sorted. Section headings state what they report rather
+than posing a question, and each carries a description of how to read the
+outputs beneath it.
+
+Its size is the sum of its figures, so tens of megabytes on a full run. That is
+the price of self-containment and is expected, not a fault. A table over 8 MB is
+named with its row count instead of embedded, which in practice means only the
+per-cell exports.
+
+**A failed run writes it too**, with the diagnosis first: the error, the stage
+reached, the log leading up to it, what the message means for the data rather
+than for R, and the next action. Everything produced before the failure is
+embedded below. When a user reports a failed run, ask for `report.html` — it
+carries the log, so they do not need to have kept the terminal output.
 
 ## Analytical constraints
 

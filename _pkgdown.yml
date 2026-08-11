@@ -204,11 +204,21 @@ reference:
   - starts_with("fig_")
   - theme_cyto
 
-- title: Metadata and export
+- title: Inputs
+  desc: >
+    The sample sheet is one row per FCS file, carrying its identity, its
+    subject's attributes, its study variables and any externally measured
+    counts. It is read into the same structures the three separate loaders
+    below produce, by calling the same code, so the two routes cannot diverge.
   contents:
+  - read_samplesheet
+  - samplesheet_columns
   - load_patient_table
   - load_sample_map
   - load_absolute_counts
+
+- title: Metadata and export
+  contents:
   - export_flowjo_fcs
 
 - title: Appearance and session state
@@ -233,9 +243,10 @@ articles:
 - title: Setting up a run
   navbar: Setting up a run
   desc: >
-    Declaring the populations to be scored, and the command-line reference for
-    every flag that changes what a run does.
+    The two input files, how to declare the populations to be scored, and the
+    command-line reference for every flag that changes what a run does.
   contents:
+  - inputs
   - gating
   - options
 

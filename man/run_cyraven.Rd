@@ -11,6 +11,9 @@ run_cyraven(opt)
 default. See build_option_list() for the full set.}
 }
 \description{
-run_cyraven
+Runs the pipeline. A run that stops on an error still writes \code{report.html},
+carrying the diagnosis and every output produced before the failure, and then
+re-raises the original error unchanged so the exit status and the message a
+caller sees are what they would have been.
 }
 \keyword{internal}

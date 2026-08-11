@@ -1,3 +1,144 @@
+# cyRAVEN 1.0.0
+
+Two changes to how a run is specified and how its result is read, and a version
+number that says the interface is now settled. Every option, output file, column
+name and value that 0.4.0 produced is produced identically; nothing is renamed
+and nothing is removed.
+
+## One CSV and one YAML
+
+* A run needed up to three tables: a sample map keyed by filename, a patient
+  table keyed by patient identifier, and an absolute-count export keyed by
+  whichever of the two the counting instrument happened to write. Each is a
+  different shape with a different key, and the joins between them are where
+  cohorts get mislabelled: a patient present in one and absent from another
+  produces no error, only an empty covariate panel or a silently dropped count.
+* `--samples` takes one sheet with a row per acquired file, carrying every fact
+  about that file: what it is, whose it is, which group and batch it belongs to,
+  and any externally measured counts in `count.<Population>` columns. One key,
+  one file, no joins. `--config` continues to carry the analysis. Between them
+  the two files specify a run completely, and the config's new `samples:` section
+  can name which column is the group and which the batch so that no further flag
+  is needed.
+* The split is deliberate. Anything varying per sample belongs in the CSV;
+  anything that is one decision for the whole study belongs in the YAML. Putting
+  an analysis choice in the CSV would repeat it on every row and invite the rows
+  to disagree about it.
+* The sheet is a different way to supply the same facts, not a different
+  analysis. The reader splits it into the same three structures the pipeline
+  always consumed and applies the same coercions by calling the same code:
+  `normalise_patient_columns()` was factored out of `load_patient_table()` so the
+  two routes cannot diverge in how they parse a date or translate a value. The
+  claim is measured rather than asserted: one study run both ways produced 31 of
+  31 tables and 22 of 22 figures byte-identical.
+* `--sample-map`, `--patient-table` and `--absolute-counts` still work exactly as
+  before and are not deprecated. They cannot be combined with `--samples`,
+  because two sources of truth for one fact is what the format removes.
+* One hazard the three-file shape did not have. A subject attribute is a property
+  of a patient, but the sheet has a row per FILE, so a patient with several
+  acquisitions repeats it. Two rows can therefore disagree about that patient's
+  sex. A reader taking the first value would silently pick one, so
+  `read_samplesheet()` reports every disagreement as
+  `subject / column: value vs value` and stops. A blank is not a disagreement and
+  is filled from the rows that carry a value.
+* `--write-samples` writes a sheet covering every file in the input directory,
+  with the filename-derived identifiers filled in. Identifiers are never inferred
+  from plate order at run time: a wrong guess mislabels a patient and nothing
+  downstream reveals it, so a file the sheet does not cover is a fatal error.
+* Annotated templates ship as `inst/examples/samples_template.csv` and
+  `inst/examples/analysis_template.yaml`.
+
+## Validation before the run rather than during it
+
+* `--check` reads FCS headers and the two input files, reports what the run would
+  do, and exits without analysing anything. It names every marker resolved from
+  the files, every specification entry matching none of them, whether the sheet
+  covers every file, the levels of the group column and their sizes, the number
+  of batches, and the study variables available.
+* Everything it catches was already knowable before the first event was read, and
+  was already being reported: partway through a run that costs many minutes on a
+  real cohort. A marker name not matching `$PnS` exactly is the most common cause
+  of an empty frequency table, and it was surfacing after the reading stage
+  rather than before it.
+* It reads keyword blocks rather than event matrices, so it costs seconds
+  regardless of cohort size.
+
+## The report is one self-contained file
+
+* `report.html` embedded nothing. It referenced the figures beside it, so moving
+  it produced a page of broken images, and a result that cannot survive being
+  moved is not a record.
+* Every figure is now embedded at full resolution and every table in full. The
+  file references nothing, loads no font or script from a network, and works from
+  a `file://` path. It can be attached to an email, put in a supplement or
+  archived on its own.
+* Base64 encoding is written out in `R/base64.R` rather than taken from a
+  package: the CRAN options would each add a dependency to an import list that is
+  deliberately short and a container image that is pinned, for fifteen lines with
+  no edge cases beyond padding. It is vectorised over the raw vector, because a
+  per-byte loop over a 6 MB PNG is minutes in R.
+* Sections are collapsible, with a sidebar indexing every section, figure and
+  table. Figures share one display box whatever their native aspect ratio, zoom
+  on click with keyboard control, and download at full resolution from the same
+  bytes that are already embedded, so nothing is stored twice. Tables are
+  searchable, sortable by column, shown 10, 50, 100 or all rows, and export to
+  CSV exactly as filtered and sorted.
+* Tables are carried as JSON and rendered in the browser rather than written as
+  markup. Over pre-rendered rows the export would re-parse the DOM and the search
+  would hide rather than filter; carrying the data means all three operations
+  read one array, so what is exported is what was filtered.
+* Section headings state what the section reports rather than posing a question,
+  and each carries a description of what its figures and tables show and how to
+  read them.
+* No output can be silently omitted. The named sections put files in reading
+  order; anything a section does not name is collected under "Further outputs"
+  rather than dropped. A table above 8 MB is named with its row count instead of
+  being embedded, which in practice means only the per-cell exports, whose row
+  count is the number of cells; the limit is
+  `options(cyRAVEN.report_table_max_mb = )`.
+* The file is large, tens of megabytes on a full run, and its size is logged.
+  That is the cost of self-containment and is stated rather than discovered.
+
+## A failed run explains itself
+
+* A run that failed left the outputs written before it stopped, a manifest marked
+  `failed`, and an R error on stderr that whoever opens the results directory
+  afterwards may never have seen. Reconstructing what happened meant reading a
+  stack trace out of a container log.
+* A failed run now writes `report.html` too, with the diagnosis first: what
+  stopped it, which stage it reached, the log leading up to that point, what the
+  message means in the vocabulary of the analysis rather than of R, and the
+  specific next action. Everything produced before the failure is embedded below
+  it, because the partial output is usually where the evidence is: a
+  `gating_qc.png` written before the failure often shows the cause directly.
+* Twelve failure modes carry an interpretation, including a sheet that does not
+  cover every file, subject rows that disagree, a path that does not exist inside
+  the container, memory exhaustion, an absent optional package, and a marker name
+  that resolves to nothing. "Subscript out of bounds" is not a useful thing to
+  tell a cytometrist; "the specification names a marker this panel does not
+  contain" is the same fact in terms they can act on.
+* The report is written by the entry point rather than by an exit handler,
+  because an exit handler cannot see the condition that ended the call and
+  "something failed" is not a diagnosis. The original error is re-raised
+  immediately afterwards, so the exit status and the message a caller sees are
+  unchanged, and a failure inside the reporting cannot replace the real error
+  with one about reporting.
+* The run log is now kept in a bounded in-memory buffer as well as being written
+  to stderr, which is what lets the report show what the run was doing when it
+  stopped.
+
+## Documentation
+
+* New Inputs article covering both routes, every reserved column, the count
+  columns, the config sections, the templates, and the errors the format can
+  raise with what each means.
+* The Get started article is organised by use case, each with the full command
+  sequence: a first run on a new cohort, the full analysis, a cohort that must
+  fit in memory, comparing against an accepted baseline, and driving it from R.
+* The diagnostics article opens with `--check`, since every other check in it
+  applies to a run that has already happened.
+* README, the options reference, the output article and the Claude skill all
+  document the new flags, the report's behaviour and the failure report.
 # cyRAVEN 0.4.0
 
 Seven additions, completing the feature backlog in `dev/TODO.md`. Every file the

@@ -1,5 +1,20 @@
 # Population spec for a myeloid-lymphoid immunophenotyping panel.
 #
+# This file pairs with a sample sheet: one CSV with a row per FCS file, carrying
+# what each file is, whose it is and which group and batch it belongs to. The
+# two together specify a run completely. See the Inputs article, and
+# system.file("examples", "analysis_template.yaml", package = "cyRAVEN") for an
+# annotated skeleton of every section this file may contain.
+#
+# The `samples:` section below names which sheet column plays which role, so the
+# pair needs no further flags. A command-line flag still wins where both are
+# given: the config is the study's standing choice, the flag is this run's.
+#
+# samples:
+#   group_column: cohort
+#   batch_column: acquisition_date
+#   count_unit: cells/uL
+#
 # This file is DATA, not code. It is a literal transcription of the "gating
 # strategy" sheet of `gating strategy & cohort info.xlsx`; nothing here is tuned
 # to any particular file. Editing it changes the analysis without touching R.

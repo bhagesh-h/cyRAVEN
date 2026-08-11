@@ -1,0 +1,7 @@
+file,sample_id,patient_id,is_control,timepoint,batch,cohort,sex,age_years,count.Granulocytes,count.Monocytes,count.Lymphocytes
+HC-01.fcs,HC-01,HC-01,FALSE,baseline,2025-03-04,Healthy controls,female,34,3810,420,1650
+HC-02.fcs,HC-02,HC-02,FALSE,baseline,2025-03-04,Healthy controls,male,29,2990,395,1880
+PT-01_v1.fcs,PT-01_v1,PT-01,FALSE,baseline,2025-03-11,Patients,male,41,5120,610,1140
+PT-01_v2.fcs,PT-01_v2,PT-01,FALSE,week12,2025-06-02,Patients,male,41,4380,540,1290
+PT-02_v1.fcs,PT-02_v1,PT-02,FALSE,baseline,2025-03-11,Patients,female,37,4760,588,1205
+unstained.fcs,unstained,,TRUE,,2025-03-04,,,,,,

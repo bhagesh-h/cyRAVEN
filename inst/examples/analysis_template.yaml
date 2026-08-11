@@ -1,0 +1,145 @@
+# =============================================================================
+# cyRAVEN analysis configuration
+# =============================================================================
+#
+# This file and one sample sheet specify a run completely:
+#
+#   samples.csv    one row per FCS file: what it is, whose it is, which group
+#                  and batch it belongs to, and any measured counts for it.
+#                  See inst/examples/samples_template.csv.
+#   analysis.yaml  this file: what to score and how, shared by every sample.
+#
+# The split is deliberate. Anything that varies per sample belongs in the CSV;
+# anything that is one decision for the whole study belongs here. Putting an
+# analysis choice in the CSV would repeat it on every row and invite the rows
+# to disagree about it.
+#
+#   docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
+#     cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
+#     --config /data/analysis.yaml --outdir /results --check
+#
+# Run with --check first. It validates the pair against the FCS headers in
+# seconds and reports every problem it can find without analysing anything.
+#
+# Every section below is OPTIONAL except `populations:`. A section left out
+# takes its built-in default, which is reported in the run log.
+
+# -----------------------------------------------------------------------------
+# populations: what to score.
+# -----------------------------------------------------------------------------
+# Each population is a conjunction of marker directions, evaluated per sample
+# against that sample's own thresholds. Marker names must match the $PnS keyword
+# of the FCS files EXACTLY; a name that does not match scores nothing and the
+# population is reported UNAVAILABLE. --check lists every marker the files
+# actually carry.
+#
+# Directions are `above`, `below` and `intermediate`. Declare lineage-level
+# populations first and confirm they score plausibly before adding subsets: an
+# error in a parent gate propagates to everything beneath it.
+populations:
+  Granulocytes:
+    CD45: above
+    SSC-A: above
+    CD15: above
+  Monocytes:
+    CD45: above
+    CD14: above
+    CD15: below
+  Lymphocytes:
+    CD45: above
+    SSC-A: below
+    CD14: below
+
+# -----------------------------------------------------------------------------
+# samples: how to read the sample sheet.
+# -----------------------------------------------------------------------------
+# Naming the roles here means the CSV and this file specify the run on their own,
+# with no further flags. A command-line flag still wins: the config is a study's
+# standing choice, a flag is this run's.
+samples:
+  group_column: cohort        # the comparison; any column of the sheet
+  batch_column: batch         # acquisition occasion, for the batch diagnostics
+  count_unit: cells/uL        # units of the count.<population> columns
+                              # (cells/mL is accepted and divided by 1000)
+
+# -----------------------------------------------------------------------------
+# functional_blocks: markers read INSIDE a population rather than defining one.
+# -----------------------------------------------------------------------------
+# Scope resolves in this order: an explicit `populations:` list, then `require:`
+# (populations whose definition has that marker `above`), then everything except
+# `exclude:`.
+#
+# One rule decides whether a block is meaningful: a marker must not be read
+# inside a gate its own threshold helped draw. CD15 measured within a
+# CD15-positive population is 100 percent in every sample, which has zero
+# variance and an undefined p-value, and measures the definition rather than the
+# biology.
+#
+# Declaring this section REPLACES the built-in blocks rather than adding to
+# them. See ?default_functional_blocks for what those are.
+functional_blocks:
+  CD33 on gated myeloid subsets:
+    markers: [CD33]
+    populations: [Granulocytes, Monocytes]
+
+# -----------------------------------------------------------------------------
+# ratios: derived quantities, tested like any abundance.
+# -----------------------------------------------------------------------------
+# Worth declaring when both populations are percentages of the same parent: a
+# shift in either moves both frequencies, and the ratio is the only quantity
+# that isolates their relative change. There is no default, because a ratio
+# naming populations a panel does not contain would be silently meaningless.
+ratios:
+  gran_lymph:
+    label: "Granulocyte:lymphocyte ratio"
+    numerator: Granulocytes
+    denominator: Lymphocytes
+
+# -----------------------------------------------------------------------------
+# sample_overrides: one sample's cut, corrected by hand, with attribution.
+# -----------------------------------------------------------------------------
+# Use only where the QC figure shows the derived cut is wrong for that sample.
+# `set_by` and `reason` are recorded in run_manifest.txt, so a run touched by
+# hand says so in its provenance rather than only in the table it altered. An
+# override naming a sample this cohort does not contain is reported, not
+# silently ignored.
+#
+# sample_overrides:
+#   PT-01_v1:
+#     CD14:
+#       threshold: 2.4
+#       set_by: "initials or name"
+#       reason: "bimodal but the minimum fell in the shoulder, see gating_qc.png"
+
+# -----------------------------------------------------------------------------
+# gating: thresholds that apply to every sample.
+# -----------------------------------------------------------------------------
+# gating:
+#   staining_qc:
+#     min_cd45_pct_of_live: 5     # below this a sample has no usable parent gate
+#   singlet_band:
+#     mad_k: 3                    # width of the FSC-H against FSC-A band
+
+# -----------------------------------------------------------------------------
+# metadata: header spellings and value translations.
+# -----------------------------------------------------------------------------
+# The defaults already resolve English and German spellings of the standard
+# columns and translate the common clinical values. Extend rather than replace
+# when a study uses its own vocabulary; an unmapped value is passed through
+# unchanged and reported, never silently mangled.
+#
+# metadata:
+#   column_map:
+#     cohort: [cohort, Kohorte, Gruppe, Genotype, Arm, study_arm]
+#   value_translations:
+#     sex: {m: male, w: female}
+
+# -----------------------------------------------------------------------------
+# colors: the palette every figure draws with.
+# -----------------------------------------------------------------------------
+# Any key left out keeps its built-in default. See ?default_colors, or
+# system.file("examples", "colors_template.yaml", package = "cyRAVEN") for the
+# full annotated list.
+#
+# colors:
+#   reference_group: "#0a7d4a"

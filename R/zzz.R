@@ -115,17 +115,49 @@ fcs_verbosity <- function() {
     "inform" else v
 }
 
+# The run log is also kept in memory so that a run which FAILS can show what it
+# had done up to the point it stopped. stderr is not enough for that: the
+# container writes it to the terminal, and the person reading the results
+# directory afterwards may never have seen it. The buffer is bounded because a
+# cohort of several hundred files logs tens of thousands of lines and none of
+# the early ones help diagnose a late failure.
+.cyraven_log <- new.env(parent = emptyenv())
+.cyraven_log$lines <- character(0)
+.cyraven_log$stage <- NA_character_
+.LOG_MAX <- 4000L
+
+#' @noRd
+log_record <- function(txt, stage = NULL) {
+  if (!is.null(stage)) .cyraven_log$stage <- stage
+  n <- length(.cyraven_log$lines)
+  if (n >= .LOG_MAX)
+    .cyraven_log$lines <- .cyraven_log$lines[seq.int(n - .LOG_MAX %/% 2L + 1L, n)]
+  .cyraven_log$lines <- c(.cyraven_log$lines, txt)
+  invisible(NULL)
+}
+
+#' @noRd
+log_reset <- function() {
+  .cyraven_log$lines <- character(0)
+  .cyraven_log$stage <- NA_character_
+  invisible(NULL)
+}
+
 #' @noRd
 log_msg <- function(...) {
+  txt <- paste0(sprintf("[%s] ", format(Sys.time(), "%H:%M:%S")), ...)
+  log_record(txt)
   if (fcs_verbosity() == "none") return(invisible(NULL))
-  message(sprintf("[%s] ", format(Sys.time(), "%H:%M:%S")), ...)
+  message(txt)
 }
 
 #' @noRd
 log_step <- function(...) {
+  txt <- paste0(...)
+  log_record(paste0("== ", txt), stage = txt)
   if (fcs_verbosity() == "none") return(invisible(NULL))
   bar <- strrep("=", 78)
-  message("\n", bar, "\n", ..., "\n", bar)
+  message("\n", bar, "\n", txt, "\n", bar)
 }
 
 #' @noRd

@@ -2,9 +2,9 @@
 % Please edit documentation in R/report.R
 \name{write_run_report}
 \alias{write_run_report}
-\title{Write a single HTML report indexing everything a run produced}
+\title{Write a single self-contained HTML report of everything a run produced}
 \usage{
-write_run_report(outdir, opt = NULL, verdicts = NULL)
+write_run_report(outdir, opt = NULL, verdicts = NULL, failure = NULL)
 }
 \arguments{
 \item{outdir}{the results directory, which is also where the report is written}
@@ -12,6 +12,9 @@ write_run_report(outdir, opt = NULL, verdicts = NULL)
 \item{opt}{parsed options, used for the header}
 
 \item{verdicts}{per-sample staining verdicts, used for the summary banner}
+
+\item{failure}{a condition or message; when given, the report is written as
+the record of a failed run rather than a completed one.}
 }
 \value{
 the path, invisibly, or NULL when there is nothing to report
@@ -20,4 +23,16 @@ the path, invisibly, or NULL when there is nothing to report
 Presents the outputs in the order the documentation says they must be read,
 because each stage can invalidate the ones after it. Sections whose files are
 absent are omitted rather than shown empty.
+}
+\details{
+The file references nothing: every figure is embedded at full resolution as a
+data URI and every table as JSON, so the report can be moved, emailed or
+archived on its own. Figures can be zoomed and downloaded at full resolution;
+tables can be searched, sorted, paged at 10/50/100/all rows and exported to
+CSV.
+
+When \code{failure} is supplied the same report is written for a run that stopped
+early, with a diagnosis section first and every output produced up to the
+failure embedded below it. The partial output is usually where the evidence
+is, so it is kept rather than discarded.
 }

@@ -1,8 +1,8 @@
 ---
-title: "Workflow"
+title: "Get started"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Workflow}
+  %\VignetteIndexEntry{Get started}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -10,9 +10,6 @@ vignette: >
 ```{r, include = FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 set.seed(1)
-```
-
-```{r setup}
 library(cyRAVEN)
 ```
 
@@ -39,38 +36,144 @@ The supported execution path is the container. `uwot` is a stochastic embedder
 whose output varies with its own version and with the BLAS beneath it, and every
 gate is placed at a kernel density minimum, so a different density implementation
 moves thresholds and the frequencies derived from them. The image pins R 4.4.3, a
-dated CRAN snapshot and Bioconductor 3.20. Build instructions and a runnable
-example on public data are in the
-[README](https://github.com/bhagesh-h/cyRAVEN#2-quick-start).
+dated CRAN snapshot and Bioconductor 3.20.
+
+A run takes the FCS files, one sample sheet and one config. Both files are
+described in the [Inputs article](inputs.html).
+
+### 2.1 First run on a new cohort
+
+The sequence, in order. Each step is cheap and catches what the next one would
+otherwise waste time on.
 
 ```sh
-docker run --rm \
-  -v "$PWD/data:/data:ro" \
-  -v "$PWD/results:/results" \
-  cyraven:0.4.0 \
-  --dir /data/fcs --recursive \
-  --sample-map /data/sample_map.csv \
-  --config /data/panel.yaml \
+# 0. build the image once
+docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
+
+mkdir -p data results
+
+# 1. a sheet covering every file in the directory
+docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
+  --dir /data/fcs --recursive --write-samples /data/samples.csv
+
+# 2. edit data/samples.csv: patient_id, cohort, and any study variable
+
+# 3. start the config from the shipped template
+docker run --rm --entrypoint sh cyraven:1.0.0 -c \
+  'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml' \
+  > data/analysis.yaml
+
+# 4. validate both files against the FCS headers, in seconds
+docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
+  cyraven:1.0.0 --dir /data/fcs --recursive \
+  --samples /data/samples.csv --config /data/analysis.yaml \
+  --outdir /results --check
+
+# 5. edit populations: in the config until --check reports no problems,
+#    then run
+docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
+  cyraven:1.0.0 --dir /data/fcs --recursive \
+  --samples /data/samples.csv --config /data/analysis.yaml \
   --group-column cohort --reference-group "Healthy controls" \
+  --outdir /results
+
+# 6. read results/report.html
+```
+
+On Windows PowerShell substitute `${PWD}` for `$PWD`; on Git Bash prefix with
+`MSYS_NO_PATHCONV=1`, or the shell rewrites `/data` into a Windows path.
+
+### 2.2 The full analysis
+
+Batch diagnostics and the unsupervised check are opt-in because each adds
+outputs and runtime.
+
+```sh
+docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
+  cyraven:1.0.0 \
+  --dir /data/fcs --recursive \
+  --samples /data/samples.csv --config /data/analysis.yaml \
+  --group-column cohort --reference-group "Healthy controls" \
+  --batch-column acquisition_date --cluster \
+  --covariates age,sex --reference-date 2025-01-01 \
+  --no-session \
   --outdir /results
 ```
 
-The same run from an R session, where the package is installed locally and
-bit-level reproducibility against the pinned environment is not required:
+`--no-session` is worth adding on a large cohort: `session_state.RData` can reach
+several hundred MB and dominate the runtime, and no result depends on it.
+
+### 2.3 A large cohort that must fit in memory
+
+Peak memory is set by the events held at once, not by the number of files.
+
+```sh
+docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
+  cyraven:1.0.0 \
+  --dir /data --recursive \
+  --samples /data/samples.csv --config /data/analysis.yaml \
+  --max-events-per-file 300000 \
+  --cells-per-sample 6000 --max-cells 150000 \
+  --no-session --outdir /results
+```
+
+Subsampling raises every detection limit in proportion, because it lowers the
+parent-gate count each frequency is a fraction of.
+
+Run one analysis at a time. Peak memory is dominated by the embedding, which
+holds `--max-cells` cells across every marker, and two concurrent runs at these
+settings will exhaust a workstation. The stages are already multi-threaded, so
+nothing is gained by running containers in parallel. A run killed by the
+out-of-memory killer exits 137 and writes no report, because SIGKILL runs no
+handler; that combination is the signature to look for.
+
+### 2.4 Comparing a run against an accepted one
+
+```sh
+# once, on the run being adopted as the reference
+docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
+  cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
+  --config /data/analysis.yaml --outdir /results \
+  --write-baseline /results/baseline.rds
+
+# on every later run
+docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results2:/results" \
+  -v "$PWD/results/baseline.rds:/baseline.rds:ro" \
+  cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
+  --config /data/analysis.yaml --outdir /results \
+  --baseline /baseline.rds --fail-on-drift
+```
+
+`--fail-on-drift` exits non-zero after every output has been written, so it can
+gate a pipeline without costing the diagnostics that explain the failure.
+
+### 2.5 From an R session
+
+Where the package is installed locally and bit-level reproducibility against the
+pinned environment is not required:
 
 ```r
+library(cyRAVEN)
+
 run_cyraven(list(
-  dir              = "data/fcs",
-  recursive        = TRUE,
-  outdir           = "results/",
-  sample_map       = "data/sample_map.csv",
-  patient_table    = "data/patient_table.csv",
-  config           = system.file("config", "config_cohorts.yaml", package = "cyRAVEN"),
-  group_column     = "cohort",
-  reference_group  = "Healthy controls",
+  dir                 = "data/fcs",
+  recursive           = TRUE,
+  outdir              = "results/",
+  samples             = "data/samples.csv",
+  config              = "data/analysis.yaml",
+  group_column        = "cohort",
+  reference_group     = "Healthy controls",
   max_events_per_file = 300000,
-  seed             = 42
+  seed                = 42
 ))
+```
+
+Validate first, exactly as `--check` does from the command line:
+
+```r
+run_cyraven(list(dir = "data/fcs", samples = "data/samples.csv",
+                 config = "data/analysis.yaml", outdir = "results/",
+                 check_only = TRUE))
 ```
 
 Both forms call the same `run_cyraven()`. The command-line front end resolves to
@@ -82,6 +185,10 @@ Progress is emitted through `message()` and directed to stderr:
 ```r
 options(cyRAVEN.verbose = "none")     # or "inform" (default), or "debug"
 ```
+
+A run that stops on an error still writes `report.html`, carrying the error, the
+stage it reached, the log leading up to it, what the message means for the data,
+the next action, and every output produced before the failure.
 
 ## 3. Stages
 

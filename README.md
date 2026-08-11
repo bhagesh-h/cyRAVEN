@@ -58,7 +58,7 @@ require only Docker.
 ```bash
 git clone https://github.com/bhagesh-h/cyRAVEN.git
 cd cyRAVEN
-docker build -f inst/scripts/Dockerfile -t cyraven:0.4.0 .
+docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
 ```
 
 The first build compiles the dependency stack and takes 15 to 25 minutes. It
@@ -70,13 +70,13 @@ image fails at build time rather than during an analysis.
 ```bash
 mkdir -p demo results
 docker run --rm -v "$PWD/demo:/demo" \
-  --entrypoint Rscript cyraven:0.4.0 \
+  --entrypoint Rscript cyraven:1.0.0 \
   /opt/cyraven/src/inst/scripts/demo_data.R /demo
 ```
 
 This writes the graft-versus-host disease cohort distributed with flowCore
 (Brinkman et al., 2007, *Biol Blood Marrow Transplant* 13:691; Artistic-2.0)
-together with `sample_map.csv` and `panel.yaml`. Nothing is downloaded: the data
+together with `samples.csv` and `panel.yaml`. Nothing is downloaded: the data
 ship inside a package cyRAVEN already depends on, so the example is reproducible
 offline and cannot break when a repository moves or a certificate expires.
 
@@ -105,15 +105,36 @@ one entry under `ratios:`. Each section is annotated in the file itself and the
 syntax is set out in the
 [Gating article](https://bhagesh-h.github.io/cyRAVEN/articles/gating.html).
 
-### 2.3 Run the pipeline
+### 2.3 Check the inputs, then run
+
+Validate first. This reads the FCS headers and the two input files, reports what
+the run would do, and exits without analysing anything, so a marker name that
+does not match costs a second rather than the run.
 
 ```bash
 docker run --rm \
   -v "$PWD/demo:/data:ro" \
   -v "$PWD/results:/results" \
-  cyraven:0.4.0 \
+  cyraven:1.0.0 \
   --dir /data/fcs \
-  --sample-map /data/sample_map.csv \
+  --samples /data/samples.csv \
+  --config /data/panel.yaml \
+  --group-column cohort --reference-group "GvHD grade 1" \
+  --batch-column visit \
+  --outdir /results --check
+```
+
+It should report 35 files, the four markers it resolved, that every marker the
+specification names is present, that the sheet covers every file, and the group
+sizes. Then run:
+
+```bash
+docker run --rm \
+  -v "$PWD/demo:/data:ro" \
+  -v "$PWD/results:/results" \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
   --config /data/panel.yaml \
   --group-column cohort --reference-group "GvHD grade 1" \
   --batch-column visit --cluster \
@@ -131,6 +152,10 @@ On Windows PowerShell, substitute `${PWD}` for `$PWD`.
 
 ### 2.4 Read the result
 
+Open `results/report.html`. It carries every figure and table the run produced,
+embedded in one self-contained file that needs nothing beside it, presented in
+the order the outputs have to be read.
+
 ```bash
 ls results/
 ```
@@ -146,15 +171,32 @@ it is not arbitrary, because each stage can invalidate the ones after it.
 
 ## 3. Input
 
+Two files besides the FCS directory.
+
 | Argument | Content |
 |---|---|
 | `--dir` | Directory of FCS files, one per sample |
-| `--sample-map` | CSV linking each filename to a sample identifier and study group |
-| `--config` | YAML declaring each population as a set of marker directions |
-| `--patient-table` | Optional clinical covariates, keyed on patient identifier |
+| `--samples` | One CSV, one row per FCS file: what it is, whose it is, which group and batch it belongs to, and any externally measured counts |
+| `--config` | One YAML: the populations to score, and every choice shared by all samples |
 
-Only the FCS files are required. A population is declared as a conjunction of
-marker directions evaluated within the CD45<sup>+</sup> parent gate:
+Only the FCS files are required. Anything that varies per sample belongs in the
+CSV; anything that is one decision for the whole study belongs in the YAML.
+
+```
+file,sample_id,patient_id,cohort,sex,age_years,batch,count.Granulocytes
+HC-01.fcs,HC-01,HC-01,Healthy controls,female,34,2025-03-04,3810
+PT-01_v1.fcs,PT-01_v1,PT-01,Patients,male,41,2025-03-11,5120
+PT-01_v2.fcs,PT-01_v2,PT-01,Patients,male,41,2025-06-02,4380
+```
+
+Subject attributes repeat across a patient's rows, and rows that disagree are a
+fatal error naming each conflict rather than a silent choice between them. Any
+column that is not reserved becomes a study variable usable as
+`--group-column` or `--batch-column`. A column named `count.<Population>` is
+read as an externally measured absolute count.
+
+A population is declared as a conjunction of marker directions evaluated within
+the CD45<sup>+</sup> parent gate:
 
 ```yaml
 populations:
@@ -164,9 +206,34 @@ populations:
     CD8: below
 ```
 
-`--write-sample-map` and `--write-config` emit templates and exit. The
-specification syntax, including three-level markers and the `any_of` form, is
-documented in the
+Build both files rather than writing them:
+
+```bash
+# a sheet with a row for every file in the directory
+docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
+  --dir /data/fcs --write-samples /data/samples.csv
+
+# validate both against the FCS headers, in seconds, without analysing
+docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
+  cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
+  --config /data/analysis.yaml --outdir /results --check
+```
+
+`--check` reports the markers it resolved from the files, any specification
+entry matching none of them, whether the sheet covers every file, the group
+levels and their sizes, and the study variables available. A marker-name
+mismatch found here costs a second; found during a run it costs the run.
+
+Annotated templates ship with the package as
+`system.file("examples", "samples_template.csv", package = "cyRAVEN")` and
+`analysis_template.yaml` beside it.
+
+The earlier three-file form, `--sample-map` with `--patient-table` and
+`--absolute-counts`, still works unchanged and is not deprecated; it cannot be
+combined with `--samples`. Both routes are documented in full in the
+[Inputs article](https://bhagesh-h.github.io/cyRAVEN/articles/inputs.html), and
+the specification syntax, including three-level markers, functional blocks,
+ratios and the `any_of` form, in the
 [Gating article](https://bhagesh-h.github.io/cyRAVEN/articles/gating.html).
 
 ## 4. Options
@@ -193,7 +260,7 @@ existing quantity are opt-in.
   --no-uncertainty          # skip the gate uncertainty analysis
 ```
 
-`docker run --rm cyraven:0.4.0 --help` lists every option at the installed
+`docker run --rm cyraven:1.0.0 --help` lists every option at the installed
 version. All 83 are documented with their defaults and consequences in the
 [Options reference](https://bhagesh-h.github.io/cyRAVEN/articles/options.html),
 which also sets out the convention governing which are on by default: additive
@@ -414,7 +481,7 @@ unchanged.
 
 | Article | Content |
 |---|---|
-| [Workflow](https://bhagesh-h.github.io/cyRAVEN/articles/cyRAVEN.html) | The ten pipeline stages with the function implementing each, and executable examples of cofactor estimation, density minimum detection and group comparison |
+| [Get started](https://bhagesh-h.github.io/cyRAVEN/articles/cyRAVEN.html) | The ten pipeline stages with the function implementing each, and executable examples of cofactor estimation, density minimum detection and group comparison |
 | [Gating](https://bhagesh-h.github.io/cyRAVEN/articles/gating.html) | Gate hierarchy and its behaviour when CD45 or viability markers are absent; per-sample thresholding and the `source` column; threshold precision and counting sufficiency; stability against a baseline; specification syntax; arcsinh against logicle |
 | [Diagnostics](https://bhagesh-h.github.io/cyRAVEN/articles/diagnostics.html) | The checks in reading order: gate inspection, staining QC, phenotype concordance, threshold drift, gate uncertainty, detection limits, the four gate-cluster concordance patterns, held-out-donor transferability, learned gate geometry, covariate screening, batch structure, conformance, and provenance |
 | [Output](https://bhagesh-h.github.io/cyRAVEN/articles/outputs.html) | Every file the pipeline writes, its columns, the flag producing it, and why event counts are not cell counts |

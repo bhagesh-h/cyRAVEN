@@ -216,7 +216,31 @@ load_patient_table <- function(path, column_map = default_column_map(),
     out[[eng]] <- df[[hit]]
   }
   if (!ncol(out)) stop("none of the requested columns were found in the patient table")
+  normalise_patient_columns(out, value_map = value_map,
+                            reference_date = reference_date)
+}
 
+#' Coerce, derive and translate the subject columns of a metadata table
+#'
+#' The half of [load_patient_table()] that operates on an already-selected
+#' data.frame: numeric coercion, placeholder rejection, age derivation from date
+#' of birth, and dictionary translation of free-text values.
+#'
+#' WHY IT IS A SEPARATE FUNCTION. Subject attributes now arrive by two routes:
+#' a standalone patient table, and the subject columns of a unified sample sheet
+#' (see [read_samplesheet()]). Both must apply the same coercions, or the same
+#' study analysed through the two routes would produce different ages and
+#' different sex labels. Sharing the implementation is what makes the two routes
+#' equivalent rather than merely similar.
+#'
+#' @param out data.frame whose columns already carry canonical English names.
+#' @param value_map The value map. Default `default_value_map()`.
+#' @param reference_date The reference date. Default `Sys.Date()`.
+#' @return `out` with the same columns, coerced and translated, carrying an
+#'   `untranslated` attribute.
+#' @keywords internal
+normalise_patient_columns <- function(out, value_map = default_value_map(),
+                                      reference_date = Sys.Date()) {
   # numeric coercion with German decimal commas
   for (nc in intersect(c("age_years", "height_cm", "weight_kg"), names(out))) {
     v <- gsub(",", ".", trimws(as.character(out[[nc]])))

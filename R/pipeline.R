@@ -31,11 +31,35 @@ fill_option_defaults <- function(opt) {
 
 #' run_cyraven
 #'
+#' Runs the pipeline. A run that stops on an error still writes `report.html`,
+#' carrying the diagnosis and every output produced before the failure, and then
+#' re-raises the original error unchanged so the exit status and the message a
+#' caller sees are what they would have been.
+#'
 #' @param opt Named list of options; anything omitted takes its command-line
 #'   default. See build_option_list() for the full set.
 #' @keywords internal
 #' @export
 run_cyraven <- function(opt) {
+  log_reset()
+  # WHY THE REPORT IS WRITTEN HERE AND NOT IN on.exit(): an exit handler cannot
+  # see the condition that ended the call, only that it ended, and "something
+  # failed" is not a diagnosis. Catching it here gives the report the message,
+  # the call and the stage; re-raising immediately afterwards leaves the caller's
+  # view of the failure untouched.
+  tryCatch(run_cyraven_impl(opt), error = function(e) {
+    od <- tryCatch(fill_option_defaults(opt)$outdir, error = function(...) NULL)
+    if (!is.null(od) && dir.exists(od) &&
+        !isTRUE(fill_option_defaults(opt)[["check_only", exact = TRUE]]))
+      try(write_run_report(od, opt = opt, failure = e), silent = TRUE)
+    stop(e)
+  })
+}
+
+#' The pipeline itself
+#' @param opt Parsed options.
+#' @keywords internal
+run_cyraven_impl <- function(opt) {
   opt <- fill_option_defaults(opt)
   set.seed(opt$seed)
   fcs <- resolve_input_files(opt)
@@ -86,6 +110,9 @@ run_cyraven <- function(opt) {
   if (!is.null(opt$write_sample_map)) {
     write_sample_map_template(fcs, opt$write_sample_map); return(invisible(NULL))
   }
+  if (!is.null(opt[["write_samples", exact = TRUE]])) {
+    write_samplesheet_template(fcs, opt$write_samples); return(invisible(NULL))
+  }
 
   cfg <- if (!is.null(opt$config)) yaml::read_yaml(opt$config) else list()
   spec   <- cfg$populations       %||% default_population_spec()
@@ -116,7 +143,48 @@ run_cyraven <- function(opt) {
   min_cd45 <- cfg$gating$staining_qc$min_cd45_pct_of_live %||% opt$min_cd45_pct
   mad_k    <- cfg$gating$singlet_band$mad_k %||% opt$singlet_mad_k
 
-  smap <- if (!is.null(opt$sample_map)) load_sample_map(opt$sample_map, fcs) else NULL
+  # ---- inputs: one sheet, or the three separate tables ----------------------
+  # `.sheet` is non-NULL only on the unified route. Its three components are the
+  # same structures the separate loaders return, so every consumer below reads
+  # one of them without knowing which route supplied it.
+  .sheet <- NULL
+  if (!is.null(opt[["samples", exact = TRUE]])) {
+    clash <- c("--sample-map"      = !is.null(opt$sample_map),
+               "--patient-table"   = !is.null(opt$patient_table),
+               "--absolute-counts" = !is.null(opt[["absolute_counts", exact = TRUE]]))
+    if (any(clash))
+      stop("--samples supersedes ", paste(names(clash)[clash], collapse = ", "),
+           " and cannot be combined with ", if (sum(clash) > 1L) "them" else "it",
+           ".\n  The sheet carries the same facts in one file; two sources of ",
+           "truth for one fact is what this format removes.", call. = FALSE)
+    log_step("STEP 0b - reading the sample sheet")
+    .refd_sheet <- if (!is.null(opt$reference_date)) {
+      rr <- as.Date(opt$reference_date, format = "%Y-%m-%d")
+      if (is.na(rr)) stop("--reference-date must be YYYY-MM-DD, got: ",
+                          opt$reference_date, call. = FALSE)
+      rr
+    } else Sys.Date()
+    .sheet <- read_samplesheet(
+      opt$samples, fcs,
+      column_map = cfg$metadata$column_map %||% default_column_map(),
+      value_map  = cfg$metadata$value_translations %||% default_value_map(),
+      reference_date = .refd_sheet,
+      count_unit = cfg$samples$count_unit %||% "cells/uL")
+    # The YAML may name which study column plays which role, so that the pair of
+    # files specifies a run without further flags. An explicit flag still wins:
+    # a config is a study's standing choice, a flag is this run's.
+    for (r in c("group_column", "batch_column")) {
+      v <- cfg$samples[[r]]
+      if (!is.null(v) && is.null(opt[[r]])) {
+        opt[[r]] <- v
+        log_msg("  ", sub("_", "-", paste0("--", r)), " ", v, " (from the config)")
+      }
+    }
+  }
+
+  smap <- if (!is.null(.sheet)) .sheet$smap
+          else if (!is.null(opt$sample_map)) load_sample_map(opt$sample_map, fcs)
+          else NULL
   if (!is.null(smap)) {
     .fmo_map <- parse_fmo_map(smap)
     if (!is.null(.fmo_map)) {
@@ -129,6 +197,17 @@ run_cyraven <- function(opt) {
               paste(utils::head(sort(unique(.fmo_map$marker)), 8), collapse = ", "),
               if (length(unique(.fmo_map$marker)) > 8) ", ..." else "")
     }
+  }
+
+  # ---- validate and stop, without analysing ---------------------------------
+  # A run over a large cohort costs many minutes, and the errors this catches
+  # (a filename the sheet does not cover, a marker name the specification does
+  # not match, a subject whose rows disagree) are all knowable from the headers
+  # alone. Reading only headers makes the check cost seconds.
+  if (isTRUE(opt[["check_only", exact = TRUE]])) {
+    log_step("CHECK - validating inputs, no analysis")
+    report_input_check(fcs, smap, .sheet, spec, opt)
+    return(invisible(NULL))
   }
 
   # ---- read -----------------------------------------------------------------
@@ -622,7 +701,15 @@ run_cyraven <- function(opt) {
 
   # ---- metadata -------------------------------------------------------------
   patients <- NULL
-  if (!is.null(opt$patient_table)) {
+  if (!is.null(.sheet)) {
+    patients <- .sheet$patients
+    if (!is.null(patients)) {
+      log_step("STEP 5 - patient metadata")
+      write.csv(patients, file.path(opt$outdir, "patient_metadata_english.csv"),
+                row.names = FALSE, na = "")
+      log_msg("wrote patient_metadata_english.csv (from the sample sheet)")
+    }
+  } else if (!is.null(opt$patient_table)) {
     log_step("STEP 5 - patient metadata")
     cm <- cfg$metadata$column_map %||% default_column_map()
     vm <- cfg$metadata$value_translations %||% default_value_map()
@@ -1502,11 +1589,15 @@ run_cyraven <- function(opt) {
     }
   }
 
-  # ---- external absolute cell counts (--absolute-counts) --------------------
+  # ---- external absolute cell counts ----------------------------------------
+  # Either from --absolute-counts, or from the sheet's count.<population>
+  # columns. Both arrive here as the same long table, so everything below is
+  # blind to which supplied it.
   ac_path <- opt[["absolute_counts", exact = TRUE]]
-  if (!is.null(ac_path)) {
+  if (!is.null(ac_path) || !is.null(.sheet$counts)) {
     log_step("STEP 7b - absolute cell counts")
-    ac <- load_absolute_counts(ac_path, smap, opt$outdir)
+    ac <- if (!is.null(.sheet$counts)) .sheet$counts
+          else load_absolute_counts(ac_path, smap, opt$outdir)
     if (!is.null(ac)) {
       run_samples <- names(verdicts)
       not_in_run <- setdiff(unique(ac$sample_id), run_samples)

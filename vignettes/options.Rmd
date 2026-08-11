@@ -15,7 +15,7 @@ Every command-line option, its default, and what it changes. The same names are
 the element names of the list passed to `run_cyraven()`, with hyphens replaced by
 underscores: `--group-column` on the command line is `group_column = ` in R.
 
-`docker run --rm cyraven:0.4.0 --help` prints the same list at the version
+`docker run --rm cyraven:1.0.0 --help` prints the same list at the version
 installed.
 
 ## The governing convention
@@ -49,17 +49,29 @@ are five: `--transform`, `--correct-batch`, `--drop-unstable-events`,
 
 ## 2. Metadata
 
+The standard input is one CSV and one YAML. The three separate tables below it
+still work unchanged and are not deprecated, but cannot be combined with
+`--samples`. See the [Inputs article](inputs.html).
+
+| Option | Default | Effect |
+|---|---|---|
+| `--samples` | none | The sample sheet: one row per FCS file carrying its identity, its subject's attributes, its study variables and any `count.<Population>` columns. Replaces the three options below |
+| `--config` | built-in spec | The analysis: population specification, `functional_blocks`, `ratios`, threshold and `sample_overrides`, colours, metadata dictionaries, and the `samples:` section naming which sheet column plays which role |
+| `--write-samples` | none | Write a sheet template covering every input file, and exit |
+| `--check` | off | Validate the inputs from FCS headers alone and exit. Reports resolved markers, specification entries matching none of them, sheet coverage, group levels and sizes, batches and study variables. Seconds rather than the full run |
+| `--reference-date` | today | `YYYY-MM-DD` used to derive age from date of birth and to place two-digit years. Set it to a fixed study date so ages do not change between runs |
+| `--group-column` | resolved `cohort` | Column defining the comparison groups. Enables the between-group figure and tests. Also settable as `samples: group_column:` in the config, which the flag overrides |
+| `--reference-group` | first alphabetically | The group every other is tested against. Drawn unfilled and leftmost |
+| `--write-config` | none | Derive everything, write the resulting YAML, and exit. Shows what the pipeline detected before time is spent |
+
+The earlier three-file form:
+
 | Option | Default | Effect |
 |---|---|---|
 | `--sample-map` | none | CSV linking each filename to a sample, patient, group and control status. Only `file` is required. Also carries `fmo_for` and `control_group` |
 | `--patient-table` | none | Clinical covariates keyed on patient identifier. Supplies `wbc_per_ul` for absolute concentrations |
 | `--absolute-counts` | none | Externally measured absolute counts, wide format. Requires `--sample-map` |
-| `--reference-date` | today | `YYYY-MM-DD` used to derive age from date of birth and to place two-digit years. Set it to a fixed study date so ages do not change between runs |
-| `--group-column` | resolved `cohort` | Column defining the comparison groups. Enables the between-group figure and tests |
-| `--reference-group` | first alphabetically | The group every other is tested against. Drawn unfilled and leftmost |
-| `--write-sample-map` | none | Write a template and exit |
-| `--write-config` | none | Derive everything, write the resulting YAML, and exit. Shows what the pipeline detected before time is spent |
-| `--config` | built-in spec | YAML carrying the population specification, threshold overrides, `sample_overrides`, colours and metadata translations |
+| `--write-sample-map` | none | Write a sample-map template and exit |
 
 ## 3. Transformation and gating
 
@@ -181,8 +193,20 @@ are five: `--transform`, `--correct-batch`, `--drop-unstable-events`,
 
 | Option | Default | Effect |
 |---|---|---|
-| `--no-report` | on | Skip `report.html`, which indexes every output in the documented reading order |
+| `--no-report` | on | Skip `report.html`, the single self-contained file carrying every figure and table the run produced, in the documented reading order |
 | `--no-miflowcyt` | on | Skip `miflowcyt.md`, the ISAC-structured record of the instrument and the analysis |
-| `--no-session` | on | Skip `session_state.RData` |
+| `--no-session` | on | Skip `session_state.RData`. Worth doing: on a large cohort that file reaches several hundred MB and dominates the runtime, and nothing in the results depends on it |
+
+`report.html` embeds every figure at full resolution and every table in full, so
+it can be moved, attached or archived on its own; it references no other file
+and needs no network. Figures zoom and download at full resolution; tables are
+searchable, sortable, paged at 10/50/100/all rows and exportable to CSV exactly
+as filtered. A run that fails writes it too, with the diagnosis and everything
+produced before the failure.
+
+Its size is the sum of the figures it carries, which on a full run is tens of
+megabytes. A table larger than 8 MB is named with its row count rather than
+embedded, which in practice means only the per-cell exports; change the limit
+with `options(cyRAVEN.report_table_max_mb = )`.
 | `--keep-exprs` | off | Include raw expression matrices in the saved session. Large |
 | `--seed` | 42 | RNG seed. Seeded once per run; every stage that consumes draws restores the stream so the embedding cannot shift |
