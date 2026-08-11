@@ -14,22 +14,105 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", echo = FALSE,
                       out.width = "100%")
 ```
 
-All 22 figures the demonstration cohort in [README section
-2](https://github.com/bhagesh-h/cyRAVEN#2-quick-start) produces, shown as
-unmodified output, with what each measures and what this particular run shows.
-The two further figures the package can write, and why this cohort cannot produce
-them, are at the end.
+All 22 figures a run produces, shown as unmodified output, with what each
+measures and what this particular run shows. The two further figures the package
+can write, and why this cohort cannot produce them, are at the end.
 
-The cohort is the graft-versus-host disease dataset distributed with flowCore
-(Brinkman et al., 2007, *Biol Blood Marrow Transplant* 13:691): peripheral blood
-from five allogeneic transplant recipients, drawn at up to seven successive
-visits and stained with a four-colour myeloid panel. It was run with
+# 0. The data, and how to reproduce every figure below
 
+## 0.1 What the data is
+
+The graft-versus-host disease dataset distributed with flowCore (Brinkman et
+al., 2007, *Biol Blood Marrow Transplant* 13:691; Artistic-2.0): peripheral
+blood from five allogeneic transplant recipients, drawn at up to seven
+successive visits and stained with a four-colour myeloid panel.
+
+| | |
+|---|---|
+| Samples | 35 |
+| Patients | 5 |
+| Acquisition batches | 7 successive visits |
+| Groups | GvHD grade 1 (7 samples) against grade 3 (28) |
+| Panel | CD15, CD45, CD14, CD33, with forward and side scatter and a Time channel |
+| Events per file | 2,205 to 66,105, median 12,666 |
+
+Nothing is downloaded. The data ship inside a package cyRAVEN already depends
+on, so this example is reproducible offline and cannot break when a repository
+moves or a certificate expires. `inst/scripts/demo_data.R` writes them out as
+FCS together with the two input files, making two preparation changes and no
+others: `$PnS` is reduced from `CD15 FITC` to `CD15`, because cyRAVEN matches
+marker symbols exactly; and the single area channel `FL2-A` is dropped, leaving
+a consistently height-only file. Event values are written as flowCore ships
+them.
+
+## 0.2 The exact sequence
+
+Four commands. This is the whole of it, and it reproduces every figure on this
+page.
+
+```bash
+# 1. the image, once. The build context is the repository root.
+git clone https://github.com/bhagesh-h/cyRAVEN.git
+cd cyRAVEN
+docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
+
+mkdir -p demo results
+
+# 2. write the cohort, its sample sheet and its config
+docker run --rm -v "$PWD/demo:/demo" \
+  --entrypoint Rscript cyraven:1.0.0 \
+  /opt/cyraven/src/inst/scripts/demo_data.R /demo
+
+# 3. validate the inputs, in seconds, analysing nothing
+docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
+  cyraven:1.0.0 --dir /data/fcs \
+  --samples /data/samples.csv --config /data/panel.yaml \
+  --group-column cohort --reference-group "GvHD grade 1" \
+  --batch-column visit --outdir /results --check
+
+# 4. run
+docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
+  cyraven:1.0.0 --dir /data/fcs \
+  --samples /data/samples.csv --config /data/panel.yaml \
+  --group-column cohort --reference-group "GvHD grade 1" \
+  --batch-column visit --cluster --outdir /results
 ```
---group-column cohort --reference-group "GvHD grade 1" --batch-column visit --cluster
-```
 
-Four properties of the cohort govern how the figures below read.
+On Windows PowerShell substitute `${PWD}` for `$PWD`; on Git Bash prefix the
+`docker run` lines with `MSYS_NO_PATHCONV=1`, or the shell rewrites `/data` into
+a Windows path.
+
+Step 3 should report 35 files, four resolved markers, that every marker the
+specification names is present, that the sheet covers every file, and the group
+sizes. Step 4 writes 22 figures and 31 tables into `results/`, plus
+`report.html`, which carries all of them embedded in one file.
+
+## 0.3 What each flag is doing
+
+| Flag | Effect on this page |
+|---|---|
+| `--group-column cohort` | Enables section 6. Without it there is no between-group comparison and `group_comparison.png` is not written |
+| `--reference-group "GvHD grade 1"` | The group the other is tested against, drawn unfilled and leftmost |
+| `--batch-column visit` | Enables section 7. Without it `batch_diagnostic.png` and the drift table are absent |
+| `--cluster` | Enables `unsupervised_clusters.png` and the gate-cluster concordance tables in section 4 |
+
+The defaults supply everything else: gate uncertainty, detection limits,
+acquisition QC and the spreading report are all on unless switched off, because
+an analysis that has to be requested is one that does not get run.
+
+## 0.4 Why your figures should match
+
+The container pins R 4.4.3, a dated CRAN snapshot and Bioconductor 3.20, and the
+run is seeded once at 42 with every stage restoring the RNG stream. Those two
+things together are what make the figures on this page reproducible rather than
+merely similar. Run outside the container and the embedding will differ, because
+`uwot` is stochastic across its own versions and across the BLAS beneath it.
+
+Every option, and the situation each is for, is in
+[Running cyRAVEN](usage.html). The two input files are described in
+[Inputs](inputs.html).
+
+## 0.5 Four properties of this cohort that govern how the figures read
 
 **The contrast is disease severity, not disease against health.** Both groups are
 transplant recipients; the comparison is GvHD grade 1 against grade 3. There is

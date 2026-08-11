@@ -22,7 +22,7 @@ command works without it.
 
 The skill executes through Docker by default and does not fall back to a local R
 installation unless the user states that Docker is unavailable, for the
-reproducibility reasons given in the [README](https://github.com/bhagesh-h/cyRAVEN#2-quick-start).
+reproducibility reasons given in the [README](https://github.com/bhagesh-h/cyRAVEN#quick-setup).
 
 ## 1. What it covers
 
