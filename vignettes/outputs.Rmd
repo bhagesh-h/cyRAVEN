@@ -14,7 +14,7 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
 Reference for every file a run writes, its columns, and the flag that produces
 it. Worked examples of the principal figures, rendered from a run on public data,
 are in the
-[README](https://github.com/bhagesh-h/cyRAVEN#5-output); this article is the
+[Worked example](figures.html); this article is the
 exhaustive list rather than a second copy of them.
 
 ## 1. Quality control
