@@ -43,7 +43,35 @@ Every option name is the same in both. Replace hyphens with underscores:
 `TRUE`: `--cluster` becomes `unsupervised = TRUE`. `docker run --rm
 cyraven:1.0.0 --help` prints the list at the version installed.
 
-## 1.2 Build the image, once
+## 1.2 Get the image, once
+
+Two routes to the same image. Which one you want depends on a single question:
+**are you going to change the source?**
+
+| Situation | Route |
+|---|---|
+| Running cyRAVEN as released | **Pull.** A download, not a 20-minute compile |
+| Reproducing the worked example or a published run | **Pull.** It is the image those were produced with |
+| You edited `R/`, the Dockerfile, or the config templates | **Build.** A pull cannot contain your changes |
+| Air-gapped host, or policy against third-party images | **Build.** |
+| No Docker Hub account and rate-limited | **Build**, or authenticate with `docker login` |
+
+### Pull
+
+```bash
+docker pull bhagesh/cyraven:1.0.0
+docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
+```
+
+`bhagesh/cyraven:latest` tracks the most recent release. Pin the version for
+anything you intend to publish — `latest` moving under you is exactly the
+reproducibility failure the pinned image exists to prevent.
+
+The `docker tag` line exists only so that every command in this article can say
+`cyraven:1.0.0`. If you skip it, substitute `bhagesh/cyraven:1.0.0` wherever
+`cyraven:1.0.0` appears below.
+
+### Build
 
 The Dockerfile refers to paths inside the package, so the build context is the
 repository root, the directory holding `DESCRIPTION`.
@@ -58,7 +86,19 @@ docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
 package version, so a broken image fails at build time rather than during an
 analysis.
 
-Check before rebuilding: `docker images | grep cyraven`.
+### Either way
+
+Both pin R 4.4.3, the same dated CRAN snapshot and Bioconductor 3.20, so a pulled
+and a built image are numerically interchangeable. Confirm which you have:
+
+```bash
+docker images | grep cyraven
+docker run --rm --entrypoint Rscript cyraven:1.0.0 \
+  -e 'cat(as.character(packageVersion("cyRAVEN")), R.version.string)'
+```
+
+Every run also writes the image's package versions into `run_manifest.txt`, so a
+result folder records what produced it whichever route you took.
 
 ## 1.3 A first run on a new cohort
 

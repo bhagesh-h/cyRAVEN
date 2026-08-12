@@ -183,11 +183,10 @@ Which to use:
 # 5. Worked example
 
 ```bash
-# 0. the image, once. The Dockerfile refers to paths inside the package, so the
-#    build context is the repository root.
-git clone https://github.com/bhagesh-h/cyRAVEN.git
-cd cyRAVEN
-docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
+# 0. the image, once. Pull it, or build it from source if you have changed
+#    the code -- see the Running cyRAVEN article.
+docker pull bhagesh/cyraven:1.0.0
+docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
 
 mkdir -p data results
 # put the FCS files in data/fcs/

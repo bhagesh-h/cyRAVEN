@@ -28,6 +28,24 @@ ggplot2 4.0.3 · patchwork 1.3.2 · viridisLite 0.4.2 · scales 1.4.0
 yaml 2.3.12 · optparse 1.8.2 · hexbin 1.28.5
 ```
 
+## Pull
+
+The released image is published at
+[`bhagesh/cyraven`](https://hub.docker.com/r/bhagesh/cyraven), `linux/amd64`,
+about 650 MB compressed.
+
+```bash
+docker pull bhagesh/cyraven:1.0.0
+docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
+```
+
+`1.0.0` and `latest` are currently the same digest. Pin the version for anything
+that will be published; `latest` moving under a study is the reproducibility
+failure the pinned image exists to prevent.
+
+Prefer this over building unless the source has been modified — a pulled image
+cannot contain local changes to `R/`, the Dockerfile or the config templates.
+
 ## Build
 
 From the package root, the directory containing `DESCRIPTION`, not
