@@ -335,6 +335,61 @@ The FlowJo export writes one pooled file, one per sample and one per group. Open
 `_ALL_SAMPLES.fcs`, plot UMAP-1 against UMAP-2, and decode the Population,
 SampleID and CohortID parameters using `population_codes.csv`.
 
+## 10a. The statistics catalogue
+
+Written on every run, grouped or not.
+
+| File | Content |
+|---|---|
+| `statistical_methods.csv` | Every commonly reported method in the immunophenotyping and cytometry literature, whether this run computed it, and why |
+| `normality_tests.csv` | Shapiro-Wilk per population per group, and Brown-Forsythe for equal variances across groups |
+
+These exist because a reader arriving from a paper that reports *t*-tests and
+ANOVA finds rank tests here instead. `statistical_methods.csv` names Student's
+and Welch's *t*, one-way and two-way ANOVA with Tukey, repeated measures,
+Mann-Whitney, Kruskal-Wallis with Dunn, chi-squared, Bonferroni and the diffcyt
+family, and states what was done about each.
+
+`normality_tests.csv` is the evidence for that choice. Read its `interpretation`
+column rather than `shapiro_p` alone: Shapiro-Wilk on 4 to 10 donors has almost
+no power, so a non-significant result is **not** evidence of normality, and the
+column says so. That fact is itself the argument for the rank test.
+
+What deliberately does not happen is running every test and reporting all the
+p-values. At these group sizes, choosing among six p-values per population is
+p-hacking with extra steps.
+
+## 10b. `explore/`: unsupervised discovery
+
+Written only under `--explore` or `--explore-only`, and only into this
+subdirectory. Nothing outside it changes.
+
+| File | Content |
+|---|---|
+| `explore_report.html` | Self-contained report, separate from `report.html` |
+| `explore_cluster_profile.csv` | Per cluster: size, phenotype string, fraction positive and median per channel |
+| `explore_qc_clusters.csv` | The cluster-level gate: `call` and the `basis` for it |
+| `explore_cluster_abundance.csv` | Per donor per cluster, with counting uncertainty and LOD/LOQ |
+| `explore_cluster_stats.csv` | Donor-level group tests, carrying the batch/group confounding verdict |
+| `explore_cells.csv` | One row per cell: sample, event index, cluster, UMAP coordinates |
+| `explore_vs_populations.csv` | Cross-tab against the declared labels |
+| `explore_findings.csv` | Clusters no declared population covers |
+| `explore_population_split.csv` | Declared labels spanning several clusters |
+| `explore_suggested_spec.yaml` | A draft specification, for curation |
+| `explore_provenance.csv` | Every choice explore made, and on what basis |
+
+Figures: `explore_umap_clusters.png`, `explore_cluster_heatmap.png`,
+`explore_umap_by_group.png`, `explore_umap_markers.png`, and
+`explore_marker_umaps_by_group/`.
+
+The last four tables appear only when a specification was scored **and**
+`--maybe-learn` is set. Without that flag the two analyses are computed in
+isolation and neither sees the other; see [Explore mode](explore.html).
+
+`spec_gaps.csv` is the one file explore may add to the run directory itself, and
+only under `--maybe-learn`. It names declared populations spanning several
+clusters and clusters no population covers.
+
 ## 11. Failure handling
 
 Analyses beyond the core pipeline execute after the primary outputs are written

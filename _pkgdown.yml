@@ -261,6 +261,8 @@ articles:
   contents:
   - pipeline
   - diagnostics
+  - explore
+  - design-explore
   - outputs
   - statistics
   - figures
@@ -297,6 +299,10 @@ navbar:
         href: articles/pipeline.html
       - text: Diagnostics, in reading order
         href: articles/diagnostics.html
+      - text: Explore mode, unsupervised discovery
+        href: articles/explore.html
+      - text: Why explore mode is built that way
+        href: articles/design-explore.html
       - text: Every output file
         href: articles/outputs.html
       - text: Statistics
