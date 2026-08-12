@@ -40,7 +40,19 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # The runner images already ship pandoc 3.x. setup-pandoc downloads its own
+      # from GitHub releases, which has 503'd and failed a release build for a
+      # reason that has nothing to do with this package. Try it, but do not let
+      # it be fatal: the verify step below fails loudly if NEITHER source left a
+      # usable pandoc, so a real absence is still caught.
       - uses: r-lib/actions/setup-pandoc@v2
+        continue-on-error: true
+
+      - name: Verify pandoc is available
+        run: |
+          pandoc --version || {
+            echo "::error::no pandoc from setup-pandoc or the runner image"; exit 1; }
+
 
       - uses: r-lib/actions/setup-r@v2
         with:
