@@ -198,6 +198,14 @@ expensive stages and rewritten at completion, so an interrupted run records
 `status: failed`.
 
 
+## 10a Explore
+
+`--explore` runs a second, independent analysis over every event and every
+eligible channel, writing to `<outdir>/explore/` and leaving stages 1 to 10
+untouched. It has its own quality gate, its own embedding and clustering, and its
+own self-contained report. `--explore-only` runs it without stages 2 to 10 at
+all. See [Explore mode](explore.html).
+
 # Further reading
 
 - [Running cyRAVEN](usage.html), for every command and option.

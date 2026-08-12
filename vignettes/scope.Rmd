@@ -40,6 +40,10 @@ is incompatible with the reproducibility guarantee the container provides.
 **Revisit when** cluster count is the quantity under investigation rather than a
 setting.
 
+`--explore-k` is likewise a setting rather than a finding, and
+`explore_provenance.csv` records it as one, because a cluster count chosen from
+the data is one more thing the number of significant results depends on.
+
 ## 3. diffcyt
 
 The rank tests address the same hypotheses without distributional assumptions,

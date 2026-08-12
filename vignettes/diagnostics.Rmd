@@ -209,6 +209,13 @@ on disk.
 reference to the specification, then cross-tabulates. Four configurations are
 diagnostic.
 
+This check clusters WITHIN the parent gate, on the cells the specification
+already selected. `--explore` is the wider version: it clusters every event in
+the file over every eligible channel, so it can also find a population the
+parent gate excluded. Under `--maybe-learn` it writes `spec_gaps.csv`, which
+names declared populations that turn out to span several clusters. See
+[Explore mode](explore.html).
+
 **6.1 Concordant.** A cluster composed predominantly of one declared label. The
 specification and the data agree.
 

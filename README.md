@@ -8,8 +8,8 @@
 
 **Documentation: <https://bhagesh-h.github.io/cyRAVEN/>**
 
-An R package for supervised immunophenotyping of multi-sample flow cytometry
-data, with per-sample gate derivation and donor-level differential abundance and
+An R package for immunophenotyping of multi-sample flow cytometry data, with
+per-sample gate derivation and donor-level differential abundance and
 differential state testing.
 
 A directory of FCS files becomes population frequencies, marker expression, a
@@ -17,6 +17,14 @@ shared UMAP and between-group statistics. Every threshold is placed within the
 sample it applies to, every frequency carries the uncertainty of the cut and of
 the event count behind it, and six diagnostics test whether the gating
 specification held.
+
+It works both ways round. The **supervised** path scores populations you declare
+in advance and then tries to falsify the declaration. **Explore mode**
+(`--explore`) is the complement: unsupervised clustering over every eligible
+channel, ignoring the specification and the parent gate, which is the only way to
+find a population nobody declared. Explore writes to its own directory and
+changes no existing output, and `--explore-only` needs no specification at all.
+See [Explore mode](https://bhagesh-h.github.io/cyRAVEN/articles/explore.html).
 
 ## Why
 
@@ -135,7 +143,26 @@ Inspect `recon_diagnostics.png` and `gating_qc.png` before any quantity derived
 from them: a threshold placed on a distribution shoulder rather than a density
 minimum is visible there and in no downstream table.
 
-<img src="man/figures/demo_gating_qc.png" alt="Per-sample marker densities with the derived threshold marked on each" width="100%"/>
+<img src="man/figures/demo_gating_qc_example.png" alt="Two samples from the demonstration cohort, five markers each, with the derived threshold drawn on the distribution it came from" width="100%"/>
+
+Two samples from that run, five markers each. The full figure carries one row per
+sample; this is the top of it.
+
+Each panel is one marker in one sample, and the dashed line is the cut that was
+applied to it. Read it column by column:
+
+- **`valley` in black** is a threshold placed at a real density minimum. `CD45` in
+  the top row sits just right of the peak, separating the leukocytes from
+  everything below them.
+- **`quantile_fallback (REVIEW)` in red** means no minimum was found, so the cut
+  came from a percentile instead. The second row has three of them. Those
+  populations are still reported, with the fallback recorded in
+  `thresholds_used.csv`, and they are the ones to check before quoting a number.
+
+Comparing the two rows is the point. The `CD14` cut is in a different place in
+each, because these are different samples with different staining, and the
+correct cut genuinely differs. A fixed coordinate copied between them would be
+right for at most one.
 
 ### 4. Your own data
 

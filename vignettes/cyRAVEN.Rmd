@@ -19,6 +19,22 @@ every marker threshold is derived inside the sample it applies to; and the
 declaration is then tested against unsupervised structure recovered from the same
 cells.
 
+There are two ways to use it, and they answer different questions.
+
+| | **Supervised**, the default | **Explore mode**, `--explore` |
+|---|---|---|
+| You supply | A specification of the populations to score | Nothing beyond the FCS files |
+| It returns | Named populations, with uncertainty and group statistics | Numbered clusters over every eligible channel |
+| It can find | Only what you declared | A population nobody declared |
+| Runs on | The parent gate | Every event in the file |
+
+Explore mode writes everything into `<outdir>/explore/` and changes no existing
+output, so adding `--explore` to a run is always safe. `--explore-only` skips the
+declared analysis entirely and needs no specification, which is the mode for a
+panel you have not written one for yet. The two stay isolated unless you pass
+`--maybe-learn`; see [Explore mode](explore.html) for what that exchanges, and
+[the design record](design-explore.html) for why it is off by default.
+
 The design addresses one failure mode. Manual gating is the dominant source of
 technical variance in multi-sample immunophenotyping: operators gating identical
 files report population sizes differing by about 32%, and analyst subjectivity
@@ -163,6 +179,10 @@ every option with the situation it is for, is in
   each.
 - [Diagnostics](diagnostics.html): the checks that can invalidate a result, in
   the order they have to be read.
+- [Explore mode](explore.html): unsupervised discovery, run beside the declared
+  analysis or on its own, and what `--maybe-learn` lets the two tell each other.
+- [Why explore mode is built that way](design-explore.html): the design record,
+  and where cyRAVEN sits against FlowSOM, cyCONDOR and diffcyt.
 - [Output files](outputs.html): every file a run writes, with its columns.
 - [Statistics](statistics.html): test selection and its assumptions.
 - [Worked example](figures.html): every figure from the demonstration cohort,
