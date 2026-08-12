@@ -64,7 +64,7 @@ docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
 ```
 
 `bhagesh/cyraven:latest` tracks the most recent release. Pin the version for
-anything you intend to publish — `latest` moving under you is exactly the
+anything you intend to publish. `latest` moving under you is exactly the
 reproducibility failure the pinned image exists to prevent.
 
 The `docker tag` line exists only so that every command in this article can say
@@ -523,6 +523,46 @@ docker run --rm $D cyraven:1.0.0 \
 detection limit in proportion, because it lowers the parent-gate count each
 frequency is a fraction of. Run one analysis at a time; the stages are already
 multi-threaded.
+
+### You suspect the specification is missing something
+
+The declared path scores what you declared. It cannot find a population nobody
+wrote down, and it cannot see outside the parent gate. Explore mode is the
+complement: every event, every eligible channel, no specification.
+
+```bash
+# alongside the declared analysis. Writes to results/explore/ and changes
+# NOTHING in the existing output.
+docker run --rm $D cyraven:1.0.0 \
+  --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
+  --group-column cohort --reference-group "Healthy controls" \
+  --cluster --explore --outdir /results
+
+# ...and let the two sides inform each other. The declared run lends explore its
+# per-sample thresholds, so clusters are NAMED rather than guessed at; explore
+# lends the declared run spec_gaps.csv, naming populations that span several
+# clusters and clusters nothing covers.
+docker run --rm $D cyraven:1.0.0 \
+  --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
+  --group-column cohort --reference-group "Healthy controls" \
+  --cluster --explore --maybe-learn --outdir /results
+```
+
+Without `--maybe-learn` the two are computed in complete isolation, which is the
+right default: a check on the specification has to be independent of the
+specification to be worth anything.
+
+### A new panel, and no specification written yet
+
+```bash
+# no --config, no --samples. A folder of FCS files is the whole input.
+docker run --rm $D cyraven:1.0.0 \
+  --dir /data/fcs --explore-only --outdir /results
+```
+
+Read `results/explore/explore_report.html`, then curate
+`results/explore/explore_suggested_spec.yaml` into a real specification and run
+the supervised path with it. Full detail in [Explore mode](explore.html).
 
 ## 2.3 The five that change reported numbers
 

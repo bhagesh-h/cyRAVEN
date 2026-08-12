@@ -35,10 +35,21 @@ report_input_check <- function(fcs, smap, sheet, spec, opt) {
     if (is.null(kw)) { note("unreadable FCS header: ", basename(f)); return(NULL) }
     np <- suppressWarnings(as.integer(kw[["$PAR"]]))
     if (is.na(np)) return(character(0))
+    # Resolve the name the SAME WAY the run will, via marker_symbol(): a
+    # spectral $PnS reads "CD45 : SparkUV-387 - Area" and the run strips from
+    # " : " onward. Reporting the raw string here made --check announce that
+    # every population named a marker no file contained, on data where the run
+    # resolved all of them -- a false alarm from the one command whose purpose
+    # is to catch real ones.
     s <- vapply(seq_len(np), function(i) {
       v <- kw[[paste0("$P", i, "S")]]
       if (is.null(v)) "" else trimws(as.character(v))
     }, character(1))
+    n <- vapply(seq_len(np), function(i) {
+      v <- kw[[paste0("$P", i, "N")]]
+      if (is.null(v)) "" else trimws(as.character(v))
+    }, character(1))
+    s <- marker_symbol(s, n)
     s[nzchar(s)]
   })
   names(per_file) <- basename(fcs)

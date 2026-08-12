@@ -329,6 +329,29 @@ run_cyraven_impl <- function(opt) {
     }
   }
 
+  # ---- explore-only ---------------------------------------------------------
+  # Standalone unsupervised discovery: no specification, no gate hierarchy, no
+  # declared populations. Only the transform is needed, and it is derived here
+  # rather than by borrowing STEP 2, so this path cannot fail for a reason that
+  # belongs to the declared analysis. Everything else below is skipped.
+  if (isTRUE(opt$explore_only)) {
+    log_step("EXPLORE ONLY - unsupervised discovery, declared analysis skipped")
+    tr_only <- list()
+    for (p in fpr$panels) {
+      cf <- opt[["cofactor", exact = TRUE]] %||% derive_cofactor_pooled(reads, p$samples)
+      tr_only[[p$name]] <- make_transform("arcsinh", cofactor = cf)
+    }
+    run_explore(reads, fpr, opt, opt$outdir, transforms = tr_only,
+                file_paths = fcs)
+    # No manifest write here: the on.exit handler above already owns that file,
+    # writes it to the right path, and flips it to "completed" off .finished_ok.
+    # An explicit call duplicated it and passed the DIRECTORY where the function
+    # wants the file path, which failed with "cannot open file: Is a directory".
+    log_step("DONE - outputs in ", normalizePath(opt$outdir))
+    .finished_ok <- TRUE
+    return(invisible(TRUE))
+  }
+
   # ---- gate -----------------------------------------------------------------
   log_step("STEP 2 - deriving transform and gates")
   cofactors <- list(); gates <- list(); verdicts <- list(); recon <- list()
@@ -2202,6 +2225,90 @@ run_cyraven_impl <- function(opt) {
   # written by default because the reading order is the part of this package a
   # directory listing cannot convey.
   if (!isTRUE(opt$no_report)) {
+    # ---- the methods catalogue, and the evidence for it ---------------------
+    # Immunophenotyping papers report t-tests and ANOVA; this run reports rank
+    # tests. statistical_methods.csv states every commonly reported method and
+    # what was done about it, and normality_tests.csv carries the Shapiro-Wilk
+    # and Brown-Forsythe results that justify the choice, so a reader can check
+    # it rather than take it on trust. Both are written on every run, including
+    # ungrouped ones, where the catalogue records why no test ran at all.
+    .ext_ok("statistical methods catalogue", {
+      ngrp <- if (!is.null(group_of))
+        length(unique(stats::na.omit(unname(group_of)))) else NA_integer_
+      ntest <- if (exists("gstats", inherits = FALSE) && !is.null(gstats))
+        nrow(gstats) else NA_integer_
+      smt <- statistical_methods_table(n_groups = ngrp, paired = FALSE,
+                                       n_tests = ntest)
+      write.csv(smt, file.path(opt$outdir, "statistical_methods.csv"),
+                row.names = FALSE)
+      log_msg("wrote statistical_methods.csv (", nrow(smt),
+              " methods; ", sum(smt$role == "used"), " used)")
+    })
+    .ext_ok("normality and variance diagnostics", {
+      if (!is.null(freq) && !is.null(group_of)) {
+        nt <- normality_report(freq, group_of)
+        if (!is.null(nt) && nrow(nt)) {
+          write.csv(nt, file.path(opt$outdir, "normality_tests.csv"),
+                    row.names = FALSE)
+          nnorm <- sum(grepl("^departs", nt$interpretation))
+          log_msg("wrote normality_tests.csv (", nrow(nt), " tests; ", nnorm,
+                  " departing from normal). Shapiro-Wilk at these group sizes ",
+                  "has little power, so a non-significant result is not ",
+                  "evidence of normality -- which is the argument for the ",
+                  "rank tests used above.")
+        }
+      }
+    })
+
+    # ---- explore mode -------------------------------------------------------
+    # Everything below writes into <outdir>/explore/ and touches no existing
+    # output. Wrapped like every other extension, so a failure here cannot take
+    # down a run whose declared deliverables are already on disk.
+    if (isTRUE(opt$explore)) {
+      .ext_ok("explore mode", {
+        # --maybe-learn is the only thing that lets the two analyses see each
+        # other. Without it explore gets the transform and the group labels and
+        # nothing else: the transform because it is a property of the panel
+        # derived from the data rather than anything the specification decided,
+        # and the group labels because they come from the sample sheet, not from
+        # the analysis. Thresholds, QC verdicts, scored populations and the
+        # confounding verdict are all products of the declared run, so they are
+        # withheld and explore names its clusters from pooled medians instead --
+        # which is what a blind unsupervised run has.
+        .learn <- isTRUE(opt$maybe_learn)
+        .conf <- NULL
+        if (.learn) {
+          .cpath <- file.path(opt$outdir, "batch_group_confounding.csv")
+          if (file.exists(.cpath))
+            .conf <- utils::read.csv(.cpath, stringsAsFactors = FALSE)
+        }
+        log_msg("explore: ", if (.learn)
+          "--maybe-learn is set, the declared run lends its thresholds, QC verdicts and confounding verdict"
+          else "isolated from the declared analysis; pass --maybe-learn to link them")
+        .ex <- run_explore(reads, fpr, opt, opt$outdir, transforms = transforms,
+                           gates = if (.learn) gates else NULL,
+                           verdicts = if (.learn) verdicts else NULL,
+                           pops = if (.learn) pops else NULL,
+                           group_of = group_of, confounding = .conf,
+                           file_paths = fcs)
+
+        # The other direction, and the only thing explore is allowed to add to
+        # the declared deliverables. One file, written only under the flag, so a
+        # run without it produces byte-identical output to a run with no
+        # --explore at all.
+        if (.learn && !is.null(.ex$gaps) && nrow(.ex$gaps)) {
+          write.csv(.ex$gaps, file.path(opt$outdir, "spec_gaps.csv"),
+                    row.names = FALSE)
+          nlump <- sum(.ex$gaps$issue == "population spans several clusters")
+          nmiss <- sum(.ex$gaps$issue == "cluster no declared population covers")
+          log_msg("wrote spec_gaps.csv (", nlump, " population(s) spanning ",
+                  "several clusters, ", nmiss, " cluster(s) nothing covers). ",
+                  "This is what unsupervised clustering says about the ",
+                  "specification, and it exists only because --maybe-learn is set.")
+        }
+      })
+    }
+
     .ext_ok("run report", {
       write_run_report(opt$outdir, opt = opt, verdicts = verdicts)
     })

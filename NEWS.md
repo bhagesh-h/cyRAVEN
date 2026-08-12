@@ -1,5 +1,65 @@
 # cyRAVEN 1.0.0
 
+Explore mode, the statistics catalogue, and the input format. Every option,
+output file, column name and value an earlier run produced is produced
+identically; nothing is renamed and nothing is removed.
+
+## Explore mode
+
+* `--explore` runs unsupervised discovery over **every eligible channel** --
+  scatter and viability included. ignoring the population specification and the
+  parent gate. It is what the declared path structurally cannot do: find a
+  population nobody declared, and look outside the parent gate.
+* Everything it writes lands in `<outdir>/explore/`, including its own
+  self-contained `explore_report.html`. No existing output changes. That is
+  verified rather than asserted: the demonstration cohort is run with and
+  without the flag and every top-level deliverable compared byte-for-byte.
+* `--explore-only` needs no specification at all. `--dir` is the whole input.
+  For a panel you have not written a config for yet.
+* A cluster-level quality gate, the one the unsupervised family uses: cluster
+  coarsely, then judge whole clusters by their marker profile, so no per-event
+  cutoff is invented. Calls debris, dead and saturated, and records the basis
+  for each in `explore_qc_clusters.csv`.
+* Cells are equalised per sample after the gate, so a faceted panel's density
+  is comparable between groups rather than reflecting group size.
+* `explore_suggested_spec.yaml` turns the clusters into a draft specification to
+  curate and run back through the supervised path.
+
+## `--maybe-learn`
+
+* The only thing that lets the two analyses see each other, and it is off by
+  default. An explore run that used the declared thresholds is no longer a blind
+  unsupervised run, and a check on a specification has to be independent of the
+  specification to be worth anything.
+* With it, the declared run lends explore its per-sample thresholds, so a
+  cluster gets a phenotype measured against each sample's own cut --
+  `CD19+ HLA-DR+ CD3-`, with a percentage behind every call. instead of one
+  read off a colour scale. Its staining QC verdicts and its batch/group
+  confounding verdict travel too, the latter into the cluster statistics, so a
+  q-value cannot be read without it.
+* In the other direction, explore writes `spec_gaps.csv`: declared populations
+  spanning several clusters, and clusters no population covers. The first is the
+  one worth the flag. a population whose total is flat while a subset inside it
+  moves is invisible to any amount of testing on the declared table.
+
+## The statistics catalogue
+
+* `statistical_methods.csv`, on every run, names every commonly reported method
+  in the immunophenotyping and cytometry literature. Student's and Welch's *t*,
+  one-way and two-way ANOVA with Tukey, repeated measures, Mann-Whitney,
+  Kruskal-Wallis with Dunn, chi-squared, Bonferroni, and diffcyt's edgeR,
+  limma-voom and GLMM. and says whether this run computed it and why.
+* `normality_tests.csv` is the evidence for the choice: Shapiro-Wilk per
+  population per group, Brown-Forsythe for equal variances across groups. Its
+  `interpretation` column states the thing a p-value alone hides. that
+  Shapiro-Wilk on 4 to 10 donors has almost no power, so a non-significant
+  result is not evidence of normality, which is itself the argument for the
+  rank tests.
+* What deliberately does not happen: running every test and reporting all the
+  p-values. At these group sizes that is p-hacking with extra steps.
+
+## Input format and the run report
+
 Two changes to how a run is specified and how its result is read, and a version
 number that says the interface is now settled. Every option, output file, column
 name and value that 0.4.0 produced is produced identically; nothing is renamed

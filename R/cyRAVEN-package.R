@@ -65,6 +65,8 @@ NULL
 # variable, and every name below is a column that exists in the data frame the
 # expression is evaluated against.
 utils::globalVariables(c(
+  # ggplot2 non-standard evaluation in explore_figures()
+  "cluster",
   ".batch", ".cluster", ".lisi", ".txt_col", "cells_per_ul", "clr", "cond",
   "count", "density", "event_index", "facet", "group", "is_control", "label",
   "lisi", "marker", "md", "mean_val", "median_asinh", "n_cells", "pair",

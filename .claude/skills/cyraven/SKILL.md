@@ -310,6 +310,60 @@ changes the units every intensity is expressed in. Say so when you use them.
 not describe. It is off by default because it costs runtime, not because it is
 peripheral to the argument the package makes.
 
+## Explore mode
+
+`--explore` runs unsupervised discovery over **every eligible channel**,
+ignoring the specification and the parent gate, and writes to
+`<outdir>/explore/`. Nothing outside that directory changes, so it is always
+safe to add to a run.
+
+Reach for it when the user says any of: a population might be missing from the
+spec, they have a new panel and no spec yet, they want to compare against
+FlowSOM/Phenograph/cyCONDOR, or they want to know whether a declared label is
+lumping two things together.
+
+```bash
+--explore                    # alongside the declared analysis
+--explore --maybe-learn      # ...and let the two inform each other
+--explore-only               # standalone; NO --config or --samples needed
+```
+
+Three things to get right when explaining it:
+
+- **`--maybe-learn` is the only link between them.** With it, the declared run
+  lends explore its per-sample thresholds, so clusters get a phenotype
+  (`CD19+ HLA-DR+ CD3-`) measured against each sample's own cut rather than
+  guessed from a heatmap; and explore lends the declared run `spec_gaps.csv`,
+  naming populations that span several clusters and clusters nothing covers.
+  Without it the two are computed in complete isolation, which is the right
+  default: a check on the specification has to be independent of it.
+- **A cluster is not a population.** Explore is a hypothesis generator. The
+  intended path is: explore finds something → curate
+  `explore_suggested_spec.yaml` into a real specification → run the supervised
+  path, which is where it gains thresholds, uncertainty and the six checks.
+- **Point at `explore/explore_report.html`**, which is separate from
+  `report.html` and self-contained in the same way.
+
+`--explore-only` needs nothing but `--dir`. It is the answer to "I have a folder
+of FCS files and no idea what is in them".
+
+## The statistics catalogue
+
+Two tables are now in every run, and they answer the question a reader arriving
+from an immunophenotyping paper asks first: *where is my t-test?*
+
+- `statistical_methods.csv` names every commonly reported method — Student's and
+  Welch's *t*, one-way and two-way ANOVA with Tukey, Mann-Whitney,
+  Kruskal-Wallis with Dunn, chi-squared, Bonferroni, diffcyt's edgeR/voom/GLMM —
+  and says whether this run computed it and why.
+- `normality_tests.csv` is the evidence: Shapiro-Wilk per population per group,
+  Brown-Forsythe across groups.
+
+When quoting it, read the `interpretation` column, not `shapiro_p` alone.
+Shapiro-Wilk on 4 to 10 donors has almost no power, so a non-significant result
+is **not** evidence of normality — which is itself the argument for the rank
+tests. Never present the catalogue as a menu to pick a test from.
+
 ## The report
 
 `report.html` is the one file to point the user at. It is **self-contained**:

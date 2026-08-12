@@ -48,8 +48,7 @@ read_fcs_resolved <- function(path, sample_id = NULL, max_events = 0L) {
   desc <- as.character(pd$desc)
   nm   <- as.character(pd$name)
   # marker symbol = text before " : "; fall back to the channel name
-  sym <- trimws(sub(" : .*$", "", desc))
-  sym[is.na(sym) | !nzchar(sym)] <- nm[is.na(sym) | !nzchar(sym)]
+  sym <- marker_symbol(desc, nm)
 
   # AREA channels only. Height/width are redundant duplicates of area and would
   # double-weight every marker in the embedding.
@@ -167,3 +166,31 @@ fingerprint_panels <- function(reads, labels = NULL) {
 }
 
 # =============================================================================
+
+#' The marker name cyRAVEN resolves from an FCS description
+#'
+#' Spectral instruments write `$PnS` as `"CD45 : SparkUV-387 - Area"` — the
+#' antibody, the detector, and the pulse statistic in one string. The name a
+#' population specification has to use is the antibody alone, so everything from
+#' `" : "` onward is stripped. Where `$PnS` is empty the channel name `$PnN`
+#' stands in.
+#'
+#' EXTRACTED SO IT CANNOT DIVERGE. [read_fcs_resolved()] and
+#' [report_input_check()] both need it, and for a while only the first had it:
+#' `--check` then reported markers as the full `$PnS` string and told the user
+#' that every population named a marker no file contained, on data where the run
+#' itself would have resolved all of them. A false alarm from the one command
+#' whose whole purpose is to catch real ones.
+#'
+#' @param desc `$PnS` values.
+#' @param nm `$PnN` values, used where `desc` is empty.
+#' @return Character vector of resolved marker names.
+#' @keywords internal
+marker_symbol <- function(desc, nm = NULL) {
+  s <- trimws(sub(" : .*$", "", as.character(desc)))
+  if (!is.null(nm)) {
+    bad <- is.na(s) | !nzchar(s)
+    s[bad] <- as.character(nm)[bad]
+  }
+  s
+}

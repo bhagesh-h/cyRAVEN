@@ -57,7 +57,7 @@ dated CRAN snapshot and Bioconductor 3.20.
 Either pull the published one or build it from source. They are the same image;
 pick by whether you intend to change the code.
 
-**Pull** — a download rather than a compile, and the image every published run
+**Pull.** A download rather than a compile, and the image every published run
 here was produced with.
 
 ```bash
@@ -68,7 +68,7 @@ docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
 The second line is only so that every command below can say `cyraven:1.0.0`. Use
 `bhagesh/cyraven:1.0.0` directly instead if you prefer.
 
-**Build** — for a modified source tree, an air-gapped host, or if you would
+**Build.** For a modified source tree, an air-gapped host, or if you would
 rather not run a third-party image. The build context is the repository root,
 the directory holding `DESCRIPTION`.
 
@@ -177,6 +177,7 @@ for, is in
 |---|---|
 | [How it works](https://bhagesh-h.github.io/cyRAVEN/articles/pipeline.html) | The ten pipeline stages with the function implementing each, and executable examples of cofactor estimation, density minimum detection and group comparison |
 | [Diagnostics](https://bhagesh-h.github.io/cyRAVEN/articles/diagnostics.html) | The checks in reading order, from validating inputs before the run through gate inspection, staining QC, threshold drift, gate uncertainty, batch structure and conformance |
+| [Explore mode](https://bhagesh-h.github.io/cyRAVEN/articles/explore.html) | Unsupervised discovery over every channel, run beside the declared analysis or standalone; the cluster-level QC gate, and what `--maybe-learn` lets the two sides tell each other |
 | [Output files](https://bhagesh-h.github.io/cyRAVEN/articles/outputs.html) | Every file the pipeline writes, its columns, the flag producing it, and why event counts are not cell counts |
 | [Statistics](https://bhagesh-h.github.io/cyRAVEN/articles/statistics.html) | Sample-level aggregation; rank tests against moderated *t*; the compositional constraint; covariate diagnosis against adjustment; multiplicity; differences expressed in units of uncertainty |
 | [Worked example](https://bhagesh-h.github.io/cyRAVEN/articles/figures.html) | All 22 figures from a run on public data, each with what it measures and what that run shows |

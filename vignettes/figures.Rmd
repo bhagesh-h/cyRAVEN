@@ -332,8 +332,8 @@ Two populations are flagged **suspect threshold**. Lymphocytes and Myeloid marke
 negative both have their dominant cluster in cluster 1, and both sit at an
 effective cluster count near one (1.30 and 1.54), meaning each is a single
 phenotype. But cluster 1 holds 11,724 cells and is 36.9% Lymphocytes against
-35.8% Myeloid marker negative. The two definitions, CD45+ SSC-A low CD33− CD14−
-and CD45+ CD14− CD15− CD33−, select largely the same cells in this panel. They
+35.8% Myeloid marker negative. The two definitions, CD45+ SSC-A low CD33- CD14-
+and CD45+ CD14- CD15- CD33-, select largely the same cells in this panel. They
 are not independent readouts, and section 6 tests them as though they were.
 
 Three populations are flagged **fragmented**: Granulocytes spans an effective

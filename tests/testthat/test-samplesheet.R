@@ -161,3 +161,16 @@ test_that("the sheet and the three separate tables carry the same facts", {
     expect_equal(r$patients[[cn]][order(r$patients$patient_id)],
                  pt[[cn]][order(pt$patient_id)], info = cn)
 })
+
+test_that("marker_symbol strips the spectral detector suffix", {
+  # Real spectral $PnS from a Cytek/BD panel. read_fcs_resolved() and
+  # report_input_check() must agree on this or --check raises a false alarm.
+  expect_equal(cyRAVEN:::marker_symbol("CD45 : SparkUV-387 - Area"), "CD45")
+  expect_equal(cyRAVEN:::marker_symbol("TCR-Vd1 : PE-eFluor610 - Area"), "TCR-Vd1")
+  expect_equal(cyRAVEN:::marker_symbol("BTN3A1/2/3 : PE - Area"), "BTN3A1/2/3")
+  # A conventional $PnS with no detector suffix is returned unchanged.
+  expect_equal(cyRAVEN:::marker_symbol("CD45"), "CD45")
+  # An empty $PnS falls back to the channel name.
+  expect_equal(cyRAVEN:::marker_symbol(c("", "CD3"), c("FSC-A", "RB780-A")),
+               c("FSC-A", "CD3"))
+})
