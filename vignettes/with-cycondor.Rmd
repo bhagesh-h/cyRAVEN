@@ -47,6 +47,7 @@ recovers rare populations that neither approach resolves independently
 | Label transfer to an independent cohort | cyCONDOR | Trained classifiers |
 | Ingestion of existing FlowJo gates | cyCONDOR | `.wsp` workspace parsing |
 | Data-determined cluster count | cyCONDOR | Phenograph |
+| Unsupervised discovery without leaving cyRAVEN | cyRAVEN | `--explore`, over every eligible channel, with clusters named from per-sample thresholds. See [Explore mode](explore.html) |
 | Whether batch correction is admissible | cyRAVEN | Cramér's *V* refusal rule |
 
 ## 3. Applications
