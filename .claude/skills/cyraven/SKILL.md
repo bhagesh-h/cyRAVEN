@@ -37,11 +37,24 @@ Check for an existing image before building one:
 docker images | grep cyraven
 ```
 
-### Build
+### Get the image
 
-The Dockerfile refers to paths inside the package, so the build context is the
-repository root, the directory holding `DESCRIPTION`. If the user does not
-already have a checkout:
+**Default to pulling.** It is a download rather than a 20-minute compile, and it
+is the image the documented runs were produced with.
+
+```bash
+docker pull bhagesh/cyraven:1.0.0
+docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
+```
+
+The `docker tag` is only so the commands below can say `cyraven:1.0.0`.
+
+**Build instead** when the user has edited `R/`, the Dockerfile or the config
+templates, when the host is air-gapped, or when they say they would rather not
+run a third-party image. A pull cannot contain local changes, so if the user is
+iterating on the source, building is the only correct option. The Dockerfile
+refers to paths inside the package, so the build context is the repository root,
+the directory holding `DESCRIPTION`:
 
 ```bash
 git clone https://github.com/bhagesh-h/cyRAVEN.git
@@ -51,6 +64,13 @@ docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
 
 15 to 25 minutes on a first build. It ends by running `--help` and printing every
 package version, so a broken image fails at build time.
+
+Both routes pin R 4.4.3, the same dated CRAN snapshot and Bioconductor 3.20, so
+they are numerically interchangeable. Check what is present before doing either:
+
+```bash
+docker images | grep cyraven
+```
 
 ### The two inputs
 

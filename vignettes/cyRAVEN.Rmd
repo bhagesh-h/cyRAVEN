@@ -50,6 +50,24 @@ different density implementation moves thresholds and therefore the frequencies
 that would be published. The image pins R 4.4.3, a dated CRAN snapshot and
 Bioconductor 3.20.
 
+Two ways to get it. They produce the same image; pick by whether you intend to
+change the code.
+
+**Pull.** A download rather than a compile, and the image the worked example and
+every published run here was produced with.
+
+```bash
+docker pull bhagesh/cyraven:1.0.0
+docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
+```
+
+The `docker tag` line only exists so every command on this site can say
+`cyraven:1.0.0`. Substitute `bhagesh/cyraven:1.0.0` throughout instead if you
+prefer.
+
+**Build.** For a modified source tree, an air-gapped host, or if you would rather
+not run a third-party image.
+
 ```bash
 git clone https://github.com/bhagesh-h/cyRAVEN.git
 cd cyRAVEN
@@ -60,6 +78,14 @@ The build context is the repository root, the directory holding `DESCRIPTION`.
 The first build compiles the dependency stack and takes 15 to 25 minutes. It ends
 by running `--help` and printing every package version, so a broken image fails
 at build time rather than during an analysis.
+
+Both pin R 4.4.3, the same dated CRAN snapshot and Bioconductor 3.20, so they are
+numerically interchangeable. Check what you have with:
+
+```bash
+docker run --rm --entrypoint Rscript cyraven:1.0.0 \
+  -e 'cat(as.character(packageVersion("cyRAVEN")), R.version.string)'
+```
 
 Local installation, for development or where Docker is unavailable, is in the
 [README](https://github.com/bhagesh-h/cyRAVEN#installation-without-docker).

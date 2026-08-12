@@ -51,10 +51,14 @@ Four commands. This is the whole of it, and it reproduces every figure on this
 page.
 
 ```bash
-# 1. the image, once. The build context is the repository root.
-git clone https://github.com/bhagesh-h/cyRAVEN.git
-cd cyRAVEN
-docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
+# 1. the image, once. Pull it -- this is the image these figures were
+#    produced with, so it is the shorter path to the same numbers.
+docker pull bhagesh/cyraven:1.0.0
+docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
+
+#    Or build it from source instead; the build context is the repository root.
+#    git clone https://github.com/bhagesh-h/cyRAVEN.git
+#    cd cyRAVEN && docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
 
 mkdir -p demo results
 
