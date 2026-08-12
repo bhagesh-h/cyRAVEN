@@ -1,0 +1,99 @@
+name: Install pandoc
+description: >
+  Put a working pandoc on PATH, from whichever of two independent sources is
+  reachable. R CMD check renders the vignettes and pkgdown renders the site, so
+  neither workflow can run without one.
+
+# WHY THIS EXISTS RATHER THAN r-lib/actions/setup-pandoc.
+#
+# That action downloads a single file from the pandoc project's GitHub release
+# and gives up if the request fails. A release build died on exactly that:
+#
+#     Unexpected HTTP response: 503
+#     Error: Failed to download Pandoc 3.8.3
+#
+# 503 is the host being briefly unavailable, not the asset being missing, so the
+# request would have succeeded seconds later. Two things are wrong with relying
+# on it: the request is not retried, and there is only one place to ask.
+#
+# Both are fixed here. --retry-all-errors retries a 5xx instead of treating it
+# as final, and if the release is genuinely unreachable the Ubuntu archive
+# serves pandoc from different infrastructure. The archive version is older
+# (3.1.3 on noble) but clears rmarkdown's floor of 2.19 for self-contained
+# output, so a fallback build is a correct build rather than a degraded one.
+#
+# The job still fails if BOTH sources fail. That case means pandoc is genuinely
+# unavailable, which is worth stopping for.
+
+inputs:
+  version:
+    description: >
+      Version to take from the pandoc project's release. Pinned rather than
+      tracking latest, so a rendered vignette does not change because upstream
+      published on a Tuesday.
+    required: false
+    default: '3.10.2'
+  sha256:
+    description: >
+      Expected SHA-256 of pandoc-<version>-1-amd64.deb. Set it empty when
+      overriding `version`, since the pin belongs to one specific file.
+    required: false
+    default: '6c06b69b49ae95087573631a6fcafb233ab7ab51e5cfa73f7539d6c964a2640d'
+
+runs:
+  using: composite
+  steps:
+    # One step, not three. Composite actions do not honour continue-on-error on
+    # their steps, so a chain of sources that tolerates a failing link has to be
+    # a chain inside one script.
+    - name: Install pandoc
+      shell: bash
+      env:
+        PANDOC_VERSION: ${{ inputs.version }}
+        PANDOC_SHA256: ${{ inputs.sha256 }}
+      run: |
+        # No `set -e`. A failing source must fall through to the next one rather
+        # than end the job; the check at the bottom decides whether this passed.
+        set -uo pipefail
+
+        if command -v pandoc >/dev/null 2>&1; then
+          echo "already on PATH: $(pandoc --version | head -n 1)"
+          exit 0
+        fi
+
+        deb="${RUNNER_TEMP:-/tmp}/pandoc.deb"
+        url="https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-1-amd64.deb"
+
+        echo "::group::Source 1: pandoc ${PANDOC_VERSION} from the project release"
+        if curl -fsSL --connect-timeout 20 --retry 5 --retry-delay 5 \
+                --retry-all-errors -o "$deb" "$url"; then
+          if [ -n "$PANDOC_SHA256" ]; then
+            # A mismatch is not a transient outage, so it exits instead of
+            # falling through: the bytes served were not the bytes expected, and
+            # installing them anyway is the one outcome worse than no pandoc.
+            if ! printf '%s  %s' "$PANDOC_SHA256" "$deb" | sha256sum --check --status; then
+              echo "::error::checksum mismatch for ${url}"
+              echo "expected ${PANDOC_SHA256}"
+              echo "got      $(sha256sum "$deb" | cut -d' ' -f1)"
+              exit 1
+            fi
+            echo "checksum verified"
+          fi
+          sudo apt-get install -y "$deb"
+        fi
+        echo "::endgroup::"
+
+        if ! command -v pandoc >/dev/null 2>&1; then
+          echo "::warning::project release unreachable, falling back to the Ubuntu archive"
+          echo "::group::Source 2: pandoc from the Ubuntu archive"
+          sudo apt-get update
+          sudo apt-get install -y pandoc
+          echo "::endgroup::"
+        fi
+
+        if ! command -v pandoc >/dev/null 2>&1; then
+          echo "::error::no pandoc from the project release or the Ubuntu archive"
+          exit 1
+        fi
+
+        echo "using $(pandoc --version | head -n 1) at $(command -v pandoc)"
