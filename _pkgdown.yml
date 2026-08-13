@@ -236,9 +236,11 @@ articles:
 - title: Start here
   navbar: ~
   desc: >
-    What the pipeline is for, and a complete run on the demonstration cohort.
+    What the pipeline is for, a complete run on the demonstration cohort, and the
+    cytometry background the rest of the site assumes.
   contents:
   - cyRAVEN
+  - flow-cytometry-for-dummies
 
 - title: Code and setup
   navbar: ~
@@ -270,9 +272,12 @@ articles:
 
 navbar:
   structure:
-    left:  [intro, code, science, news]
+    left:  [intro, basics, code, science, news]
     right: [search, github, lightswitch]
   components:
+    basics:
+      text: Flow cytometry for dummies
+      href: articles/flow-cytometry-for-dummies.html
     code:
       text: Code and setup
       menu:

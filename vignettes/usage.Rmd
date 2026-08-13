@@ -41,7 +41,7 @@ frequencies derived from them.
 Every option name is the same in both. Replace hyphens with underscores:
 `--group-column` becomes `group_column = `. Flags that take no value become
 `TRUE`: `--cluster` becomes `unsupervised = TRUE`. `docker run --rm
-cyraven:1.0.0 --help` prints the list at the version installed.
+cyraven:1.1.0 --help` prints the list at the version installed.
 
 ## 1.2 Get the image, once
 
@@ -59,8 +59,8 @@ Two routes to the same image. Which one you want depends on a single question:
 ### Pull
 
 ```bash
-docker pull bhagesh/cyraven:1.0.0
-docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
+docker pull bhagesh/cyraven:1.1.0
+docker tag bhagesh/cyraven:1.1.0 cyraven:1.1.0
 ```
 
 `bhagesh/cyraven:latest` tracks the most recent release. Pin the version for
@@ -68,8 +68,8 @@ anything you intend to publish. `latest` moving under you is exactly the
 reproducibility failure the pinned image exists to prevent.
 
 The `docker tag` line exists only so that every command in this article can say
-`cyraven:1.0.0`. If you skip it, substitute `bhagesh/cyraven:1.0.0` wherever
-`cyraven:1.0.0` appears below.
+`cyraven:1.1.0`. If you skip it, substitute `bhagesh/cyraven:1.1.0` wherever
+`cyraven:1.1.0` appears below.
 
 ### Build
 
@@ -79,7 +79,7 @@ repository root, the directory holding `DESCRIPTION`.
 ```bash
 git clone https://github.com/bhagesh-h/cyRAVEN.git
 cd cyRAVEN
-docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
+docker build -f inst/scripts/Dockerfile -t cyraven:1.1.0 .
 ```
 
 15 to 25 minutes on a first build. It ends by running `--help` and printing every
@@ -93,7 +93,7 @@ and a built image are numerically interchangeable. Confirm which you have:
 
 ```bash
 docker images | grep cyraven
-docker run --rm --entrypoint Rscript cyraven:1.0.0 \
+docker run --rm --entrypoint Rscript cyraven:1.1.0 \
   -e 'cat(as.character(packageVersion("cyRAVEN")), R.version.string)'
 ```
 
@@ -109,25 +109,25 @@ mkdir -p data results
 # put the FCS files in data/fcs/
 
 # 1. a sheet with a row for every file
-docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
+docker run --rm -v "$PWD/data:/data" cyraven:1.1.0 \
   --dir /data/fcs --recursive --write-samples /data/samples.csv
 
 # 2. edit data/samples.csv: patient_id, cohort, and any study variable
 
 # 3. start the config from the shipped template
-docker run --rm --entrypoint sh cyraven:1.0.0 -c \
+docker run --rm --entrypoint sh cyraven:1.1.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml' \
   > data/analysis.yaml
 
 # 4. edit populations: to match the panel, then validate in seconds
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs --recursive \
+  cyraven:1.1.0 --dir /data/fcs --recursive \
   --samples /data/samples.csv --config /data/analysis.yaml \
   --outdir /results --check
 
 # 5. repeat 4 until it reports no problems, then run
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs --recursive \
+  cyraven:1.1.0 --dir /data/fcs --recursive \
   --samples /data/samples.csv --config /data/analysis.yaml \
   --group-column cohort --reference-group "Healthy controls" \
   --outdir /results
@@ -158,7 +158,7 @@ outputs and runtime.
 
 ```bash
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 \
+  cyraven:1.1.0 \
   --dir /data/fcs --recursive \
   --samples /data/samples.csv --config /data/analysis.yaml \
   --group-column cohort --reference-group "Healthy controls" \
@@ -174,7 +174,7 @@ Peak memory is set by the events held at once, not by the number of files.
 
 ```bash
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 \
+  cyraven:1.1.0 \
   --dir /data --recursive \
   --samples /data/samples.csv --config /data/analysis.yaml \
   --max-events-per-file 300000 \
@@ -195,14 +195,14 @@ parent-gate count each frequency is a fraction of.
 ```bash
 # once, on the run being adopted as the reference
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
+  cyraven:1.1.0 --dir /data/fcs --samples /data/samples.csv \
   --config /data/analysis.yaml --outdir /results \
   --write-baseline /results/baseline.rds
 
 # on every later run
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results2:/results" \
   -v "$PWD/results/baseline.rds:/baseline.rds:ro" \
-  cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
+  cyraven:1.1.0 --dir /data/fcs --samples /data/samples.csv \
   --config /data/analysis.yaml --outdir /results \
   --baseline /baseline.rds --fail-on-drift
 ```
@@ -217,11 +217,11 @@ No data of your own required, and nothing downloaded.
 ```bash
 mkdir -p demo results
 docker run --rm -v "$PWD/demo:/demo" \
-  --entrypoint Rscript cyraven:1.0.0 \
+  --entrypoint Rscript cyraven:1.1.0 \
   /opt/cyraven/src/inst/scripts/demo_data.R /demo
 
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs \
+  cyraven:1.1.0 --dir /data/fcs \
   --samples /data/samples.csv --config /data/panel.yaml \
   --group-column cohort --reference-group "GvHD grade 1" \
   --batch-column visit --cluster --outdir /results
@@ -239,7 +239,7 @@ a rebuild.
 ```bash
 docker run --rm -v "$PWD:/src:ro" -v "$PWD/data:/data:ro" \
   -v "$PWD/results:/results" -e CYRAVEN_SOURCE=/src \
-  cyraven:1.0.0 --dir /data/fcs --outdir /results
+  cyraven:1.1.0 --dir /data/fcs --outdir /results
 ```
 
 ## 1.9 Paths, mounts and platforms
@@ -293,7 +293,7 @@ separation. Try the transform first, because for dim markers it decides whether 
 stable threshold exists at all.
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
+docker run --rm $D cyraven:1.1.0 \
   --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
   --transform logicle \
   --group-column cohort --reference-group "Healthy controls" \
@@ -313,7 +313,7 @@ The declared populations are only ever what was declared. Clustering is the one
 output that can contradict them.
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
+docker run --rm $D cyraven:1.1.0 \
   --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
   --cluster --explain-clusters \
   --group-column cohort --reference-group "Healthy controls" \
@@ -331,7 +331,7 @@ edit to the config, and the next run reads it.
 ### Samples were acquired on several days or instruments
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
+docker run --rm $D cyraven:1.1.0 \
   --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
   --batch-column acquisition_date \
   --group-column cohort --reference-group "Healthy controls" \
@@ -348,7 +348,7 @@ the finding. cyRAVEN refuses correction above 0.6 for that reason. Where *V* is
 low and the drift is real, add correction:
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
+docker run --rm $D cyraven:1.1.0 \
   --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
   --batch-column acquisition_date --correct-batch \
   --group-column cohort --reference-group "Healthy controls" \
@@ -370,7 +370,7 @@ HC-01.fcs,HC-01,HC-01,Healthy controls,3810,1650
 ```
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
+docker run --rm $D cyraven:1.1.0 \
   --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
   --group-column cohort --reference-group "Healthy controls" \
   --outdir /results
@@ -387,7 +387,7 @@ instrument exports its own sheet and transcription is not worth it, use
 Record where the accepted run placed its thresholds:
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
+docker run --rm $D cyraven:1.1.0 \
   --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
   --outdir /results --write-baseline /results/baseline.rds
 ```
@@ -396,7 +396,7 @@ Then test every later run against it:
 
 ```bash
 docker run --rm $D -v "$PWD/results/baseline.rds:/baseline.rds:ro" \
-  cyraven:1.0.0 \
+  cyraven:1.1.0 \
   --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
   --outdir /results --baseline /baseline.rds --fail-on-drift
 ```
@@ -410,7 +410,7 @@ the diagnostics that explain the failure. Omit it while investigating.
 ### A longitudinal or paired design
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
+docker run --rm $D cyraven:1.1.0 \
   --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
   --paired-column patient_id --condition-column timepoint \
   --group-column cohort --reference-group "Healthy controls" \
@@ -447,7 +447,7 @@ Uniform sampling reproduces each sample's composition, so a population at 0.1%
 contributes 0.1% of the drawn cells and forms no cluster.
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
+docker run --rm $D cyraven:1.1.0 \
   --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
   --subsample rare --cluster \
   --group-column cohort --reference-group "Healthy controls" \
@@ -462,7 +462,7 @@ on the drawn subset.
 ### Gates are needed on the instrument or in FlowJo
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
+docker run --rm $D cyraven:1.1.0 \
   --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
   --cluster --explain-clusters --export-gates --flowjo-export \
   --outdir /results
@@ -476,7 +476,7 @@ against UMAP-2, and the populations are there as channels.
 ### Intensities must be comparable across instruments or over months
 
 ```bash
-docker run --rm $D -v "$PWD/beads:/beads:ro" cyraven:1.0.0 \
+docker run --rm $D -v "$PWD/beads:/beads:ro" cyraven:1.1.0 \
   --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
   --calibration-beads /beads/rainbow.fcs \
   --calibration-values /beads/lot_values.csv \
@@ -491,7 +491,7 @@ than converted on a fit that does not hold, and the log says which.
 ### Labels from another tool
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
+docker run --rm $D cyraven:1.1.0 \
   --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
   --external-labels /data/cycondor_labels.csv --export-gates \
   --outdir /results
@@ -508,12 +508,12 @@ In this order, because the first costs nothing analytically:
 
 ```bash
 # 1. skip the session file: often most of the wall-clock, none of the results
-docker run --rm $D cyraven:1.0.0 \
+docker run --rm $D cyraven:1.1.0 \
   --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
   --no-session --outdir /results
 
 # 2. bound the events read per file, then the cells embedded
-docker run --rm $D cyraven:1.0.0 \
+docker run --rm $D cyraven:1.1.0 \
   --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
   --no-session --max-events-per-file 300000 \
   --cells-per-sample 6000 --max-cells 150000 --outdir /results
@@ -533,7 +533,7 @@ complement: every event, every eligible channel, no specification.
 ```bash
 # alongside the declared analysis. Writes to results/explore/ and changes
 # NOTHING in the existing output.
-docker run --rm $D cyraven:1.0.0 \
+docker run --rm $D cyraven:1.1.0 \
   --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
   --group-column cohort --reference-group "Healthy controls" \
   --cluster --explore --outdir /results
@@ -542,7 +542,7 @@ docker run --rm $D cyraven:1.0.0 \
 # per-sample thresholds, so clusters are NAMED rather than guessed at; explore
 # lends the declared run spec_gaps.csv, naming populations that span several
 # clusters and clusters nothing covers.
-docker run --rm $D cyraven:1.0.0 \
+docker run --rm $D cyraven:1.1.0 \
   --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
   --group-column cohort --reference-group "Healthy controls" \
   --cluster --explore --maybe-learn --outdir /results
@@ -556,7 +556,7 @@ specification to be worth anything.
 
 ```bash
 # no --config, no --samples. A folder of FCS files is the whole input.
-docker run --rm $D cyraven:1.0.0 \
+docker run --rm $D cyraven:1.1.0 \
   --dir /data/fcs --explore-only --outdir /results
 ```
 
@@ -619,6 +619,8 @@ still work unchanged and are not deprecated, but cannot be combined with
 | `--config` | built-in spec | The analysis: population specification, `functional_blocks`, `ratios`, threshold and `sample_overrides`, colours, metadata dictionaries, and the `samples:` section naming which sheet column plays which role |
 | `--write-samples` | none | Write a sheet template covering every input file, and exit |
 | `--check` | off | Validate the inputs from FCS headers alone and exit. Reports resolved markers, specification entries matching none of them, sheet coverage, group levels and sizes, batches and study variables. Seconds rather than the full run |
+| `--list-channels` | off | List every acquisition parameter and exit: index, `$PnN`, `$PnS`, and the symbol the run resolves it to, which is the name the specification must use. Also reports whether every file carries the same panel. Needs no sheet and no config, because it answers what to put in one |
+| `--ignore-channels` | none | Comma-separated marker names dropped before anything else, including before the panel fingerprint. Names match whole and case-insensitively; a name containing `*` is a glob. See [section 3.2a](#a-channel-that-splits-the-cohort) |
 | `--reference-date` | today | `YYYY-MM-DD` used to derive age from date of birth and to place two-digit years. Set it to a fixed study date so ages do not change between runs |
 | `--group-column` | resolved `cohort` | Column defining the comparison groups. Enables the between-group figure and tests. Also settable as `samples: group_column:` in the config, which the flag overrides |
 | `--reference-group` | first alphabetically | The group every other is tested against. Drawn unfilled and leftmost |
@@ -632,6 +634,37 @@ The earlier three-file form:
 | `--patient-table` | none | Clinical covariates keyed on patient identifier. Supplies `wbc_per_ul` for absolute concentrations |
 | `--absolute-counts` | none | Externally measured absolute counts, wide format. Requires `--sample-map` |
 | `--write-sample-map` | none | Write a sample-map template and exit |
+
+### A channel that splits the cohort
+
+The panel fingerprint is the set of marker names a file resolves. Files sharing
+a set form one panel, and each panel gets its own cofactor, its own embedding
+and its own thresholds. That is correct when panels genuinely differ, and
+destructive when they do not.
+
+Spectral unmixing is where it usually goes wrong. Unmixing writes the extracted
+autofluorescence back as channels, often named `[AF color 1]` and upward, and
+how many it writes depends on the sample rather than on the panel. They are not
+stains and nothing is measured with them, but they enter the fingerprint like
+any other channel, so twelve comparable files can resolve into seven panels of
+one or two files each. Every downstream quantity is then derived within a panel
+of one, and nothing is comparable to anything.
+
+`--list-channels` shows the resolved names, and `--check` reports markers that
+are not present in every file. When the culprit is a nuisance channel, drop it:
+
+```bash
+--ignore-channels '[AF color*'
+```
+
+The channel is removed before the fingerprint is taken, so the files collapse
+back into one panel. Names match whole and case-insensitively, and `*` makes an
+entry a glob, so `CD16` matches `CD16` and not `CD161`. Separate several with
+commas.
+
+Only drop a channel that carries no signal you intend to use. A real marker
+missing from some files is a different problem, and the honest handling of it is
+the panel split.
 
 ## 3.3 Transformation and gating
 
@@ -716,6 +749,10 @@ The earlier three-file form:
 | `--no-differential-state` | on | Skip the sample-level differential-state tests |
 | `--no-compositional` | on | Skip the centred log-ratio re-test and its concordance table |
 | `--no-confounding` | on | Skip the age and sex confounding diagnostic |
+| `--no-group-tests` | on | Keep the grouping but run no between-group test. Figures stay split and coloured by `--group-column` and every per-sample quantity is still reported; the abundance, functional-marker, ratio, absolute-count, marker-state and compositional comparisons are skipped. Diagnostics are unaffected |
+| `--min-group-n` | 3 | Minimum samples in a group before it is tested. Groups below it appear in `design_feasibility.csv` instead of being tested |
+| `--no-parametric` | on | Skip `parametric_tests.csv` and `posthoc_tests.csv` |
+| `--read-threads` | 1 | Read this many FCS files at once. Reading is the slowest stage and each file is independent. Peak memory scales with it, and results do not change |
 | `--covariates` | `age,sex` | Patient-table columns screened as confounders |
 | `--rank-ancova` | off | Additionally fit an exploratory covariate-adjusted rank ANCOVA. At single-digit n per group the adjustment is usually extrapolation; read `confounding_diagnostics.csv` first |
 | `--paired-column` | none | Column identifying the pairing unit, for example donor. Requires `--condition-column`. Pairing cannot be inferred, so nothing paired runs without it |

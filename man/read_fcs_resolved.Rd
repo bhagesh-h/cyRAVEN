@@ -4,7 +4,7 @@
 \alias{read_fcs_resolved}
 \title{Read one FCS file and resolve marker symbols}
 \usage{
-read_fcs_resolved(path, sample_id = NULL, max_events = 0L)
+read_fcs_resolved(path, sample_id = NULL, max_events = 0L, ignore_channels = NULL)
 }
 \arguments{
 \item{path}{File path.}
@@ -12,6 +12,10 @@ read_fcs_resolved(path, sample_id = NULL, max_events = 0L)
 \item{sample_id}{The sample id.}
 
 \item{max_events}{The max events. Default \code{0L}.}
+
+\item{ignore_channels}{Character vector of marker names to drop before the
+panel fingerprint is taken, or NULL. Names match whole and
+case-insensitively; a name containing \code{*} is treated as a glob.}
 }
 \value{
 list(exprs, marker_cols, all_cols, keywords, n_events, file, sample_id)

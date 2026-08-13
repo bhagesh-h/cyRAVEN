@@ -69,12 +69,12 @@ pick by whether you intend to change the code.
 here was produced with.
 
 ```bash
-docker pull bhagesh/cyraven:1.0.0
-docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
+docker pull bhagesh/cyraven:1.1.0
+docker tag bhagesh/cyraven:1.1.0 cyraven:1.1.0
 ```
 
-The second line is only so that every command below can say `cyraven:1.0.0`. Use
-`bhagesh/cyraven:1.0.0` directly instead if you prefer.
+The second line is only so that every command below can say `cyraven:1.1.0`. Use
+`bhagesh/cyraven:1.1.0` directly instead if you prefer.
 
 **Build.** For a modified source tree, an air-gapped host, or if you would
 rather not run a third-party image. The build context is the repository root,
@@ -83,7 +83,7 @@ the directory holding `DESCRIPTION`.
 ```bash
 git clone https://github.com/bhagesh-h/cyRAVEN.git
 cd cyRAVEN
-docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
+docker build -f inst/scripts/Dockerfile -t cyraven:1.1.0 .
 ```
 
 The first build compiles the dependency stack and takes 15 to 25 minutes. It
@@ -92,7 +92,7 @@ image fails at build time rather than during an analysis.
 
 Both routes pin R 4.4.3, the same dated CRAN snapshot and Bioconductor 3.20, so
 they are numerically interchangeable. Confirm what you have with
-`docker run --rm --entrypoint Rscript cyraven:1.0.0 -e 'packageVersion("cyRAVEN")'`.
+`docker run --rm --entrypoint Rscript cyraven:1.1.0 -e 'packageVersion("cyRAVEN")'`.
 
 ### 2. Run the demonstration cohort
 
@@ -105,19 +105,19 @@ mkdir -p demo results
 
 # write the cohort, its sample sheet and its config
 docker run --rm -v "$PWD/demo:/demo" \
-  --entrypoint Rscript cyraven:1.0.0 \
+  --entrypoint Rscript cyraven:1.1.0 \
   /opt/cyraven/src/inst/scripts/demo_data.R /demo
 
 # validate the inputs in seconds, without analysing anything
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs \
+  cyraven:1.1.0 --dir /data/fcs \
   --samples /data/samples.csv --config /data/panel.yaml \
   --group-column cohort --reference-group "GvHD grade 1" \
   --batch-column visit --outdir /results --check
 
 # run
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs \
+  cyraven:1.1.0 --dir /data/fcs \
   --samples /data/samples.csv --config /data/panel.yaml \
   --group-column cohort --reference-group "GvHD grade 1" \
   --batch-column visit --cluster --outdir /results
@@ -171,11 +171,11 @@ declaring what to score.
 
 ```bash
 # a sheet with a row for every file, which you then fill in
-docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
+docker run --rm -v "$PWD/data:/data" cyraven:1.1.0 \
   --dir /data/fcs --recursive --write-samples /data/samples.csv
 
 # the annotated config template
-docker run --rm --entrypoint sh cyraven:1.0.0 -c \
+docker run --rm --entrypoint sh cyraven:1.1.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml' \
   > data/analysis.yaml
 ```
@@ -187,11 +187,17 @@ for, is in
 
 ## Documentation
 
+New to flow cytometry?
+[Flow cytometry for dummies](https://bhagesh-h.github.io/cyRAVEN/articles/flow-cytometry-for-dummies.html)
+explains what an event is, what a cut is, why `SSC-A` sits in a population
+definition next to two antibodies, and what the `-A` on a channel name means.
+Every other page assumes it.
+
 **Code and setup**
 
 | Page | Content |
 |---|---|
-| [Running cyRAVEN](https://bhagesh-h.github.io/cyRAVEN/articles/usage.html) | Every command in Docker and R, which variation to use in which situation, and the complete reference for all 83 options |
+| [Running cyRAVEN](https://bhagesh-h.github.io/cyRAVEN/articles/usage.html) | Every command in Docker and R, which variation to use in which situation, and the complete reference for all 111 options |
 | [Inputs](https://bhagesh-h.github.io/cyRAVEN/articles/inputs.html) | The sample sheet and the config: every column, the templates, and the errors the format can raise |
 | [Gating specification](https://bhagesh-h.github.io/cyRAVEN/articles/gating.html) | Declaring populations, functional blocks and ratios; per-sample thresholding and the `source` column; arcsinh against logicle |
 | [Claude skill](https://bhagesh-h.github.io/cyRAVEN/articles/claude-skill.html) | Installing and using the bundled Claude Code skill, which executes through Docker by default |

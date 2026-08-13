@@ -50,27 +50,27 @@ whether the gating specification held.
 ## Quick start
 
 ```bash
-docker pull bhagesh/cyraven:1.0.0
+docker pull bhagesh/cyraven:1.1.0
 
 # what the flags are
-docker run --rm bhagesh/cyraven:1.0.0 --help
+docker run --rm bhagesh/cyraven:1.1.0 --help
 
 # write the demonstration cohort, its sample sheet and its config
 mkdir -p demo results
 docker run --rm -v "$PWD/demo:/demo" \
-  --entrypoint Rscript bhagesh/cyraven:1.0.0 \
+  --entrypoint Rscript bhagesh/cyraven:1.1.0 \
   /opt/cyraven/src/inst/scripts/demo_data.R /demo
 
 # validate the inputs from the FCS headers alone. Seconds. Analyses nothing.
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
-  bhagesh/cyraven:1.0.0 --dir /data/fcs \
+  bhagesh/cyraven:1.1.0 --dir /data/fcs \
   --samples /data/samples.csv --config /data/panel.yaml \
   --group-column cohort --reference-group "GvHD grade 1" \
   --batch-column visit --outdir /results --check
 
 # run it
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
-  bhagesh/cyraven:1.0.0 --dir /data/fcs \
+  bhagesh/cyraven:1.1.0 --dir /data/fcs \
   --samples /data/samples.csv --config /data/panel.yaml \
   --group-column cohort --reference-group "GvHD grade 1" \
   --batch-column visit --cluster --outdir /results
@@ -88,11 +88,11 @@ declaring what to score.
 
 ```bash
 # a sheet listing every file, which you then fill in
-docker run --rm -v "$PWD/data:/data" bhagesh/cyraven:1.0.0 \
+docker run --rm -v "$PWD/data:/data" bhagesh/cyraven:1.1.0 \
   --dir /data/fcs --recursive --write-samples /data/samples.csv
 
 # the annotated config template
-docker run --rm --entrypoint sh bhagesh/cyraven:1.0.0 -c \
+docker run --rm --entrypoint sh bhagesh/cyraven:1.1.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml' \
   > data/analysis.yaml
 ```
@@ -129,7 +129,7 @@ on an air-gapped host, or would rather not run a third-party image.
 ```bash
 git clone https://github.com/bhagesh-h/cyRAVEN.git
 cd cyRAVEN
-docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
+docker build -f inst/scripts/Dockerfile -t cyraven:1.1.0 .
 ```
 
 The build context is the repository root, the directory holding `DESCRIPTION`.

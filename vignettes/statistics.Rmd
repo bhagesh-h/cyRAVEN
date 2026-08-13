@@ -80,6 +80,51 @@ adjustment.
 **Revisit at.** Approximately fifteen samples per group, where the prior becomes
 informative and mixed models can accommodate repeated measures.
 
+### 2a. The parametric tests, and why they are reported separately
+
+Most immunology papers report a *t*-test or an ANOVA, and a reviewer may ask for
+one. Declining to compute it does not remove it from the paper; it moves the
+calculation somewhere with no record of whether its assumptions held.
+
+So `parametric_tests.csv` carries the parametric equivalent of every comparison,
+and `group_comparison_stats.csv` is unchanged. Two files, two answers, and the
+columns that decide between them sit on the parametric row.
+
+**The transform.** Frequencies are proportions. They are bounded, their variance
+depends on their mean, and near 0 or 100 they are strongly skewed, which is
+exactly where rare populations live. The arcsine square root transform stabilises
+that variance and is the conventional remedy, so the parametric tests run on
+transformed values. Group means are reported back on the percentage scale,
+because a difference of 0.07 arcsine units means nothing to a reader.
+
+**Which test.** Two groups give Welch's *t*-test, which does not assume equal
+variances, with Student's *t* beside it. Three or more give Welch's ANOVA with
+the classical one-way beside it. Welch's is the default in both cases because
+equal variance is an assumption, not a property, and the cost of Welch's when
+variances happen to be equal is small.
+
+**The assumptions, on every row.** `brown_forsythe_p` tests equal variance, using
+deviations from the median rather than the mean so it does not itself assume
+normality. `shapiro_p` tests normality of the **within-group residuals**, not the
+pooled values, which are bimodal whenever the groups genuinely differ and would
+fail the test for the wrong reason. `assumptions_met` combines them and
+`recommended` names the test to read.
+
+**Post-hoc.** With three or more groups, `posthoc_tests.csv` carries all three
+standard families: Games-Howell, which uses Welch's standard error and
+pair-specific degrees of freedom and so pairs with Welch's ANOVA; Tukey HSD,
+which assumes equal variances and pairs with the classical ANOVA; and Dunn, the
+rank equivalent that follows Kruskal-Wallis. All three are written, adjusted
+within each family, and the assumption columns say which to read. Choosing after
+seeing the p-values is the thing this arrangement is designed to make visible.
+
+**What is still not here.** Mixed models and GLMMs are the right tool for
+repeated measures and are not implemented; `--paired-column` with
+`--condition-column` covers the two-timepoint case and nothing wider. Beta
+regression, which models the bounded support directly rather than transforming
+it, is the better answer at larger sample sizes. Both become worth the dependency
+at roughly fifteen donors per group.
+
 ## 3. Compositionality
 
 ### 3.1 Constraint
@@ -237,3 +282,37 @@ p-value is adjusted by it, and the tests behave as they did before.
 | Is the difference bigger than the gate's own uncertainty? | `run_gate_uncertainty()`, `annotate_gate_uncertainty()` | sample |
 | Were enough cells counted for the frequency to mean anything? | `counting_uncertainty()` | sample |
 | Which markers shift within a subcluster? | `stats_subcluster_shifts()` | cell, no p-value |
+
+## 10. Sources for the tests implemented here
+
+Where each method came from, and what it is for.
+
+**Proportions.** Population frequencies are bounded and their variance depends on
+their mean, so a test assuming constant variance is wrong in a way that gets
+worse as the population gets rarer. The arcsine square root transform is the
+standard remedy, and its asymptotic variance is known rather than estimated from
+the data, which is what lets ordinary ANOVA machinery run on top of it
+([Frontiers in Psychology, 2022](https://www.frontiersin.org/articles/10.3389/fpsyg.2022.1045436)).
+
+**Unequal variance.** Welch's t-test and Welch's ANOVA do not assume equal
+variances, so they stay valid when group sizes and spreads differ, which they
+almost always do in an immunophenotyping cohort. Games-Howell is the post-hoc
+test that matches: it uses Welch's standard error and pair-specific degrees of
+freedom rather than one pooled estimate
+([rstatix](https://rpkgs.datanovia.com/rstatix/reference/games_howell_test.html)).
+
+**Rank post-hoc.** Dunn's test compares mean ranks computed over the whole
+dataset, which is what makes it the correct follow-up to Kruskal-Wallis. A set of
+pairwise Wilcoxon tests re-ranks within each pair and answers a different
+question.
+
+**What is deliberately not implemented.** Generalised linear mixed models are the
+right tool when donors contribute several samples, and CytoGLMM implements them
+for cytometry specifically
+([Seiler et al.](https://christofseiler.github.io/CytoGLMM/)). Beta regression
+models bounded support directly instead of transforming it
+([npj Systems Biology, 2025](https://www.nature.com/articles/s41540-025-00572-4)).
+Both need more donors per group than the cohorts this package is aimed at, and
+both add a dependency whose failure modes are harder to explain than the tests
+above. `--paired-column` with `--condition-column` covers the two-timepoint case;
+anything wider belongs in one of those packages.

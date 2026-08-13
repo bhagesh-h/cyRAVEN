@@ -1,3 +1,85 @@
+# cyRAVEN 1.1.0
+
+Parametric tests beside the rank tests, a feasibility check before either, the
+channel control that stops a cohort splitting into panels, and parallel reading.
+Every option, output file, column name and value version 1.0.0 produced is
+produced identically.
+
+## Knowing what to write in the config
+
+* `--list-channels` prints one row per acquisition parameter: index, `$PnN`,
+  `$PnS`, and the symbol the run resolves it to, which is the name a population
+  specification has to use. On a spectral panel those differ, because `$PnS`
+  reads `CD45 : SparkUV-387 - Area` and the run uses `CD45`. Reads headers only.
+* It reads every file rather than the first, and reports whether they all carry
+  the same panel, naming the markers that differ.
+
+## A channel that splits the cohort
+
+* `--ignore-channels` drops named channels before anything else, including
+  before the panel fingerprint.
+* This matters more than it sounds. The fingerprint is the set of resolved
+  marker names, so a channel present in some files and absent in others makes
+  them separate panels, each with its own cofactor, embedding and thresholds.
+  Autofluorescence channels from spectral unmixing do this routinely: they are
+  not stains, and how many are written depends on the sample. Twelve comparable
+  files can become seven panels of one or two files each.
+* Names match whole and case-insensitively; a name containing `*` is a glob, so
+  `[AF color*` catches all of them and `CD16` does not catch `CD161`.
+
+## Testing what is testable
+
+* `design_feasibility.csv` is written whenever a group column resolves. One row
+  per group with `n_samples`, `n_donors`, `will_be_tested`, `valid_unpaired` and
+  a reason.
+* It catches two failures that are otherwise invisible. A group below the
+  minimum is skipped silently, and a skipped comparison is indistinguishable
+  from one that ran and found nothing. Worse, a donor contributing to more than
+  one group makes an unpaired test treat repeated measures as independent, and
+  that test runs and produces a well-formed p-value answering a question nobody
+  asked.
+* `--no-group-tests` keeps the grouping and skips the between-group tests.
+  Figures stay split and coloured by group and every per-sample quantity is
+  still reported. For a cohort worth describing but too small, or too
+  confounded, to test. Diagnostics are unaffected.
+* `--min-group-n` exposes the minimum group size, which was fixed at 3.
+
+## The t-test and ANOVA, with their assumptions attached
+
+* `parametric_tests.csv` holds Welch's t-test and Student's t-test for two
+  groups, Welch's ANOVA and the classical one-way ANOVA for more, with Cohen's
+  *d* and eta squared.
+* `posthoc_tests.csv` holds Games-Howell, Tukey HSD and Dunn for every pair.
+* All of it is computed on arcsine square root transformed percentages, the
+  standard variance-stabilising transform for proportion data, and both scales
+  are reported because a difference in arcsine units is uninterpretable.
+* Every row carries `shapiro_p`, `brown_forsythe_p` and a `recommended` column.
+  Normality is tested on within-group residuals rather than pooled values, which
+  are bimodal whenever the groups genuinely differ.
+* These sit beside the rank tests and never replace them. No existing table
+  changes. `--no-parametric` turns them off.
+
+## Speed
+
+* `--read-threads N` reads N files at once. Reading is the slowest stage on a large
+  cohort and files are independent, so this scales close to linearly. Peak
+  memory scales with it too, since each worker holds one expression matrix.
+* Everything after reading stays sequential, because cofactors, thresholds and
+  the embedding are derived across samples from a seeded generator that has to
+  be consumed in one order for a run to reproduce. Results do not depend on the
+  thread count.
+
+## Fixes
+
+* A UMAP marker panel whose marker is constant over the cells drawn no longer
+  fails the run. The 1st and 99th percentile came back equal, the colour scale
+  was zero width, ggplot collapsed its two identical breaks into one while both
+  labels remained, and the run died with "`breaks` and `labels` have different
+  lengths" after most of its output had been written.
+* `--paired-column` without `--condition-column` was documented as sufficient in
+  places. It is not, and never was: the pipeline logs `paired test skipped` and
+  writes no paired output.
+
 # cyRAVEN 1.0.0
 
 Explore mode, the statistics catalogue, and the input format. Every option,

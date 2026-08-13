@@ -26,10 +26,10 @@ rows to disagree about it.
 Both templates ship with the package:
 
 ```bash
-docker run --rm --entrypoint sh cyraven:1.0.0 -c \
+docker run --rm --entrypoint sh cyraven:1.1.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/samples_template.csv'
 
-docker run --rm --entrypoint sh cyraven:1.0.0 -c \
+docker run --rm --entrypoint sh cyraven:1.1.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml'
 ```
 
@@ -42,7 +42,7 @@ Do not write it from scratch. Generate one covering every file in the input
 directory, then fill in the columns only you know:
 
 ```bash
-docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
+docker run --rm -v "$PWD/data:/data" cyraven:1.1.0 \
   --dir /data/fcs --write-samples /data/samples.csv
 ```
 
@@ -56,7 +56,7 @@ Then check it, which costs seconds because it reads FCS headers and not events:
 
 ```bash
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
+  cyraven:1.1.0 --dir /data/fcs --samples /data/samples.csv \
   --config /data/analysis.yaml --outdir /results --check
 ```
 
@@ -185,20 +185,20 @@ Which to use:
 ```bash
 # 0. the image, once. Pull it, or build it from source if you have changed
 #    the code -- see the Running cyRAVEN article.
-docker pull bhagesh/cyraven:1.0.0
-docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
+docker pull bhagesh/cyraven:1.1.0
+docker tag bhagesh/cyraven:1.1.0 cyraven:1.1.0
 
 mkdir -p data results
 # put the FCS files in data/fcs/
 
 # 1. a sheet covering every file
-docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
+docker run --rm -v "$PWD/data:/data" cyraven:1.1.0 \
   --dir /data/fcs --write-samples /data/samples.csv
 
 # 2. edit samples.csv: patient_id, cohort, and any study variable
 
 # 3. a config: start from the shipped template
-docker run --rm --entrypoint sh cyraven:1.0.0 -c \
+docker run --rm --entrypoint sh cyraven:1.1.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml' \
   > data/analysis.yaml
 
@@ -206,12 +206,12 @@ docker run --rm --entrypoint sh cyraven:1.0.0 -c \
 
 # 5. validate, in seconds
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
+  cyraven:1.1.0 --dir /data/fcs --samples /data/samples.csv \
   --config /data/analysis.yaml --outdir /results --check
 
 # 6. run
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
+  cyraven:1.1.0 --dir /data/fcs --samples /data/samples.csv \
   --config /data/analysis.yaml --group-column cohort \
   --reference-group "Healthy controls" --batch-column acquisition_date \
   --cluster --outdir /results

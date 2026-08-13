@@ -220,7 +220,10 @@ definition of a CD4 T cell, expressed in a form the scoring stage can evaluate.
 
 ### 3.2 Directions
 
-`above` and `below` denote expression and its absence.
+`above` and `below` denote expression and its absence. If the terms in this
+section are unfamiliar, [Flow cytometry for
+dummies](flow-cytometry-for-dummies.html) covers events, cuts, scatter and the
+pulse suffixes from the beginning.
 
 `intermediate` addresses markers with three resolvable levels. CD14 in monocyte
 subsetting is the canonical case: classical monocytes are CD14<sup>++</sup>,
