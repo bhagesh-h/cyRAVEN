@@ -428,6 +428,22 @@ build_option_list <- function() list(
               dest = "batch_max_cramers_v",
               help = paste("refuse batch correction above this Cramer's V",
                            "between batch and group [default %default]")),
+  # HOW a correction is fitted, never WHETHER one is defensible. The Cramer's V
+  # refusal above is evaluated before this option is consulted, so both methods
+  # are refused on identical evidence and --force-batch-correction remains the
+  # only way past. Default stays 'quantile' so no existing invocation changes.
+  optparse::make_option("--batch-method", type = "character", default = "quantile",
+              dest = "batch_method",
+              help = paste("'quantile' fits one map per marker over the whole",
+                           "file; 'cluster' fits one per marker PER CELL TYPE,",
+                           "which is what a whole-file map cannot do when a",
+                           "detector shift moves bright and dim populations by",
+                           "different amounts. 'cytonorm' is a synonym for",
+                           "'cluster' [default %default]")),
+  optparse::make_option("--batch-cluster-k", type = "integer", default = 10L,
+              dest = "batch_cluster_k",
+              help = paste("cell-type clusters to fit for --batch-method",
+                           "cluster [default %default]")),
   # ---- explore mode --------------------------------------------------------
   # Unsupervised discovery ALONGSIDE the declared analysis. Everything it writes
   # goes to <outdir>/explore/, so nothing here can alter an existing output.

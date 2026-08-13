@@ -10,7 +10,10 @@ correct_batch(
   group = NULL,
   markers = NULL,
   max_cramers_v = 0.6,
-  force = FALSE
+  force = FALSE,
+  method = c("quantile", "cluster", "cytonorm"),
+  cluster_k = 10L,
+  seed = 42L
 )
 }
 \arguments{
@@ -25,9 +28,16 @@ correct_batch(
 \item{max_cramers_v}{refusal threshold}
 
 \item{force}{proceed despite confounding}
+
+\item{method}{\code{"quantile"} for one map per marker over the whole file, or
+\code{"cluster"} (synonym \code{"cytonorm"}) for one map per marker per cell type}
+
+\item{cluster_k}{number of cell-type clusters when \code{method = "cluster"}}
+
+\item{seed}{RNG seed for the clustering, so a run reproduces}
 }
 \value{
-list(tmat, cramers_v, corrected, markers, reason)
+list(tmat, cramers_v, corrected, markers, reason, method)
 }
 \description{
 WHAT IT DOES: aligns each marker's distribution across batches, after
@@ -43,4 +53,14 @@ reaches the run manifest.
 
 This is descriptive of intensity only. It does not touch the gate hierarchy,
 which is derived per sample and is already batch-local by construction.
+
+TWO METHODS. \code{"quantile"} fits one map per marker over the whole file.
+\code{"cluster"} fits one map per marker per cell type, which is what CytoNorm
+does and what a whole-file map cannot do. \code{"cytonorm"} is accepted as a
+synonym for \code{"cluster"}, because that is the name the method is known by.
+
+THE METHOD IS CHOSEN AFTER THE REFUSAL, NEVER BEFORE IT. A better alignment
+algorithm does not make a confounded design correctable. Where Cramer's V
+says batch and group are close to the same variable, both methods are refused
+identically, and \code{force = TRUE} remains the only way past.
 }

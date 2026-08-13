@@ -105,6 +105,51 @@ numbers, because the numbers it changes were wrong.
 * `--no-marker-group-umaps` turns it off. One PNG per marker is a folder you may
   not want on a panel of forty.
 
+## Batch correction per cell type, not per file
+
+* `--batch-method cluster` fits one alignment map per marker **per cell type**
+  instead of one per marker over the whole file. `cytonorm` is accepted as a
+  synonym, because that is the name the method is known by. `quantile`, the
+  whole-file map, stays the default and is unchanged.
+* Why it matters: a detector shift moves a bright population and a dim one by
+  different amounts, so a single map fitted to the pooled distribution
+  over-corrects one and under-corrects the other. A per-file map also moves with
+  the biology, so it can remove the difference it was meant to preserve.
+* It is fitted in two stages, and the second stage is not optional. Clustering
+  the raw matrix lets a large batch shift become the dominant variance, so the
+  clusters turn out to be the batches, every cluster holds one batch and the
+  correction silently does almost nothing. Measured on a synthetic three-batch
+  shift: per-cluster alignment fitted that way left a mean between-batch gap of
+  1.296 against whole-file alignment's 0.003. Fitting the clustering on a
+  whole-file-aligned copy and the per-cluster maps on the original values brings
+  it to 0.014, while leaving the true between-cell-type separation at 3.996
+  against a true 3.994, where whole-file alignment inflates it to 4.078.
+* `--batch-cluster-k` sets the number of cell types, default 10.
+* No new dependency. The clustering reuses `run_unsupervised_clusters()`, which
+  is already seeded, already stream-safe, and already falls back to a built-in
+  SOM when FlowSOM is absent.
+* **The Cramer's V refusal is evaluated before the method is consulted.** Both
+  methods are refused on identical evidence, and `--force-batch-correction`
+  remains the only way past. A better alignment algorithm does not make a
+  confounded design correctable.
+* `batch_correction.csv` is new. The decision was previously held in memory and
+  never written, so no output said whether a correction had run, which method
+  fitted it, or why it was refused. Written whenever `--correct-batch` is set,
+  including on a refusal.
+
+## `--list-channels` now names the fix, not just the symptom
+
+* When files carry different panels, it reports which channels vary and, where
+  the cause is mechanical, prints the exact `--ignore-channels` pattern that
+  merges the cohort.
+* Two causes are detected: autofluorescence and unmixing artefacts, which are
+  not stains and whose count varies per acquisition, and a real marker present
+  in a minority of files. Anything else is reported as a genuine panel
+  difference and left alone, because that is a decision about the experiment.
+* This was previously something you had to know to look for. A fragmented cohort
+  raises no error: every file loads and every table is written, while each panel
+  quietly gets its own cofactor, thresholds and embedding.
+
 ## Speed
 
 * `--read-threads N` reads N files at once. Reading is the slowest stage on a large

@@ -289,6 +289,48 @@ list_channels <- function(fcs) {
       }
       log_msg("A population naming a marker some files lack is UNAVAILABLE in ",
               "those files, not an error.")
+      # NAME THE FIX, NOT JUST THE SYMPTOM.
+      #
+      # A differing panel is not itself the problem. The problem is what it
+      # causes: the fingerprint is the set of resolved marker names, so files
+      # that differ become separate panels, each with its own cofactor,
+      # thresholds and embedding, and a cohort quietly stops being one cohort.
+      # Twelve comparable files have become seven panels this way.
+      #
+      # Two causes are mechanical enough to detect without judgement, so they
+      # are named here with the exact flag that merges the cohort. Anything else
+      # is reported as a genuine panel difference and left alone, because that
+      # is a decision about the experiment rather than about the file format.
+      .all <- unique(unlist(others))
+      .n_with <- vapply(.all, function(s)
+        sum(vapply(others, function(x) s %in% x, logical(1))), integer(1))
+      .varies <- names(.n_with)[.n_with < length(others)]
+      # 1. Spectral unmixing writes extracted autofluorescence back as extra
+      #    channels, and how many appear varies per acquisition. Not stains.
+      .af <- grep("^\\[?AF([ _-]|$)|autofluor|unmix", .varies,
+                  ignore.case = TRUE, value = TRUE)
+      # 2. A real marker stained in only a minority of files. Legitimate, but it
+      #    still splits the cohort, so the choice has to be made deliberately.
+      .minority <- setdiff(.varies[.n_with[.varies] < length(others) / 2], .af)
+      if (length(.af) || length(.minority)) {
+        log_msg("")
+        log_msg("SUGGESTED FIX. These channels are why the files split:")
+        if (length(.af))
+          log_msg("  autofluorescence/unmixing artefacts, not stains: ",
+                  paste(.af, collapse = ", "))
+        for (s in .minority)
+          log_msg("  '", s, "' is present in only ", .n_with[[s]], " of ",
+                  length(others), " file(s)")
+        .pat <- c(if (length(.af)) "[AF color*", .minority)
+        log_msg("  Dropping them merges the cohort into one panel:")
+        log_msg("    --ignore-channels '", paste(.pat, collapse = ","), "'")
+        log_msg("  Quote it, or the shell expands [ and * itself. Dropped ",
+                "before the fingerprint is computed, which is the only place ",
+                "it works.")
+        if (length(.minority))
+          log_msg("  Keep a minority marker only if you accept that the answer ",
+                  "covers those files alone, which is not a cohort-wide result.")
+      }
     }
     if (length(bad))
       log_msg("unreadable header(s): ", paste(bad, collapse = ", "))

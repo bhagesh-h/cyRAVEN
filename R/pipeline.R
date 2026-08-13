@@ -957,12 +957,38 @@ run_cyraven_impl <- function(opt) {
           log_msg("  batch column '", bcol, "' not found in the sample map; ",
                   "skipping correction")
         } else {
+          .bm <- tolower(trimws(opt$batch_method %||% "quantile"))
+          if (!.bm %in% c("quantile", "cluster", "cytonorm")) {
+            log_msg("  --batch-method '", .bm, "' not recognised; using ",
+                    "'quantile'. Valid: quantile, cluster, cytonorm")
+            .bm <- "quantile"
+          }
           bres <- correct_batch(.fmat, bvec, gvec,
                                 max_cramers_v = opt$batch_max_cramers_v %||% 0.6,
-                                force = isTRUE(opt$force_batch_correction))
+                                force = isTRUE(opt$force_batch_correction),
+                                method = .bm,
+                                cluster_k = opt$batch_cluster_k %||% 10L,
+                                seed = opt$seed %||% 42L)
           .fmat <- bres$tmat
           for (cc in colnames(.fmat)) data.table::set(cells, j = cc, value = .fmat[, cc])
           batch_info <- bres
+          # The decision was previously held in memory and never written, so a
+          # reader could not tell from the outputs whether a correction had run,
+          # which method fitted it, or why it was refused. One row, always
+          # written once --correct-batch is set, including on a refusal.
+          write.csv(data.frame(
+            method        = bres$method,
+            fitted_as     = bres$how %||% NA_character_,
+            corrected     = bres$corrected,
+            cramers_v     = bres$cramers_v,
+            max_cramers_v = opt$batch_max_cramers_v %||% 0.6,
+            forced        = isTRUE(opt$force_batch_correction),
+            n_markers     = length(bres$markers),
+            markers       = paste(bres$markers, collapse = ";"),
+            reason        = bres$reason,
+            stringsAsFactors = FALSE),
+            file.path(opt$outdir, "batch_correction.csv"), row.names = FALSE)
+          log_msg("wrote batch_correction.csv")
         }
       }
     }

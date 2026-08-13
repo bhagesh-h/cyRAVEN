@@ -54,6 +54,12 @@ benchmark/
 # See dev/README.md. Local to a working copy, never part of the package or the
 # history.
 dev/
+# The backlog kept at the top level rather than under dev/, because it is read
+# often enough to want it where you trip over it. Same status as dev/: local to
+# a working copy. Also in .Rbuildignore -- R CMD build reads the directory, not
+# git, so ignoring it here alone would still ship it in the tarball and add a
+# non-standard-top-level-file NOTE to a check that is currently clean.
+ToDo.md
 
 # Patient data must never enter this repository. The analyses this package was
 # written for keep their FCS files, sample sheets and results OUTSIDE the
