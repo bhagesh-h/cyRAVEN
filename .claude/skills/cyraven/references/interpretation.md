@@ -288,6 +288,26 @@ interpretation and changes sign without a change in biology.
 p-values, hypothesis-generating. Event counts are set by acquisition duration, so
 a test over pooled events derives its degrees of freedom from instrument time.
 
+**`marker_umaps_by_group/`** is the picture that goes with those tables: one
+full-size UMAP per marker, in its own folder, written by every run. Where a group
+column resolves to two or more groups each marker is faceted by it
+(`umap_CD3_by_timepoint.png`); where it does not, the folder holds one panel per
+marker (`umap_CD3.png`).
+
+It answers a question neither of the other UMAP figures can. `umap_markers.png`
+colours by intensity but pools the groups and shrinks each marker into a grid
+cell, so a shift confined to one group is averaged away.
+`umap_overview_by_group.png` splits by group but colours by population or
+covariate, never by intensity. Within one file the colour scale is shared across
+the facets and clipped to the 1st-99th percentile of the cells drawn, so a colour
+difference between two panels is a real intensity difference; between files it is
+not shared, because markers differ by orders of magnitude in brightness.
+
+Panel density is comparable only because the embedding draws the same number of
+cells from every sample. That also means admitting a sample with few gated cells
+lowers the depth for every other sample, since the draw is set by the smallest
+supply.
+
 **`functional_markers_stats.csv`** is the same measure restricted to the
 `functional_blocks:` scoping in the config, which is what makes it interpretable:
 a marker is reported only where it means something. Before reading a row, check

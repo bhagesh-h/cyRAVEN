@@ -761,6 +761,7 @@ the panel split.
 | `--no-threshold-drift` | on | Skip the check for thresholds that differ systematically between groups |
 | `--no-heatmaps` | on | Skip the phenotype and cohort composition heatmaps |
 | `--other` | off | Draw the `Other CD45+` catch-all on the UMAP figures. A display choice only: those cells are always gated, counted and tabulated |
+| `--no-marker-group-umaps` | off | Skip `marker_umaps_by_group/`, one full-size UMAP per marker. Written by every run: split by group where a group column resolves to two or more groups, one panel per marker where it does not. Turn it off for a panel wide enough that one PNG per marker is a folder you do not want |
 
 ## 3.10 Batch structure
 
@@ -770,6 +771,24 @@ the panel split.
 | `--correct-batch` | off | **Consequential**: align each marker across batches by monotone quantile mapping. Applied to the embedding and clustering, not to per-sample thresholds, which are batch-local by construction |
 | `--batch-max-cramers-v` | 0.6 | Refuse correction above this association between batch and group. Above it, removing the batch and removing the finding are the same operation |
 | `--force-batch-correction` | off | Correct anyway. Recorded in the manifest, and the finding cannot then be attributed to biology |
+| `--batch-method` | `quantile` | How a correction is fitted, never whether one is defensible. `quantile` fits one map per marker over the whole file. `cluster` fits one per marker **per cell type**, which a whole-file map cannot do when a detector shift moves bright and dim populations by different amounts. `cytonorm` is a synonym for `cluster` |
+| `--batch-cluster-k` | 10 | Cell-type clusters to fit for `--batch-method cluster` |
+
+The refusal is evaluated before `--batch-method` is read, so both methods are
+refused on identical evidence. A better alignment algorithm does not make a
+confounded design correctable.
+
+`cluster` is fitted in two stages. Clustering the raw matrix would let a large
+batch shift become the dominant source of variance, so the clusters would be the
+batches, each holding one batch with nothing to align against. The clustering is
+therefore fitted on a whole-file-aligned copy and the per-cluster maps on the
+original values. Measured on a synthetic three-batch shift: fitted the naive way
+it left a mean between-batch gap of 1.296 against whole-file alignment's 0.003;
+fitted this way it reaches 0.014 while leaving the true between-cell-type
+separation at 3.996 against a true 3.994, where whole-file alignment inflates it
+to 4.078.
+
+Whichever method runs, `batch_correction.csv` records it, including on a refusal.
 
 ## 3.11 Calibration
 

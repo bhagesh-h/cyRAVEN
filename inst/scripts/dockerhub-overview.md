@@ -42,8 +42,8 @@ whether the gating specification held.
 
 | Tag | Contents |
 |---|---|
-| `1.0.0` | cyRAVEN 1.0.0. Pin this for anything you intend to publish |
-| `latest` | The most recent release. Currently identical to `1.0.0` |
+| `1.1.0` | cyRAVEN 1.1.0. Pin this for anything you intend to publish |
+| `latest` | The most recent release. Currently identical to `1.1.0` |
 
 `linux/amd64`, about 650 MB compressed.
 
@@ -76,7 +76,8 @@ docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
   --batch-column visit --cluster --outdir /results
 ```
 
-That writes 22 figures, 31 tables and a self-contained `results/report.html` —
+That writes 22 figures and 36 tables at the top level, one full-size UMAP per
+marker in `marker_umaps_by_group/`, and a self-contained `results/report.html` —
 one file carrying every figure and table, linking to nothing and loading nothing
 from a network. Nothing is downloaded: the demonstration cohort ships inside a
 package cyRAVEN already depends on.
