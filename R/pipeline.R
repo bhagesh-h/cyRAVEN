@@ -496,15 +496,65 @@ run_cyraven_impl <- function(opt) {
               "otherwise have failed staining QC into gating/UMAP/frequencies, see ",
               "staining_qc.csv for which, and treat their numbers as unreliable")
   }
-  for (s in names(verdicts)) {
-    if (isTRUE(verdicts[[s]]$is_reference)) {
-      pn <- fpr$assignment[[s]]
-      if (is.null(ctrl_by_panel[[pn]])) ctrl_by_panel[[pn]] <- s
+  # WHY A DISCOVERED CONTROL IS NOT BELIEVED WHEN NONE WAS DECLARED.
+  #
+  # staining_verdict() reads an ABSENT is_control column as "might be a
+  # control", because only `is_control = FALSE` is a positive assertion that a
+  # file is a biological sample. On a sheet with no such column, any sample
+  # whose CD45 gate found no density minimum was therefore promoted to the
+  # unstained reference for its whole panel.
+  #
+  # The consequence is severe and silent. Every threshold in that panel then
+  # comes from the 99.5th percentile of that one sample. If it is in fact a
+  # stained biological sample rather than an unstained tube, every cut lands at
+  # the top of a real distribution, and every population collapses to a
+  # fraction of a percent. Observed on a real cohort: T cells at 0.034% of
+  # CD45+ where the correct answer was over a hundred times that. No error, no
+  # warning, just a table of near-zero frequencies that looks like a finding.
+  #
+  # So a control is believed only when the sheet says so. Absence of evidence
+  # is not evidence of an unstained tube, and a cohort that contains no
+  # controls is the ordinary case rather than the exception. --discover-controls
+  # restores the old behaviour for anyone who really does ship unstained tubes
+  # without labelling them.
+  declared_control <- !is.null(smap) && "is_control" %in% names(smap) &&
+    any(vapply(smap$is_control, isTRUE, logical(1)))
+  discovered <- names(verdicts)[vapply(verdicts, function(v)
+    isTRUE(v$is_reference), logical(1))]
+  trust_discovered <- declared_control || isTRUE(opt$discover_controls)
+
+  if (length(discovered) && !trust_discovered) {
+    log_msg("NOTE ", length(discovered), " sample(s) failed staining QC and would ",
+            "have been used as the unstained reference for every threshold: ",
+            paste(discovered, collapse = ", "))
+    log_msg("  the sheet declares no control, so they are treated as FAILED ",
+            "samples instead and each threshold is derived from its own sample.")
+    log_msg("  if one of them IS an unstained tube, declare it with ",
+            "is_control=TRUE in the sheet, or pass --discover-controls.")
+    for (s in discovered) {
+      verdicts[[s]]$is_reference <- FALSE
+      verdicts[[s]]$is_control   <- FALSE
+      verdicts[[s]]$qc_status    <- if (isTRUE(opt$include_qc_failed)) "pass" else "failed"
+      verdicts[[s]]$include      <- isTRUE(opt$include_qc_failed)
+      verdicts[[s]]$verdict      <- paste0(
+        verdicts[[s]]$verdict,
+        " [no control declared in the sheet, so NOT used as a reference]")
     }
+    discovered <- character(0)
   }
-  if (length(ctrl_by_panel))
+
+  for (s in discovered) {
+    pn <- fpr$assignment[[s]]
+    if (is.null(ctrl_by_panel[[pn]])) ctrl_by_panel[[pn]] <- s
+  }
+  if (length(ctrl_by_panel)) {
     log_msg("control reference per panel: ",
             paste(names(ctrl_by_panel), unlist(ctrl_by_panel), sep = "=", collapse = ", "))
+    log_msg("  every threshold in these panel(s) is the 99.5th percentile of that ",
+            "sample. Check thresholds_used.csv: a 'source' of control_q995 on ",
+            "most markers, with frequencies far below what the panel should ",
+            "yield, means the reference is not an unstained tube.")
+  }
 
   # ---- QC figure FIRST ------------------------------------------------------
   log_step("STEP 3 - initial QC diagnostics")

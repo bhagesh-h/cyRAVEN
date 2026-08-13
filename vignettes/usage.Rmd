@@ -678,6 +678,7 @@ the panel split.
 | `--viability-marker` | auto-detect | Name the dye where the pattern is ambiguous |
 | `--min-cd45-pct` | 5 | Staining QC floor, percent CD45<sup>+</sup> of live |
 | `--include-qc-failed` | off | Keep declared samples that failed staining QC. Admits them to every stage, not only the embedding. Their percentages carry no evidence; under this flag `qc_status` reads `pass` and only the `verdict` column in `staining_qc.csv` records which were forced in |
+| `--discover-controls` | off | Let a sample that fails staining QC become the unstained reference for its panel even though the sheet declares no control. See below for why this is off |
 
 ## 3.4 Uncertainty and detection limits
 
