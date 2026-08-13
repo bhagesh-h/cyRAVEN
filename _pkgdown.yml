@@ -268,6 +268,7 @@ articles:
   - outputs
   - statistics
   - figures
+  - known-limitations
   - scope
 
 navbar:
@@ -317,3 +318,5 @@ navbar:
         href: articles/figures.html
       - text: Scope and boundaries
         href: articles/scope.html
+      - text: Known limitations
+        href: articles/known-limitations.html

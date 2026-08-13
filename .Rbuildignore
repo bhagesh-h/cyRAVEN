@@ -47,3 +47,7 @@
 # by inst/scripts/demo_data.R.
 ^dev$
 ^demo$
+# The backlog. Untracked by git and not part of the package; listed here because
+# R CMD build reads the working directory rather than git, and any unrecognised
+# top-level file is reported by R CMD check as non-standard.
+^ToDo\.md$

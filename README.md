@@ -193,6 +193,14 @@ explains what an event is, what a cut is, why `SSC-A` sits in a population
 definition next to two antibodies, and what the `-A` on a channel name means.
 Every other page assumes it.
 
+Before you trust a result,
+[Known limitations](https://bhagesh-h.github.io/cyRAVEN/articles/known-limitations.html)
+collects every caveat in one place: what the 1.1.0 control fix means for results
+produced by an earlier version and how to tell whether yours were affected,
+where the automated gates have and have not been validated, and which comparisons
+this package will not make. It also records what was deliberately left out and
+why, so the same arguments do not get relitigated.
+
 **Code and setup**
 
 | Page | Content |
