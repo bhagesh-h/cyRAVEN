@@ -1,8 +1,8 @@
 # cyRAVEN 1.1.0
 
 Parametric tests beside the rank tests, a feasibility check before either, the
-channel control that stops a cohort splitting into panels, parallel reading, and
-one fix for a failure that was silent and severe.
+channel control that stops a cohort splitting into panels, a full-size UMAP per
+marker, parallel reading, and one fix for a failure that was silent and severe.
 
 Every option, output file, column name and value version 1.0.0 produced is
 produced identically, with the single deliberate exception in "A sample that
@@ -87,6 +87,23 @@ numbers, because the numbers it changes were wrong.
   are bimodal whenever the groups genuinely differ.
 * These sit beside the rank tests and never replace them. No existing table
   changes. `--no-parametric` turns them off.
+
+## A full-size UMAP for every marker
+
+* `marker_umaps_by_group/` holds one PNG per marker. Where a group column
+  resolves to two or more groups each marker is faceted by it; where it does
+  not, the folder holds one unfaceted panel per marker. Written by every run.
+* Neither existing figure covers this. `umap_markers.png` colours by intensity
+  but pools the groups and shrinks each marker into a grid cell.
+  `umap_overview_by_group.png` splits by group but colours by population or
+  covariate, never by intensity. "Is this marker brighter, or somewhere else,
+  in one group" needs both at once.
+* Within one file the colour scale is shared across the facets and clipped to
+  the 1st-99th percentile of the cells drawn, so a colour difference between two
+  panels is a real intensity difference. It is not shared between files, for the
+  reason `fig_marker_grid()` gives.
+* `--no-marker-group-umaps` turns it off. One PNG per marker is a folder you may
+  not want on a panel of forty.
 
 ## Speed
 

@@ -259,6 +259,15 @@ build_option_list <- function() list(
               dest = "include_other",
               help = paste("also draw the 'Other CD45+' catch-all on the UMAP",
                            "figures [hidden by default; never affects tables]")),
+  # marker_umaps_by_group/ writes ONE PNG PER MARKER, so a 40-marker panel makes
+  # a folder of 40 files. That is the only reason to turn it off; nothing else
+  # in the run reads it, and no table changes either way.
+  optparse::make_option("--no-marker-group-umaps", action = "store_true",
+              default = FALSE, dest = "no_marker_group_umaps",
+              help = paste("skip marker_umaps_by_group/, one full-size UMAP per",
+                           "marker [written by every run; split by group where a",
+                           "group column resolves to 2+ groups, one panel per",
+                           "marker where it does not]")),
 
   # =========================================================================
   # EXTENDED ANALYSES
