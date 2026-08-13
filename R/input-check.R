@@ -41,14 +41,10 @@ report_input_check <- function(fcs, smap, sheet, spec, opt) {
     # every population named a marker no file contained, on data where the run
     # resolved all of them -- a false alarm from the one command whose purpose
     # is to catch real ones.
-    s <- vapply(seq_len(np), function(i) {
-      v <- kw[[paste0("$P", i, "S")]]
-      if (is.null(v)) "" else trimws(as.character(v))
-    }, character(1))
-    n <- vapply(seq_len(np), function(i) {
-      v <- kw[[paste0("$P", i, "N")]]
-      if (is.null(v)) "" else trimws(as.character(v))
-    }, character(1))
+    # kw_value(), not kw[[...]]: the guard that used to be here could not fire.
+    # See kw_value() for why a missing $PnS aborted the command instead.
+    s <- vapply(seq_len(np), function(i) kw_value(kw, i, "S"), character(1))
+    n <- vapply(seq_len(np), function(i) kw_value(kw, i, "N"), character(1))
     s <- marker_symbol(s, n)
     s[nzchar(s)]
   })
@@ -160,4 +156,145 @@ report_input_check <- function(fcs, smap, sheet, spec, opt) {
   log_msg("")
   log_msg("no problems found. Remove --check to run the analysis.")
   invisible(TRUE)
+}
+
+#' One `$Pn*` keyword, or "" when the file does not carry it
+#'
+#' read.FCSHeader returns a NAMED CHARACTER VECTOR rather than a list, and `[[`
+#' on one raises "subscript out of bounds" for a name that is absent, where the
+#' same call on a list returns NULL. An `if (is.null(v))` guard therefore never
+#' runs: the error is raised before it is reached.
+#'
+#' A parameter with no `$PnS` is ordinary rather than exceptional. Time channels
+#' routinely carry none, and some instruments omit it for scatter. Reading a
+#' cohort containing one used to abort the whole command.
+#'
+#' @param kw Keyword vector from [flowCore::read.FCSheader()].
+#' @param i Parameter index.
+#' @param suffix "N" or "S".
+#' @return Trimmed character scalar, "" when absent or NA.
+#' @keywords internal
+kw_value <- function(kw, i, suffix) {
+  key <- paste0("$P", i, suffix)
+  if (!key %in% names(kw)) return("")
+  v <- kw[[key]]
+  if (is.null(v) || is.na(v)) "" else trimws(as.character(v))
+}
+
+# --list-channels ------------------------------------------------------------
+#
+# WHY THIS IS A FLAG AND NOT A SNIPPET. Writing a specification requires knowing
+# the name to put in it, and on a spectral panel that name is not what the
+# instrument recorded: $PnS reads "CD45 : SparkUV-387 - Area" and the run uses
+# "CD45". Getting it wrong produces a full set of tables containing zeros, which
+# is the most common way a run fails.
+#
+# That left every user dumping the keyword block with an ad-hoc Rscript one-liner
+# against the FIRST file. Two things are wrong with that. It shows the raw
+# keyword rather than the name the run resolves, so it does not answer the
+# question being asked; and reading one file cannot detect the panel differing
+# between files, which is the failure worth catching before a run rather than
+# during one.
+
+#' List the acquisition parameters and the names the run resolves them to
+#'
+#' One row per parameter: index, the detector name (`$PnN`), the description
+#' (`$PnS`), the symbol the run resolves it to, and how the run will use it. The
+#' resolved symbol is the string a population specification has to name.
+#'
+#' Reads headers only, so it costs nothing on large files, and reads every file
+#' rather than the first so a panel that differs between files is reported.
+#'
+#' @param fcs Paths to the FCS files.
+#' @return invisible data.frame of the reference file's parameters.
+#' @keywords internal
+list_channels <- function(fcs) {
+  read_params <- function(f) {
+    kw <- tryCatch(flowCore::read.FCSheader(f)[[1]], error = function(e) NULL)
+    if (is.null(kw)) return(NULL)
+    np <- suppressWarnings(as.integer(kw[["$PAR"]]))
+    if (is.na(np)) return(NULL)
+    get_kw <- function(suffix) vapply(seq_len(np), function(i) kw_value(kw, i, suffix),
+                                      character(1))
+    n <- get_kw("N")
+    s <- get_kw("S")
+    data.frame(idx = seq_len(np), name = n, desc = s,
+               symbol = marker_symbol(s, n),
+               stringsAsFactors = FALSE, check.names = FALSE)
+  }
+
+  # The role column mirrors the rules in read_fcs_resolved(): area channels
+  # carry the markers, height and width are redundant duplicates of area that
+  # would double-weight a marker in the embedding, and scatter is matched by its
+  # own patterns because it is used for gating rather than as a marker.
+  role_of <- function(nm, ds) {
+    scatter <- c("FSC.*A(rea)?$", "FSC.*H(eight)?$", "SSC.*A(rea)?$", "SSC.*H(eight)?$")
+    is_sc <- Reduce(`|`, lapply(scatter, function(p) grepl(p, nm) | grepl(p, ds)))
+    is_area <- grepl("(^|[^A-Za-z])A$|\\.A$|-A$|Area$", nm) | grepl("- Area$", ds)
+    is_time <- grepl("^Time", nm, ignore.case = TRUE) |
+               grepl("^Time", ds, ignore.case = TRUE)
+    out <- rep("ignored, not an area channel", length(nm))
+    out[is_area] <- "marker"
+    out[is_sc]   <- "scatter, used for gating"
+    out[is_time] <- "ignored, acquisition time"
+    out
+  }
+
+  ref <- NULL
+  for (f in fcs) { ref <- read_params(f); if (!is.null(ref)) { ref_file <- f; break } }
+  if (is.null(ref)) {
+    log_msg("no readable FCS header in ", length(fcs), " file(s)")
+    return(invisible(NULL))
+  }
+  ref$role <- role_of(ref$name, ref$desc)
+
+  log_msg(length(fcs), " file(s); parameters listed from ", basename(ref_file))
+  log_msg("")
+  cat(sprintf("%-5s %-22s %-38s %-16s %s\n",
+              "idx", "$PnN", "$PnS", "resolves to", "role"))
+  cat(strrep("-", 110), "\n", sep = "")
+  for (i in seq_len(nrow(ref)))
+    cat(sprintf("P%-4d %-22s %-38s %-16s %s\n", ref$idx[i],
+                substr(ref$name[i], 1, 22), substr(ref$desc[i], 1, 38),
+                substr(ref$symbol[i], 1, 16), ref$role[i]))
+  cat("\n")
+
+  usable <- sort(ref$symbol[ref$role == "marker"])
+  log_msg(length(usable), " marker name(s) to use in a specification:")
+  log_msg("  ", paste(usable, collapse = ", "))
+
+  # ---- does every file carry the same panel ---------------------------------
+  if (length(fcs) > 1L) {
+    others <- lapply(fcs, function(f) {
+      p <- read_params(f)
+      if (is.null(p)) return(NULL)
+      sort(p$symbol[role_of(p$name, p$desc) == "marker"])
+    })
+    names(others) <- basename(fcs)
+    bad <- names(others)[vapply(others, is.null, logical(1))]
+    others <- Filter(Negate(is.null), others)
+    same <- vapply(others, function(x) identical(x, usable), logical(1))
+    log_msg("")
+    if (all(same)) {
+      log_msg("every file carries the same ", length(usable), " marker(s)")
+    } else {
+      log_msg("PANEL DIFFERS between files. ", sum(!same), " of ", length(others),
+              " do not match ", basename(ref_file), ":")
+      for (nm in names(others)[!same]) {
+        miss <- setdiff(usable, others[[nm]])
+        extra <- setdiff(others[[nm]], usable)
+        log_msg("  ", nm,
+                if (length(miss)) paste0("  missing: ", paste(miss, collapse = ", ")) else "",
+                if (length(extra)) paste0("  extra: ", paste(extra, collapse = ", ")) else "")
+      }
+      log_msg("A population naming a marker some files lack is UNAVAILABLE in ",
+              "those files, not an error.")
+    }
+    if (length(bad))
+      log_msg("unreadable header(s): ", paste(bad, collapse = ", "))
+  }
+
+  log_msg("")
+  log_msg("--list-channels read headers only and analysed nothing.")
+  invisible(ref)
 }

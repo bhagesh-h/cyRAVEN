@@ -242,3 +242,114 @@ statistical_methods_table <- function(n_groups = NA_integer_, paired = FALSE,
   out$n_groups <- n_groups
   out
 }
+
+# design feasibility ---------------------------------------------------------
+#
+# WHY THIS TABLE EXISTS. Two ways a between-group comparison fails are both
+# invisible in the output it produces.
+#
+# The first is a group too small to test. stats_group_comparison() skips it and
+# writes no row, so the reader sees a shorter table, not an explanation, and a
+# population that was never tested looks the same as one that was tested and
+# came out null.
+#
+# The second is worse, because the test RUNS. If the same donor contributes to
+# more than one group -- the usual case when the group column is a timepoint --
+# an unpaired test treats repeated measures on one person as independent
+# observations. Nothing downstream reveals it: the p-value is well formed, the
+# effect size is well formed, and both are answering a question nobody asked.
+#
+# This table states what will be tested, what would be defensible, and where the
+# two differ, before any of it is read.
+
+#' Report which group comparisons can be made, and which cannot
+#'
+#' Writes `design_feasibility.csv`: one row per group, carrying the sample and
+#' donor counts behind it, whether the pipeline will test it, whether an unpaired
+#' test of it is defensible, and the reason when those two disagree.
+#'
+#' @param group_of Named vector, sample_id to group.
+#' @param gcol Name of the column the grouping came from.
+#' @param min_n Minimum samples per group required to test.
+#' @param reference Reference group, or NULL.
+#' @param outdir Output directory.
+#' @param donor_of Named vector, sample_id to donor. NULL when unavailable, in
+#'   which case the repeated-measures check is not attempted and says so.
+#' @param tested FALSE under `--no-group-tests`.
+#' @return invisible data.frame, or NULL when there is no grouping to report.
+#' @keywords internal
+write_design_feasibility <- function(group_of, gcol, min_n, reference, outdir,
+                                     donor_of = NULL, tested = TRUE) {
+  g <- group_of[!is.na(group_of)]
+  if (!length(g)) return(invisible(NULL))
+  groups <- sort(unique(as.character(g)))
+  samples_by <- split(names(g), as.character(g))
+
+  donors_by <- if (!is.null(donor_of))
+    lapply(samples_by, function(s) {
+      d <- donor_of[s]
+      unique(d[!is.na(d)])
+    }) else NULL
+
+  # A donor in more than one group is what makes an unpaired test wrong. Counted
+  # over DISTINCT donors per group, so a donor sampled twice inside one group is
+  # not mistaken for one spanning two.
+  shared <- character(0)
+  if (!is.null(donors_by) && length(groups) > 1L) {
+    per_group <- lapply(donors_by, unique)
+    all_d <- unlist(per_group, use.names = FALSE)
+    shared <- unique(all_d[duplicated(all_d)])
+  }
+
+  ref <- if (!is.null(reference) && reference %in% groups) reference else groups[1]
+
+  rows <- lapply(groups, function(gg) {
+    ns <- length(samples_by[[gg]])
+    nd <- if (!is.null(donors_by)) length(donors_by[[gg]]) else NA_integer_
+    why <- character(0)
+    if (!tested) why <- c(why, "--no-group-tests was set")
+    if (ns < min_n)
+      why <- c(why, sprintf("%d sample(s), below --min-group-n %d", ns, min_n))
+    if (length(groups) < 2L) why <- c(why, "only one group present")
+    will <- tested && ns >= min_n && length(groups) > 1L
+
+    why_invalid <- character(0)
+    if (length(shared))
+      why_invalid <- c(why_invalid,
+                       sprintf("%d donor(s) also appear in another group; use --paired-column with --condition-column",
+                               length(shared)))
+    if (!is.na(nd) && nd < min_n)
+      why_invalid <- c(why_invalid,
+                       sprintf("%d donor(s) behind %d sample(s); the unit of replication is the donor",
+                               nd, ns))
+    valid <- !length(why_invalid) && ns >= min_n && length(groups) > 1L
+
+    data.frame(
+      group_column = gcol, group = gg,
+      n_samples = ns, n_donors = nd,
+      is_reference = identical(gg, ref),
+      will_be_tested = if (will) "yes" else "no",
+      valid_unpaired = if (is.na(nd) && !length(shared)) "unknown" else
+        if (valid) "yes" else "no",
+      reason = paste(c(why, why_invalid), collapse = "; "),
+      stringsAsFactors = FALSE)
+  })
+  out <- do.call(rbind, rows)
+  if (is.null(donors_by))
+    out$reason <- ifelse(nzchar(out$reason), out$reason,
+                         "no donor column resolved, repeated measures not checked")
+
+  utils::write.csv(out, file.path(outdir, "design_feasibility.csv"),
+                   row.names = FALSE)
+  log_msg("wrote design_feasibility.csv (", nrow(out), " group(s) of '", gcol, "')")
+
+  n_untested <- sum(out$will_be_tested == "no")
+  if (n_untested)
+    log_msg("  ", n_untested, " group(s) will not be tested; the reason is in the table")
+  if (length(shared))
+    log_msg("  WARNING ", length(shared), " donor(s) appear in more than one '",
+            gcol, "' group. An unpaired test treats repeated measures on one ",
+            "donor as independent samples. Use --paired-column with ",
+            "--condition-column for a design like this.")
+  invisible(out)
+}

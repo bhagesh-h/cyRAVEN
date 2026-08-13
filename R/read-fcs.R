@@ -1,6 +1,35 @@
 # SECTION 1 -- FCS READING AND MARKER RESOLUTION
 # =============================================================================
 
+#' Do these marker symbols match any ignore pattern
+#'
+#' Each pattern is matched as a whole name, case-insensitively. A pattern
+#' containing `*` is treated as a glob, so `[AF color*` catches all three
+#' autofluorescence channels while `CD16` matches CD16 and not CD161. Whole-name
+#' matching is the point: substring matching would silently drop markers nobody
+#' named.
+#'
+#' @param sym Character vector of resolved marker symbols.
+#' @param patterns Character vector of patterns, or NULL.
+#' @return Logical vector the length of `sym`.
+#' @keywords internal
+ignore_channel_match <- function(sym, patterns) {
+  hit <- rep(FALSE, length(sym))
+  if (!length(patterns)) return(hit)
+  for (p in patterns) {
+    p <- trimws(p)
+    if (!nzchar(p)) next
+    if (grepl("*", p, fixed = TRUE)) {
+      esc <- gsub("([][{}()+.^$|\\\\?])", "\\\\\\1", p)
+      hit <- hit | grepl(paste0("^", gsub("\\*", ".*", esc), "$"), sym,
+                         ignore.case = TRUE)
+    } else {
+      hit <- hit | (tolower(sym) == tolower(p))
+    }
+  }
+  hit
+}
+
 #' Read one FCS file and resolve marker symbols
 #'
 #' WHY marker symbols, not channel names: detector/channel names are
@@ -17,9 +46,13 @@
 #' @param path File path.
 #' @param sample_id The sample id.
 #' @param max_events The max events. Default `0L`.
+#' @param ignore_channels Character vector of marker names to drop before the
+#'   panel fingerprint is taken, or NULL. Names match whole and
+#'   case-insensitively; a name containing `*` is treated as a glob.
 #' @return list(exprs, marker_cols, all_cols, keywords, n_events, file, sample_id)
 #' @export
-read_fcs_resolved <- function(path, sample_id = NULL, max_events = 0L) {
+read_fcs_resolved <- function(path, sample_id = NULL, max_events = 0L,
+                              ignore_channels = NULL) {
   # Bound the events read per file when asked.
   #
   # WHY EVENLY SPACED rather than the first N: acquisition order is time order,
@@ -100,6 +133,19 @@ read_fcs_resolved <- function(path, sample_id = NULL, max_events = 0L) {
   marker_cols <- setNames(keep, sym[keep])
   # collapse duplicate symbols to the first occurrence
   marker_cols <- marker_cols[!duplicated(names(marker_cols))]
+
+  # WHY DROPPING A CHANNEL HERE MATTERS MORE THAN IT LOOKS. The panel
+  # fingerprint is the sorted set of marker names, so a channel present in some
+  # files and absent in others splits one cohort into several panels, each with
+  # its own cofactor, its own embedding and its own thresholds. Autofluorescence
+  # channels extracted during spectral unmixing do exactly this: they are not
+  # stains, they vary in number between acquisitions, and left in they can turn
+  # twelve comparable files into seven incomparable panels. Removing them before
+  # the fingerprint is taken is what makes the cohort one cohort again.
+  if (length(ignore_channels)) {
+    drop <- ignore_channel_match(names(marker_cols), ignore_channels)
+    if (any(drop)) marker_cols <- marker_cols[!drop]
+  }
 
   ex <- flowCore::exprs(ff)
   # n_events is what was READ (the denominator of every downstream percentage);

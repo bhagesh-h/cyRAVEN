@@ -288,6 +288,18 @@ umap_continuous <- function(df, colour_by, title = NULL, subtitle = NULL,
   if (is.null(point_size)) point_size <- .a$size
   if (is.null(alpha))      alpha      <- .a$alpha
   if (is.null(limits)) limits <- quantile(d[[colour_by]], c(0.01, 0.99), na.rm = TRUE)
+  # A DEGENERATE COLOUR RANGE. When the marker is effectively constant over the
+  # cells being drawn -- a single sample, a panel where one population holds
+  # almost every cell, a channel that resolved no signal -- the 1st and 99th
+  # percentile come back equal. The scale is then zero width, ggplot collapses
+  # its two identical breaks into one while both labels remain, and the plot
+  # fails with "`breaks` and `labels` have different lengths" partway through a
+  # run that had already produced most of its output. Widening by half a unit
+  # keeps the panel drawable and truthful: a flat colour is what a constant
+  # marker should look like.
+  limits <- as.numeric(limits)
+  if (length(limits) != 2L || !all(is.finite(limits))) limits <- c(0, 1)
+  if (limits[1L] == limits[2L]) limits <- limits + c(-0.5, 0.5)
   # compact_bar: a short horizontal bar labelled only with its two end values,
   # for use inside a small multi-panel grid where a full legend would not fit.
   # Built here rather than layered on afterwards, so only ONE colour scale is

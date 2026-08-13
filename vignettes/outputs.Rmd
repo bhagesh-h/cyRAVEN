@@ -160,10 +160,47 @@ produce coordinates that are geometrically valid and biologically meaningless.
 | `paired_comparison_stats.csv` | Paired designs, written by `--paired-column` |
 | `covariate_adjusted_stats.csv` | Rank ANCOVA, written by `--rank-ancova` |
 | `subcluster_marker_shifts.csv` | Pooled-event marker shifts per compartment |
+| `design_feasibility.csv` | Which group comparisons can be made, and why the rest cannot |
+| `parametric_tests.csv` | The t-test or ANOVA equivalent, with its assumptions recorded |
+| `posthoc_tests.csv` | Pairwise comparisons by three methods, for three or more groups |
 
-Every file above except the last uses one value per sample.
+Every file above except the last three uses one value per sample.
 `subcluster_marker_shifts.csv` operates on pooled events, carries effect sizes
 without p-values, and answers a different question from the tests above it.
+
+### `design_feasibility.csv`
+
+Read before any of the tests. One row per group, carrying `n_samples`,
+`n_donors`, `will_be_tested`, `valid_unpaired` and a `reason`.
+
+Two failures it is there to catch. A group smaller than `--min-group-n` is
+skipped, and a skipped comparison looks exactly like a comparison that ran and
+found nothing, because both produce no row. And a donor contributing to more
+than one group, which happens whenever the group column is a timepoint, makes an
+unpaired test treat repeated measures on one person as independent observations.
+That second one is the dangerous case, because the test runs and its output is
+well formed. `will_be_tested` says what the run did; `valid_unpaired` says
+whether it should have.
+
+### `parametric_tests.csv` and `posthoc_tests.csv`
+
+The rank tests remain the primary result. These hold the parametric equivalents
+most immunology papers report, computed on arcsine square root transformed
+percentages, which stabilises the variance of proportion data.
+
+Two groups give Welch's t-test with Student's alongside it and Cohen's *d*. Three
+or more give Welch's ANOVA with the classical one-way alongside it and eta
+squared. `posthoc_tests.csv` then carries Games-Howell, Tukey HSD and Dunn for
+every pair.
+
+Every row records `shapiro_p` and `brown_forsythe_p` with the derived
+`residuals_normal`, `equal_variance` and `assumptions_met`. Where
+`assumptions_met` is `FALSE` the rank test is the defensible one, and the
+`recommended` column says which test to read. Normality is tested on the
+within-group residuals, not the pooled values, because pooled values are bimodal
+whenever the groups genuinely differ.
+
+Disable with `--no-parametric`.
 
 ## 7. Diagnostics
 

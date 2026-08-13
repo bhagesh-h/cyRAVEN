@@ -113,6 +113,11 @@ run_cyraven_impl <- function(opt) {
   if (!is.null(opt[["write_samples", exact = TRUE]])) {
     write_samplesheet_template(fcs, opt$write_samples); return(invisible(NULL))
   }
+  # Before the config is parsed, deliberately: --list-channels answers "what do I
+  # write in the config", so requiring one to run it would be circular.
+  if (isTRUE(opt$list_channels)) {
+    list_channels(fcs); return(invisible(NULL))
+  }
 
   cfg <- if (!is.null(opt$config)) yaml::read_yaml(opt$config) else list()
   spec   <- cfg$populations       %||% default_population_spec()
@@ -212,23 +217,78 @@ run_cyraven_impl <- function(opt) {
 
   # ---- read -----------------------------------------------------------------
   log_step("STEP 1 - reading files and resolving markers")
-  reads <- list()
-  for (f in fcs) {
+  ignore_ch <- if (!is.null(opt$ignore_channels) && nzchar(opt$ignore_channels))
+    trimws(strsplit(opt$ignore_channels, ",")[[1]]) else NULL
+  if (length(ignore_ch))
+    log_msg("ignoring channel(s) before panel fingerprinting: ",
+            paste(ignore_ch, collapse = ", "))
+
+  .sid_for <- function(f) {
     sid <- if (!is.null(smap)) {
       row <- smap[smap$file == basename(f), ]
       (row$sample_id %||% row$well %||% NA)[1]
     } else NA
-    if (is.na(sid) || !nzchar(as.character(sid))) sid <- NULL
-    log_msg("reading ", basename(f), " (", round(file.size(f) / 1e6), " MB)")
-    rd <- read_fcs_resolved(f, sample_id = sid,
-                            max_events = opt$max_events_per_file %||% 0L)
+    if (is.na(sid) || !nzchar(as.character(sid))) NULL else sid
+  }
+  .read_one <- function(f) {
+    rd <- read_fcs_resolved(f, sample_id = .sid_for(f),
+                            max_events = opt$max_events_per_file %||% 0L,
+                            ignore_channels = ignore_ch)
     rd$exprs <- maybe_compensate(rd$exprs, rd$keywords)
-    log_msg("  ", rd$n_events, " events",
-            if (isTRUE(rd$subsampled))
-              paste0(" (evenly sampled from ", rd$n_events_file, " in file)") else "",
-            ", ", length(rd$marker_cols),
-            " markers, sample_id '", rd$sample_id, "'")
-    reads[[rd$sample_id]] <- rd
+    rd
+  }
+
+  # ---- reading, optionally in parallel --------------------------------------
+  # Files are independent of one another, and reading is the slowest stage on a
+  # large cohort, so this is the one place parallelism pays. Everything after it
+  # stays sequential: cofactors, thresholds and the embedding are derived across
+  # samples, and the seeded RNG that places them has to be consumed in one
+  # order or a run stops reproducing itself.
+  #
+  # WHY FORKING AND NOT A SOCKET CLUSTER. Workers need the FCS data and give
+  # back a matrix each. A fork shares memory copy-on-write and returns the
+  # result directly; a socket cluster would serialise every matrix twice. Fork
+  # is Unix-only, which is what the container is, and Windows falls back to
+  # sequential reading with a note rather than silently ignoring the flag.
+  n_threads <- suppressWarnings(as.integer(opt$read_threads %||% 1L))
+  if (is.na(n_threads) || n_threads < 1L) n_threads <- 1L
+  n_threads <- min(n_threads, length(fcs))
+  if (n_threads > 1L && .Platform$OS.type != "unix") {
+    log_msg("--read-threads ", n_threads, " ignored: forking needs a Unix host, ",
+            "reading sequentially")
+    n_threads <- 1L
+  }
+
+  if (n_threads > 1L) {
+    log_msg("reading ", length(fcs), " file(s) on ", n_threads, " thread(s). ",
+            "Peak memory scales with the thread count.")
+    reads <- parallel::mclapply(fcs, .read_one, mc.cores = n_threads,
+                                mc.preschedule = FALSE)
+    bad <- vapply(reads, function(r) inherits(r, "try-error") || is.null(r$sample_id),
+                  logical(1))
+    if (any(bad))
+      stop("parallel read failed for ", sum(bad), " file(s): ",
+           paste(basename(fcs[bad]), collapse = ", "),
+           ". Re-run with --threads 1 for the actual error.")
+    names(reads) <- vapply(reads, `[[`, "", "sample_id")
+    for (rd in reads)
+      log_msg("  ", basename(rd$file), ": ", rd$n_events, " events",
+              if (isTRUE(rd$subsampled))
+                paste0(" (evenly sampled from ", rd$n_events_file, " in file)") else "",
+              ", ", length(rd$marker_cols),
+              " markers, sample_id '", rd$sample_id, "'")
+  } else {
+    reads <- list()
+    for (f in fcs) {
+      log_msg("reading ", basename(f), " (", round(file.size(f) / 1e6), " MB)")
+      rd <- .read_one(f)
+      log_msg("  ", rd$n_events, " events",
+              if (isTRUE(rd$subsampled))
+                paste0(" (evenly sampled from ", rd$n_events_file, " in file)") else "",
+              ", ", length(rd$marker_cols),
+              " markers, sample_id '", rd$sample_id, "'")
+      reads[[rd$sample_id]] <- rd
+    }
   }
   fpr <- fingerprint_panels(reads)
 
@@ -1498,8 +1558,48 @@ run_cyraven_impl <- function(opt) {
               paste0("; in the patient table: ",
                      paste(setdiff(names(patients), "patient_id"), collapse = ", ")))
   }
+  # Defined here rather than at STEP 7c, where it used to be, because the design
+  # feasibility table and the parametric tests below are the first things to use
+  # it and a function is not visible before the line that creates it.
+  #
+  # Everything it wraps is an addition to a run that has already produced its
+  # baseline output, so a failure inside one is logged and stepped over. An
+  # addition that can delete the thing it was added to is not an addition.
+  .ext_ok <- function(label, expr) {
+    tryCatch(expr, error = function(e)
+      log_msg("  WARNING ", label, " failed: ", conditionMessage(e),
+              ", every other output is unaffected"))
+  }
+
   p_src <- if (identical(opt$p_adjust_display, "BH")) "BH" else "raw"
   grouped <- !is.null(group_of) && length(unique(group_of)) > 1L
+
+  # WHY GROUPING AND TESTING ARE SEPARATE DECISIONS. `grouped` says a group
+  # column resolved, and it goes on driving how figures are coloured and split.
+  # `group_tests` says the between-group null hypothesis should actually be
+  # tested. A cohort can legitimately want the first without the second: with one
+  # donor in a group there is no comparison to make, yet the per-group figures
+  # are still the point of the run. --no-group-tests separates the two.
+  #
+  # Diagnostics are deliberately NOT covered by it. Confounding, threshold drift
+  # and batch mixing keep their own --no-* flags, because on a design too small
+  # to test they become more informative, not less.
+  min_group_n <- suppressWarnings(as.integer(opt$min_group_n %||% 3L))
+  if (is.na(min_group_n) || min_group_n < 2L) min_group_n <- 3L
+  group_tests <- grouped && !isTRUE(opt$no_group_tests)
+  if (grouped) {
+    .donor_of <- if (!is.null(smap) &&
+                     all(c("sample_id", "patient_id") %in% names(smap)))
+      setNames(as.character(smap$patient_id), as.character(smap$sample_id)) else NULL
+    .ext_ok("design feasibility", {
+      write_design_feasibility(group_of, gcol, min_group_n, opt$reference_group,
+                               opt$outdir, donor_of = .donor_of,
+                               tested = group_tests)
+    })
+  }
+  if (grouped && !group_tests)
+    log_msg("--no-group-tests: figures stay grouped by '", gcol,
+            "', and no between-group test is run. Diagnostics are unaffected.")
 
   if (!is.null(freq)) {
     # One pass per marker panel when more than one is present -- the same
@@ -1521,9 +1621,10 @@ run_cyraven_impl <- function(opt) {
         rt[!is.na(rt$panel) & rt$panel == pn, , drop = FALSE] else rt
 
       gstats <- NULL
-      if (grouped) {
+      if (group_tests) {
         gstats <- stats_group_comparison(freq_p, group_of,
-                                         reference = opt$reference_group)
+                                         reference = opt$reference_group,
+                                         min_n = min_group_n)
         if (!is.null(gstats)) {
           # Two columns appended after every existing one: the typical gate
           # uncertainty behind this population, and how many multiples of it the
@@ -1558,6 +1659,41 @@ run_cyraven_impl <- function(opt) {
             log_msg("NOTE no comparison survives multiple-testing correction, treat ",
                     "the raw-p hits as hypotheses to confirm, not findings.")
         }
+
+        # The parametric equivalents, in their own files. Written beside the
+        # rank tests rather than in place of them, so the primary result does
+        # not change and the t-test or ANOVA a journal asks for exists with its
+        # assumption checks attached.
+        if (!isTRUE(opt$no_parametric)) {
+          .ext_ok("parametric tests", {
+            pt <- parametric_group_tests(freq_p, group_of,
+                                         reference = opt$reference_group,
+                                         min_n = min_group_n)
+            if (!is.null(pt)) {
+              write.csv(pt, file.path(opt$outdir,
+                                      paste0("parametric_tests", sfx, ".csv")),
+                        row.names = FALSE)
+              nok <- sum(pt$assumptions_met, na.rm = TRUE)
+              log_msg("wrote parametric_tests", sfx, ".csv (", nrow(pt),
+                      " test(s); ", nok, " of ", nrow(pt),
+                      " met both normality and equal-variance assumptions)")
+              if (nok < nrow(pt))
+                log_msg("  where assumptions_met is FALSE the rank test in ",
+                        "group_comparison_stats", sfx, ".csv is the defensible one")
+            }
+            ph <- posthoc_group_tests(freq_p, group_of, min_n = min_group_n)
+            if (!is.null(ph)) {
+              write.csv(ph, file.path(opt$outdir,
+                                      paste0("posthoc_tests", sfx, ".csv")),
+                        row.names = FALSE)
+              log_msg("wrote posthoc_tests", sfx, ".csv (", nrow(ph),
+                      " pairwise comparison(s) across ",
+                      length(unique(ph$test)), " method(s); read the one the ",
+                      "assumption columns of parametric_tests", sfx,
+                      ".csv point to)")
+            }
+          })
+        }
         fig_group_comparison(
           freq_p, file.path(opt$outdir, paste0("group_comparison", sfx, ".png")),
           group_of = group_of, stats = gstats, reference = opt$reference_group,
@@ -1571,10 +1707,10 @@ run_cyraven_impl <- function(opt) {
       # ---- functional-marker positivity, same grouping/stats as abundance ---
       if (!is.null(fx_p) && nrow(fx_p)) {
         fxstats <- NULL
-        if (grouped) {
+        if (group_tests) {
           fxstats <- stats_group_comparison(
             fx_panel_key(fx_p), group_of, reference = opt$reference_group,
-            value_col = "pct_positive")
+            value_col = "pct_positive", min_n = min_group_n)
           if (!is.null(fxstats)) {
             write.csv(fxstats, file.path(opt$outdir,
                                          paste0("functional_markers_stats", sfx, ".csv")),
@@ -1592,10 +1728,11 @@ run_cyraven_impl <- function(opt) {
       # ---- derived-ratio comparison, same grouping/stats as abundance ------
       if (!is.null(rt_p) && nrow(rt_p)) {
         rtstats <- NULL
-        if (grouped) {
+        if (group_tests) {
           rtstats <- stats_group_comparison(rt_p, group_of,
                                             reference = opt$reference_group,
-                                            value_col = "value")
+                                            value_col = "value",
+                                            min_n = min_group_n)
           if (!is.null(rtstats)) {
             write.csv(rtstats, file.path(opt$outdir,
                                          paste0("population_ratios_stats", sfx, ".csv")),
@@ -1656,9 +1793,10 @@ run_cyraven_impl <- function(opt) {
                                group_of = group_of)
 
         acstats <- NULL
-        if (grouped) {
+        if (group_tests) {
           acstats <- stats_group_comparison(ac, group_of, reference = opt$reference_group,
-                                            value_col = "cells_per_ul")
+                                            value_col = "cells_per_ul",
+                                            min_n = min_group_n)
           if (!is.null(acstats)) {
             write.csv(acstats, file.path(opt$outdir, "absolute_counts_stats.csv"),
                       row.names = FALSE)
@@ -1687,11 +1825,8 @@ run_cyraven_impl <- function(opt) {
   # same reason: these are additions, and an addition that can delete the thing
   # it was added to is not an addition.
   log_step("STEP 7c - extension analyses")
-  .ext_ok <- function(label, expr) {
-    tryCatch(expr, error = function(e)
-      log_msg("  WARNING ", label, " failed: ", conditionMessage(e),
-              ", every other output is unaffected"))
-  }
+  # .ext_ok is defined earlier in this function, before its first use in the
+  # group-comparison section.
 
   .cells_all <- if (length(all_cells))
     as.data.frame(data.table::rbindlist(all_cells, use.names = TRUE, fill = TRUE))
@@ -1724,8 +1859,9 @@ run_cyraven_impl <- function(opt) {
   # ---- differential state: population x marker, tested on SAMPLES -----------
   if (!isTRUE(opt$no_differential_state) && !is.null(mfi) && TRUE) {
     .ext_ok("differential state", {
-      ms <- if (grouped)
-        stats_marker_state(mfi, group_of, reference = opt$reference_group) else NULL
+      ms <- if (group_tests)
+        stats_marker_state(mfi, group_of, reference = opt$reference_group,
+                           min_n = min_group_n) else NULL
       if (!is.null(ms)) {
         write.csv(ms, file.path(opt$outdir, "marker_state_stats.csv"), row.names = FALSE)
         log_msg("wrote marker_state_stats.csv (", nrow(ms), " tests; ",
@@ -1759,7 +1895,7 @@ run_cyraven_impl <- function(opt) {
   }
 
   # ---- compositional (CLR) re-test of the abundance comparison -------------
-  if (!isTRUE(opt$no_compositional) && grouped && !is.null(freq) &&
+  if (!isTRUE(opt$no_compositional) && group_tests && !is.null(freq) &&
       TRUE) {
     .ext_ok("compositional analysis", {
       # The CLR closure is per SAMPLE, and a sample belongs to exactly one panel,
