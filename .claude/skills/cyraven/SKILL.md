@@ -19,7 +19,7 @@ between samples does not remove that variance, it converts it into a bias that
 tracks staining intensity. cyRAVEN removes the analyst from threshold placement
 and quantifies what remains.
 
-Current version: 1.0.0.
+Current version: 1.1.0.
 
 ## Execute through Docker
 
@@ -43,11 +43,11 @@ docker images | grep cyraven
 is the image the documented runs were produced with.
 
 ```bash
-docker pull bhagesh/cyraven:1.0.0
-docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
+docker pull bhagesh/cyraven:1.1.0
+docker tag bhagesh/cyraven:1.1.0 cyraven:1.1.0
 ```
 
-The `docker tag` is only so the commands below can say `cyraven:1.0.0`.
+The `docker tag` is only so the commands below can say `cyraven:1.1.0`.
 
 **Build instead** when the user has edited `R/`, the Dockerfile or the config
 templates, when the host is air-gapped, or when they say they would rather not
@@ -59,7 +59,7 @@ the directory holding `DESCRIPTION`:
 ```bash
 git clone https://github.com/bhagesh-h/cyRAVEN.git
 cd cyRAVEN
-docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
+docker build -f inst/scripts/Dockerfile -t cyraven:1.1.0 .
 ```
 
 15 to 25 minutes on a first build. It ends by running `--help` and printing every
@@ -97,14 +97,14 @@ Never hand-author the sheet, and never run before checking. This sequence:
 
 ```bash
 # 1. a sheet with a row for every file
-docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
+docker run --rm -v "$PWD/data:/data" cyraven:1.1.0 \
   --dir /data/fcs --recursive --write-samples /data/samples.csv
 
 # 2. user fills in patient_id, cohort and any study variable
 
 # 3. validate against the FCS headers, seconds, writes nothing
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs --recursive \
+  cyraven:1.1.0 --dir /data/fcs --recursive \
   --samples /data/samples.csv --config /data/analysis.yaml \
   --outdir /results --check
 
@@ -112,7 +112,7 @@ docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
 docker run --rm \
   -v "$PWD/data:/data:ro" \
   -v "$PWD/results:/results" \
-  cyraven:1.0.0 \
+  cyraven:1.1.0 \
   --dir /data/fcs --recursive \
   --samples /data/samples.csv \
   --config /data/analysis.yaml \
@@ -129,6 +129,20 @@ available study variables. A marker-name mismatch caught there costs a second;
 caught during a run it costs the run. It is the single highest-value habit when
 driving this tool.
 
+**Run `--list-channels` before writing the config.** It prints what each channel
+resolves to, which is the name a population definition has to use, and on a
+spectral panel that differs from `$PnS`: the file reads `CD45 : SparkUV-387 -
+Area` and the run uses `CD45`. Writing the raw string produces a table of zeros.
+
+It also reads every file rather than the first, so it catches a cohort splitting
+into panels. Where the files disagree it names the fix rather than the symptom,
+separating autofluorescence and unmixing artefacts from a real marker stained in
+only some files, and printing the exact `--ignore-channels` pattern that merges
+the cohort. Pass that pattern through: channels are dropped before the panel
+fingerprint is computed, which is the only place it works. Anything it cannot
+attribute to one of those two mechanical causes it reports as a genuine panel
+difference and leaves alone.
+
 `--no-session` is worth adding on any large cohort: `session_state.RData` can
 reach several hundred MB and dominate the runtime, and no result depends on it.
 
@@ -139,9 +153,9 @@ PowerShell use `${PWD}`; on Git Bash prefix with `MSYS_NO_PATHCONV=1`.
 Annotated templates for both files:
 
 ```bash
-docker run --rm --entrypoint sh cyraven:1.0.0 -c \
+docker run --rm --entrypoint sh cyraven:1.1.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml'
-docker run --rm --entrypoint sh cyraven:1.0.0 -c \
+docker run --rm --entrypoint sh cyraven:1.1.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/samples_template.csv'
 ```
 
@@ -162,7 +176,7 @@ When the user has no data to hand, or wants to see the output shape first:
 ```bash
 mkdir -p demo results
 docker run --rm -v "$PWD/demo:/demo" \
-  --entrypoint Rscript cyraven:1.0.0 \
+  --entrypoint Rscript cyraven:1.1.0 \
   /opt/cyraven/src/inst/scripts/demo_data.R /demo
 ```
 
@@ -195,7 +209,7 @@ a rebuild.
 
 ```bash
 docker run --rm -v "$PWD:/src:ro" -v "$PWD/results:/results" \
-  -e CYRAVEN_SOURCE=/src cyraven:1.0.0 --dir /data/fcs --outdir /results
+  -e CYRAVEN_SOURCE=/src cyraven:1.1.0 --dir /data/fcs --outdir /results
 ```
 
 Full build detail, resource tuning, Windows path handling and container-specific
@@ -270,6 +284,8 @@ number are opt-in. That rule is deliberate and worth preserving in any change.
 
 ```bash
 --check                    # validate inputs from FCS headers, exit; run this first
+--list-channels            # what each channel resolves to; names the panel fix
+--ignore-channels 'AF*'    # drop channels BEFORE the panel fingerprint
 --write-samples s.csv      # template covering every input file, then exit
 --transform logicle        # instead of arcsinh; changes every threshold
 --cluster                  # SOM clustering, then cross-check against the spec
@@ -281,6 +297,8 @@ number are opt-in. That rule is deliberate and worth preserving in any change.
 --fail-on-drift            # make the verdict an exit code
 --batch-column run_date    # quantify batch structure, per marker and overall
 --correct-batch            # correct it, subject to the confounding refusal
+--batch-method cluster     # fit the correction per cell type, not per file
+--no-marker-group-umaps    # skip marker_umaps_by_group/, one PNG per marker
 --lod-events 20            # events below which a population is not detected
 --loq-events 50            # events below which it is detected but not quantified
 --drop-unstable-events     # exclude flagged acquisition intervals; changes counts

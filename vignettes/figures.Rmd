@@ -88,7 +88,7 @@ a Windows path.
 
 Step 3 should report 35 files, four resolved markers, that every marker the
 specification names is present, that the sheet covers every file, and the group
-sizes. Step 4 writes 22 figures and 31 tables into `results/`, plus
+sizes. Step 4 writes 22 figures and 36 tables into `results/`, plus
 `report.html`, which carries all of them embedded in one file.
 
 ## 0.3 What each flag is doing

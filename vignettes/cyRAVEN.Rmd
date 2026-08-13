@@ -139,7 +139,7 @@ docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
 On Windows PowerShell substitute `${PWD}` for `$PWD`; on Git Bash prefix with
 `MSYS_NO_PATHCONV=1`.
 
-This writes 22 figures and 31 tables from 35 samples across five allogeneic
+This writes 22 figures and 36 tables from 35 samples across five allogeneic
 transplant recipients. `report.html` carries all of them embedded in one
 self-contained file, in the order they have to be read.
 
@@ -194,3 +194,6 @@ page assumes it.
 - [Worked example](figures.html): every figure from the demonstration cohort,
   with its interpretation.
 - [Scope](scope.html): what cyRAVEN does not do, and what to use instead.
+- [Known limitations](known-limitations.html): every caveat collected in one
+  place, how to tell whether a result from an earlier version was affected by
+  the control fix, and what was deliberately left out with the reason.

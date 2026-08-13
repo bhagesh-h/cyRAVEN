@@ -128,7 +128,7 @@ within a mounted volume or the output is discarded when the container exits. On
 Windows PowerShell substitute `${PWD}` for `$PWD`; on Git Bash prefix with
 `MSYS_NO_PATHCONV=1`.
 
-This writes 22 figures and 31 tables from 35 samples across five allogeneic
+This writes 22 figures and 36 tables from 35 samples across five allogeneic
 transplant recipients (Brinkman et al., 2007, *Biol Blood Marrow Transplant*
 13:691; Artistic-2.0).
 
@@ -205,11 +205,12 @@ why, so the same arguments do not get relitigated.
 
 | Page | Content |
 |---|---|
-| [Running cyRAVEN](https://bhagesh-h.github.io/cyRAVEN/articles/usage.html) | Every command in Docker and R, which variation to use in which situation, and the complete reference for all 112 options |
+| [Running cyRAVEN](https://bhagesh-h.github.io/cyRAVEN/articles/usage.html) | Every command in Docker and R, which variation to use in which situation, and the complete reference for all 115 options |
 | [Inputs](https://bhagesh-h.github.io/cyRAVEN/articles/inputs.html) | The sample sheet and the config: every column, the templates, and the errors the format can raise |
 | [Gating specification](https://bhagesh-h.github.io/cyRAVEN/articles/gating.html) | Declaring populations, functional blocks and ratios; per-sample thresholding and the `source` column; arcsinh against logicle |
 | [Claude skill](https://bhagesh-h.github.io/cyRAVEN/articles/claude-skill.html) | Installing and using the bundled Claude Code skill, which executes through Docker by default |
 | [Interoperability](https://bhagesh-h.github.io/cyRAVEN/articles/with-cycondor.html) | Method selection by question type, and handing a cyCONDOR clustering to cyRAVEN to obtain an executable gate |
+| [Known limitations](https://bhagesh-h.github.io/cyRAVEN/articles/known-limitations.html) | Every caveat in one place, how to tell whether an older result was affected by the 1.1.0 control fix, and what was deliberately left out with the reason |
 | [Function reference](https://bhagesh-h.github.io/cyRAVEN/reference/index.html) | Every exported function, grouped by stage |
 
 **Science and output**

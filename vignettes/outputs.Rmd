@@ -137,6 +137,7 @@ abundance. Report `pct_of_cd45_pos` unless absolute counts were supplied through
 | `umap_density.png` | Cell density in embedding space |
 | `umap_density_by_group.png` | The same, faceted by study group |
 | `umap_overview_by_group.png` | Combined embedding with one column per group |
+| `marker_umaps_by_group/` | One full-size UMAP per marker, in its own folder. Split by group where a group column resolves to two or more groups (`umap_CD3_by_timepoint.png`), one panel per marker where it does not (`umap_CD3.png`) |
 | `umap_multigraph_overlay.png` | Per-compartment marker distributions against the reference group |
 | `umap.model`, `umap.model.meta.rds` | Persisted model, written by `--save-umap-model` |
 
@@ -213,6 +214,7 @@ Disable with `--no-parametric`.
 | `batch_diagnostic.png` | Observed against null mixing |
 | `marker_batch_drift.csv` | Earth Mover's distance between batches per marker, in analysis units and scaled by the marker's own MAD |
 | `threshold_batch_drift.csv` | The threshold test above, grouped by batch instead of by study group |
+| `batch_correction.csv` | Whether a correction ran, which method fitted it, the Cramér's *V* it was judged on, and the reason. Written whenever `--correct-batch` is set, including on a refusal |
 
 The last two are written by `--batch-column` and answer the question the first
 three cannot: which channel moved. iLISI is a property of the embedding, so a
