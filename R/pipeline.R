@@ -1099,11 +1099,44 @@ run_cyraven_impl <- function(opt) {
                           file.path(opt$outdir, paste0("umap_density", sfx, ".png")),
                           panel_label = p$name)
 
+    gcol <- opt$group_column %||% "cohort"
+    .has_group <- gcol %in% names(embeddings[[p$name]]$cells) &&
+      length(unique(stats::na.omit(embeddings[[p$name]]$cells[[gcol]]))) > 1L
+
+    # One UMAP per marker, at full size, in its own folder. Written on EVERY
+    # run, not only grouped ones. Where a group column resolves to 2+ groups
+    # each marker is faceted by it; where it does not, the same folder holds one
+    # unfaceted panel per marker.
+    #
+    # WHY IT IS NOT COVERED BY THE FIGURES ABOVE. umap_markers.png colours by
+    # intensity but pools the groups and shrinks every marker into a grid cell.
+    # umap_overview_by_group.png splits by group but colours by population or
+    # covariate, never by intensity. The question "is this marker brighter, or
+    # somewhere else, in one group" needs both at once, and on an ungrouped run
+    # the same file is still the only full-size view of one marker.
+    #
+    # On by default, following the rule for anything that only ADDS an output:
+    # an analysis you have to know to ask for is one nobody runs.
+    # --no-marker-group-umaps turns it off, for a panel wide enough that one PNG
+    # per marker is a folder you do not want.
+    #
+    # try(): this runs before .ext_ok() is defined, and a figure failure here
+    # would otherwise take down a run whose tables are already written.
+    if (!isTRUE(opt$no_marker_group_umaps)) {
+      .mg <- try(fig_marker_umaps_by_group(
+        embeddings[[p$name]]$cells, fcols,
+        file.path(opt$outdir, paste0("marker_umaps_by_group", sfx)),
+        group_col = if (.has_group) gcol else NULL,
+        panel_label = p$name), silent = TRUE)
+      if (inherits(.mg, "try-error"))
+        log_msg("  NOTE marker UMAPs failed, continuing: ",
+                conditionMessage(attr(.mg, "condition")))
+    }
+
     # Same comparison, one panel per GROUP instead of per sample -- the combined
     # embedding (umap_overview.png) already shows every group overlaid; this is
     # the side-by-side view of the same shared axes, so a group-specific shift
     # or dropout is visible without hunting through overlaid colours.
-    gcol <- opt$group_column %||% "cohort"
     if (gcol %in% names(embeddings[[p$name]]$cells)) {
       n_grp <- length(unique(stats::na.omit(embeddings[[p$name]]$cells[[gcol]])))
       if (n_grp > 1L) {

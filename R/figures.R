@@ -634,6 +634,88 @@ fig_marker_grid <- function(cells, markers, outfile, panel_label = "",
   invisible(fig)
 }
 
+#' One UMAP per marker, faceted by study group
+#'
+#' WHY: the two existing by-group figures answer different questions.
+#'      `umap_markers.png` colours by marker intensity but pools the groups, so
+#'      a shift that happens in one group only is averaged away.
+#'      `umap_overview_by_group.png` splits by group but colours by population
+#'      or covariate, never by intensity. Neither answers "is this marker
+#'      brighter, or somewhere else, in one group", which is the comparison a
+#'      case-control or longitudinal design is usually about.
+#'
+#'      ONE FILE PER MARKER rather than one markers x groups grid. A grid is
+#'      unreadable past a handful of each, and a single marker's comparison is
+#'      the unit that goes into a slide or a figure panel.
+#'
+#'      The colour scale is SHARED across the facets within a file, and clipped
+#'      to the 1st-99th percentile of the cells drawn, so a colour difference
+#'      between two panels of one file is a real intensity difference. It is not
+#'      shared between files, for the reason given in [fig_marker_grid()].
+#'
+#'      Panel density is comparable only because the embedding draws the same
+#'      number of cells from every sample; see [plan_subsample()].
+#'
+#'      WITH NO GROUP the folder is still written, one unfaceted panel per
+#'      marker. That is not a degraded version of the figure, it is the other
+#'      half of the same need: `umap_markers.png` shrinks every marker into a
+#'      grid cell, and this is the same marker at full size. A run with no
+#'      `--group-column` has no other way to look at one marker properly.
+#' @param cells Data frame of embedded cells with `umap_1`, `umap_2` and the
+#'   marker columns, plus the group column when there is one.
+#' @param markers Character vector of marker columns to draw.
+#' @param outdir Directory to write into; created if absent.
+#' @param group_col Name of the column to facet by, or NULL for one unfaceted
+#'   panel per marker. A column resolving to a single level is treated as NULL.
+#' @param panel_label Marker-panel name added to each title; empty for none. Default `""`.
+#' @param dpi Resolution in dots per inch. Default `170`.
+#' @param colors Named list of colours; defaults to the package palette. Default `fcs_colors()`.
+#' @return Character vector of the files written, invisibly.
+#' @export
+fig_marker_umaps_by_group <- function(cells, markers, outdir, group_col = NULL,
+                                      panel_label = "", dpi = 170,
+                                      colors = fcs_colors()) {
+  markers <- markers[markers %in% names(cells)]
+  if (!length(markers) || !nrow(cells)) return(invisible(character(0)))
+  # A group column that is absent, all NA, or holds one level is treated as no
+  # group at all -- faceting into a single panel would add a strip label saying
+  # nothing and make the file look like a comparison it is not.
+  grps <- if (!is.null(group_col) && group_col %in% names(cells))
+    unique(stats::na.omit(cells[[group_col]])) else NULL
+  faceted <- length(grps) > 1L
+  ng <- if (faceted) length(grps) else 1L
+  dir.create(outdir, showWarnings = FALSE, recursive = TRUE)
+  ps <- auto_point_aes(nrow(cells))$size * 0.8
+  written <- character(0)
+  for (m in markers) {
+    msafe <- gsub("[^A-Za-z0-9]+", "_", m)
+    f <- file.path(outdir, if (faceted)
+      sprintf("umap_%s_by_%s.png", msafe, gsub("[^A-Za-z0-9]+", "_", group_col))
+      else sprintf("umap_%s.png", msafe))
+    ttl <- paste0(m, if (faceted) paste0(" by ", group_col) else "",
+                  if (nzchar(panel_label)) paste0(", ", panel_label) else "")
+    # KEEP THESE SHORT. The subtitle is drawn at the panel's full width with no
+    # wrapping, so a long one is silently clipped at the right edge -- the plot
+    # still writes, it just loses the end of the sentence. Measured: 96
+    # characters ran off a 6.2-inch canvas.
+    sub <- if (faceted)
+      "one embedding split by group; colour scale shared across panels"
+    else
+      "all samples; colour is asinh intensity, 1st-99th percentile"
+    p <- umap_continuous(cells, m, title = ttl, subtitle = sub,
+                         point_size = ps, legend_name = m, colors = colors)
+    if (faceted) p <- p + facet_wrap(vars(.data[[group_col]]))
+    safe_ggsave(f, plot = p,
+                width = if (faceted) max(7.6, 3.1 * ng + 1.4) else 7,
+                height = 4.2, dpi = dpi, limitsize = FALSE)
+    written <- c(written, f)
+  }
+  message("[fig] wrote ", basename(outdir), "/ (", length(written),
+          " marker(s)", if (faceted) paste0(" x ", ng, " group(s)") else
+            ", no group column resolved", ")")
+  invisible(written)
+}
+
 #' Per-sample (or per-group) density comparison over the shared embedding
 #'
 #' WHY: side-by-side 2D density of the SAME embedding shows where each sample
