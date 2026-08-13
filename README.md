@@ -197,7 +197,7 @@ Every other page assumes it.
 
 | Page | Content |
 |---|---|
-| [Running cyRAVEN](https://bhagesh-h.github.io/cyRAVEN/articles/usage.html) | Every command in Docker and R, which variation to use in which situation, and the complete reference for all 111 options |
+| [Running cyRAVEN](https://bhagesh-h.github.io/cyRAVEN/articles/usage.html) | Every command in Docker and R, which variation to use in which situation, and the complete reference for all 112 options |
 | [Inputs](https://bhagesh-h.github.io/cyRAVEN/articles/inputs.html) | The sample sheet and the config: every column, the templates, and the errors the format can raise |
 | [Gating specification](https://bhagesh-h.github.io/cyRAVEN/articles/gating.html) | Declaring populations, functional blocks and ratios; per-sample thresholding and the `source` column; arcsinh against logicle |
 | [Claude skill](https://bhagesh-h.github.io/cyRAVEN/articles/claude-skill.html) | Installing and using the bundled Claude Code skill, which executes through Docker by default |

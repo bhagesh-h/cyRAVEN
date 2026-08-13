@@ -82,7 +82,33 @@ absent simply disables what depends on it.
 | `patient_id` | The subject. Several rows may share one, which is what makes repeat acquisitions and longitudinal designs work. |
 | `panel` | Forces a panel assignment. Panels are fingerprinted from the channels otherwise. |
 | `timepoint` | Visit or draw. |
-| `is_control` | `TRUE` for a control tube. Controls are read and used as references but excluded from between-group tests. |
+| `is_control` | `TRUE` for a control tube. Controls are read and used as references but excluded from between-group tests. Setting it `FALSE` is not the same as leaving it out: `FALSE` asserts that the file is a biological sample, and the assertion matters. See below. |
+
+### Say `FALSE` rather than saying nothing
+
+An absent `is_control` column means "unknown", not "no controls here". The
+distinction has teeth.
+
+A control tube supplies the reference distribution for markers that resolve no
+density minimum, and the cut is then the 99.5th percentile of the control. That
+is correct when the reference really is unstained. When it is a stained
+biological sample, the cut lands at the top of a real distribution and the
+population beneath it all but disappears.
+
+Up to version 1.1.0 a sample that failed staining QC could be promoted to that
+reference on a sheet that named no controls, on the reasoning that an unlabelled
+tube might be one. On a cohort of twelve patient samples with no controls at all,
+that put T cells at 0.034% of CD45+ where the correct figure was over a hundred
+times higher, with no error and no warning.
+
+cyRAVEN now believes a control only when the sheet declares one, and says so in
+the log when it declines to promote a sample. Two habits follow from that:
+
+- Write `is_control` on every row, `FALSE` for samples and `TRUE` for controls.
+  `--write-samples` does this for you.
+- If most rows of `thresholds_used.csv` read `control_q995` in the `source`
+  column, check which sample supplied the reference before reading any
+  frequency.
 | `fmo_for` | Comma-separated markers this file is the fluorescence-minus-one control for. |
 | `control_group` | Confines a control to the samples sharing its value, since a reagent lot changes between batches. |
 

@@ -1,9 +1,38 @@
 # cyRAVEN 1.1.0
 
 Parametric tests beside the rank tests, a feasibility check before either, the
-channel control that stops a cohort splitting into panels, and parallel reading.
+channel control that stops a cohort splitting into panels, parallel reading, and
+one fix for a failure that was silent and severe.
+
 Every option, output file, column name and value version 1.0.0 produced is
-produced identically.
+produced identically, with the single deliberate exception in "A sample that
+fails staining QC is no longer assumed to be a control" below. That one changes
+numbers, because the numbers it changes were wrong.
+
+## A sample that fails staining QC is no longer assumed to be a control
+
+* `staining_verdict()` reads an **absent** `is_control` column as "might be a
+  control", because only `is_control = FALSE` positively asserts that a file is
+  a biological sample. On a sheet without that column, any sample whose CD45
+  gate found no density minimum was promoted to the unstained reference for its
+  whole panel.
+* Every threshold in that panel then came from the 99.5th percentile of that one
+  sample. When it was really a stained sample, every cut landed at the top of a
+  real distribution and every population collapsed. Measured on a real cohort:
+  T cells at 0.034% of CD45+ against 4.4% once corrected, with no error raised
+  and no warning printed. The frequency table looked like a finding.
+* A control is now believed only when the sheet declares one. Absence of
+  evidence is not evidence of an unstained tube, and a cohort with no controls
+  is the ordinary case.
+* When samples would have been promoted, the run now names them, says they are
+  being treated as failed samples instead, and points at both remedies.
+* `--discover-controls` restores the previous behaviour.
+* Where a control reference IS used, the log now states that every threshold in
+  the panel is a 99.5th percentile of it, and what a wrong reference looks like
+  in `thresholds_used.csv`.
+* If you have results from an earlier version on a cohort with no declared
+  control, check `thresholds_used.csv`. A `source` of `control_q995` on most
+  markers means those frequencies came from this failure and should be re-run.
 
 ## Knowing what to write in the config
 
