@@ -69,12 +69,12 @@ pick by whether you intend to change the code.
 here was produced with.
 
 ```bash
-docker pull bhagesh/cyraven:1.1.0
-docker tag bhagesh/cyraven:1.1.0 cyraven:1.1.0
+docker pull bhagesh/cyraven:1.0.0
+docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
 ```
 
-The second line is only so that every command below can say `cyraven:1.1.0`. Use
-`bhagesh/cyraven:1.1.0` directly instead if you prefer.
+The second line is only so that every command below can say `cyraven:1.0.0`. Use
+`bhagesh/cyraven:1.0.0` directly instead if you prefer.
 
 **Build.** For a modified source tree, an air-gapped host, or if you would
 rather not run a third-party image. The build context is the repository root,
@@ -83,7 +83,7 @@ the directory holding `DESCRIPTION`.
 ```bash
 git clone https://github.com/bhagesh-h/cyRAVEN.git
 cd cyRAVEN
-docker build -f inst/scripts/Dockerfile -t cyraven:1.1.0 .
+docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
 ```
 
 The first build compiles the dependency stack and takes 15 to 25 minutes. It
@@ -92,7 +92,7 @@ image fails at build time rather than during an analysis.
 
 Both routes pin R 4.4.3, the same dated CRAN snapshot and Bioconductor 3.20, so
 they are numerically interchangeable. Confirm what you have with
-`docker run --rm --entrypoint Rscript cyraven:1.1.0 -e 'packageVersion("cyRAVEN")'`.
+`docker run --rm --entrypoint Rscript cyraven:1.0.0 -e 'packageVersion("cyRAVEN")'`.
 
 ### 2. Run the demonstration cohort
 
@@ -105,19 +105,19 @@ mkdir -p demo results
 
 # write the cohort, its sample sheet and its config
 docker run --rm -v "$PWD/demo:/demo" \
-  --entrypoint Rscript cyraven:1.1.0 \
+  --entrypoint Rscript cyraven:1.0.0 \
   /opt/cyraven/src/inst/scripts/demo_data.R /demo
 
 # validate the inputs in seconds, without analysing anything
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.1.0 --dir /data/fcs \
+  cyraven:1.0.0 --dir /data/fcs \
   --samples /data/samples.csv --config /data/panel.yaml \
   --group-column cohort --reference-group "GvHD grade 1" \
   --batch-column visit --outdir /results --check
 
 # run
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.1.0 --dir /data/fcs \
+  cyraven:1.0.0 --dir /data/fcs \
   --samples /data/samples.csv --config /data/panel.yaml \
   --group-column cohort --reference-group "GvHD grade 1" \
   --batch-column visit --cluster --outdir /results
@@ -171,11 +171,11 @@ declaring what to score.
 
 ```bash
 # a sheet with a row for every file, which you then fill in
-docker run --rm -v "$PWD/data:/data" cyraven:1.1.0 \
+docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
   --dir /data/fcs --recursive --write-samples /data/samples.csv
 
 # the annotated config template
-docker run --rm --entrypoint sh cyraven:1.1.0 -c \
+docker run --rm --entrypoint sh cyraven:1.0.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml' \
   > data/analysis.yaml
 ```
@@ -195,7 +195,7 @@ Every other page assumes it.
 
 Before you trust a result,
 [Known limitations](https://bhagesh-h.github.io/cyRAVEN/articles/known-limitations.html)
-collects every caveat in one place: what the 1.1.0 control fix means for results
+collects every caveat in one place: what the 1.0.0 control fix means for results
 produced by an earlier version and how to tell whether yours were affected,
 where the automated gates have and have not been validated, and which comparisons
 this package will not make. It also records what was deliberately left out and
@@ -210,7 +210,7 @@ why, so the same arguments do not get relitigated.
 | [Gating specification](https://bhagesh-h.github.io/cyRAVEN/articles/gating.html) | Declaring populations, functional blocks and ratios; per-sample thresholding and the `source` column; arcsinh against logicle |
 | [Claude skill](https://bhagesh-h.github.io/cyRAVEN/articles/claude-skill.html) | Installing and using the bundled Claude Code skill, which executes through Docker by default |
 | [Interoperability](https://bhagesh-h.github.io/cyRAVEN/articles/with-cycondor.html) | Method selection by question type, and handing a cyCONDOR clustering to cyRAVEN to obtain an executable gate |
-| [Known limitations](https://bhagesh-h.github.io/cyRAVEN/articles/known-limitations.html) | Every caveat in one place, how to tell whether an older result was affected by the 1.1.0 control fix, and what was deliberately left out with the reason |
+| [Known limitations](https://bhagesh-h.github.io/cyRAVEN/articles/known-limitations.html) | Every caveat in one place, how to tell whether an older result was affected by the 1.0.0 control fix, and what was deliberately left out with the reason |
 | [Function reference](https://bhagesh-h.github.io/cyRAVEN/reference/index.html) | Every exported function, grouped by stage |
 
 **Science and output**

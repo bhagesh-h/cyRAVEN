@@ -17,7 +17,7 @@ half exists so the same arguments do not get relitigated every six months.
 
 ## Part 1. Limitations
 
-### A control was believed too easily before 1.1.0
+### A control used to be believed too easily
 
 `staining_verdict()` read an **absent** `is_control` column as "might be a
 control", because only `is_control = FALSE` positively asserts that a file is a
@@ -33,8 +33,13 @@ thresholds came from a reference. Find out which sample supplied it before
 reading a single frequency. A cohort that declares no control should show
 `valley` and `quantile_fallback` only.
 
-Fixed in 1.1.0. `--discover-controls` restores the old behaviour for anyone who
-needs it.
+Fixed. `--discover-controls` restores the old behaviour for anyone who needs it.
+
+**The version number will not tell you whether you are affected, so check the
+file.** A `1.0.0` image was published before this fix and replaced afterwards
+under the same tag, so two pulls of `bhagesh/cyraven:1.0.0` can differ. The
+`source` column in `thresholds_used.csv` is the reliable test, and it costs a
+few seconds.
 
 ### Automated gates have not been benchmarked against independent expert gating
 

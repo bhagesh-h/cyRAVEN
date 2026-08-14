@@ -1,13 +1,14 @@
-# cyRAVEN 1.1.0
+# cyRAVEN 1.0.0
 
-Parametric tests beside the rank tests, a feasibility check before either, the
-channel control that stops a cohort splitting into panels, a full-size UMAP per
-marker, parallel reading, and one fix for a failure that was silent and severe.
+Explore mode, the statistics catalogue and the input format, together with
+parametric tests beside the rank tests, a feasibility check before either, the
+channel control that stops a cohort splitting into panels, per-marker UMAPs,
+parallel reading, and one fix for a failure that was silent and severe.
 
-Every option, output file, column name and value version 1.0.0 produced is
-produced identically, with the single deliberate exception in "A sample that
-fails staining QC is no longer assumed to be a control" below. That one changes
-numbers, because the numbers it changes were wrong.
+Nothing an earlier pre-release produced is renamed or removed, with the single
+deliberate exception in "A sample that fails staining QC is no longer assumed to
+be a control" below. That one changes numbers, because the numbers it changes
+were wrong.
 
 ## A sample that fails staining QC is no longer assumed to be a control
 
@@ -251,12 +252,6 @@ numbers, because the numbers it changes were wrong.
 * `--paired-column` without `--condition-column` was documented as sufficient in
   places. It is not, and never was: the pipeline logs `paired test skipped` and
   writes no paired output.
-
-# cyRAVEN 1.0.0
-
-Explore mode, the statistics catalogue, and the input format. Every option,
-output file, column name and value an earlier run produced is produced
-identically; nothing is renamed and nothing is removed.
 
 ## Explore mode
 

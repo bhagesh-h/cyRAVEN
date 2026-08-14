@@ -73,12 +73,12 @@ change the code.
 every published run here was produced with.
 
 ```bash
-docker pull bhagesh/cyraven:1.1.0
-docker tag bhagesh/cyraven:1.1.0 cyraven:1.1.0
+docker pull bhagesh/cyraven:1.0.0
+docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
 ```
 
 The `docker tag` line only exists so every command on this site can say
-`cyraven:1.1.0`. Substitute `bhagesh/cyraven:1.1.0` throughout instead if you
+`cyraven:1.0.0`. Substitute `bhagesh/cyraven:1.0.0` throughout instead if you
 prefer.
 
 **Build.** For a modified source tree, an air-gapped host, or if you would rather
@@ -87,7 +87,7 @@ not run a third-party image.
 ```bash
 git clone https://github.com/bhagesh-h/cyRAVEN.git
 cd cyRAVEN
-docker build -f inst/scripts/Dockerfile -t cyraven:1.1.0 .
+docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
 ```
 
 The build context is the repository root, the directory holding `DESCRIPTION`.
@@ -99,7 +99,7 @@ Both pin R 4.4.3, the same dated CRAN snapshot and Bioconductor 3.20, so they ar
 numerically interchangeable. Check what you have with:
 
 ```bash
-docker run --rm --entrypoint Rscript cyraven:1.1.0 \
+docker run --rm --entrypoint Rscript cyraven:1.0.0 \
   -e 'cat(as.character(packageVersion("cyRAVEN")), R.version.string)'
 ```
 
@@ -116,19 +116,19 @@ mkdir -p demo results
 
 # 1. write the cohort, its sample sheet and its config
 docker run --rm -v "$PWD/demo:/demo" \
-  --entrypoint Rscript cyraven:1.1.0 \
+  --entrypoint Rscript cyraven:1.0.0 \
   /opt/cyraven/src/inst/scripts/demo_data.R /demo
 
 # 2. validate the inputs, in seconds, without analysing anything
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.1.0 --dir /data/fcs \
+  cyraven:1.0.0 --dir /data/fcs \
   --samples /data/samples.csv --config /data/panel.yaml \
   --group-column cohort --reference-group "GvHD grade 1" \
   --batch-column visit --outdir /results --check
 
 # 3. run
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.1.0 --dir /data/fcs \
+  cyraven:1.0.0 --dir /data/fcs \
   --samples /data/samples.csv --config /data/panel.yaml \
   --group-column cohort --reference-group "GvHD grade 1" \
   --batch-column visit --cluster --outdir /results
@@ -150,11 +150,11 @@ declaring what to score.
 
 ```bash
 # a sheet with a row for every file, which you then fill in
-docker run --rm -v "$PWD/data:/data" cyraven:1.1.0 \
+docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
   --dir /data/fcs --recursive --write-samples /data/samples.csv
 
 # the config template
-docker run --rm --entrypoint sh cyraven:1.1.0 -c \
+docker run --rm --entrypoint sh cyraven:1.0.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml' \
   > data/analysis.yaml
 ```

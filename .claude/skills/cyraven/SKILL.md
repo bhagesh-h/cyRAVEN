@@ -19,7 +19,7 @@ between samples does not remove that variance, it converts it into a bias that
 tracks staining intensity. cyRAVEN removes the analyst from threshold placement
 and quantifies what remains.
 
-Current version: 1.1.0.
+Current version: 1.0.0.
 
 ## Execute through Docker
 
@@ -43,11 +43,11 @@ docker images | grep cyraven
 is the image the documented runs were produced with.
 
 ```bash
-docker pull bhagesh/cyraven:1.1.0
-docker tag bhagesh/cyraven:1.1.0 cyraven:1.1.0
+docker pull bhagesh/cyraven:1.0.0
+docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
 ```
 
-The `docker tag` is only so the commands below can say `cyraven:1.1.0`.
+The `docker tag` is only so the commands below can say `cyraven:1.0.0`.
 
 **Build instead** when the user has edited `R/`, the Dockerfile or the config
 templates, when the host is air-gapped, or when they say they would rather not
@@ -59,7 +59,7 @@ the directory holding `DESCRIPTION`:
 ```bash
 git clone https://github.com/bhagesh-h/cyRAVEN.git
 cd cyRAVEN
-docker build -f inst/scripts/Dockerfile -t cyraven:1.1.0 .
+docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
 ```
 
 15 to 25 minutes on a first build. It ends by running `--help` and printing every
@@ -97,14 +97,14 @@ Never hand-author the sheet, and never run before checking. This sequence:
 
 ```bash
 # 1. a sheet with a row for every file
-docker run --rm -v "$PWD/data:/data" cyraven:1.1.0 \
+docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
   --dir /data/fcs --recursive --write-samples /data/samples.csv
 
 # 2. user fills in patient_id, cohort and any study variable
 
 # 3. validate against the FCS headers, seconds, writes nothing
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.1.0 --dir /data/fcs --recursive \
+  cyraven:1.0.0 --dir /data/fcs --recursive \
   --samples /data/samples.csv --config /data/analysis.yaml \
   --outdir /results --check
 
@@ -112,7 +112,7 @@ docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
 docker run --rm \
   -v "$PWD/data:/data:ro" \
   -v "$PWD/results:/results" \
-  cyraven:1.1.0 \
+  cyraven:1.0.0 \
   --dir /data/fcs --recursive \
   --samples /data/samples.csv \
   --config /data/analysis.yaml \
@@ -153,9 +153,9 @@ PowerShell use `${PWD}`; on Git Bash prefix with `MSYS_NO_PATHCONV=1`.
 Annotated templates for both files:
 
 ```bash
-docker run --rm --entrypoint sh cyraven:1.1.0 -c \
+docker run --rm --entrypoint sh cyraven:1.0.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml'
-docker run --rm --entrypoint sh cyraven:1.1.0 -c \
+docker run --rm --entrypoint sh cyraven:1.0.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/samples_template.csv'
 ```
 
@@ -176,7 +176,7 @@ When the user has no data to hand, or wants to see the output shape first:
 ```bash
 mkdir -p demo results
 docker run --rm -v "$PWD/demo:/demo" \
-  --entrypoint Rscript cyraven:1.1.0 \
+  --entrypoint Rscript cyraven:1.0.0 \
   /opt/cyraven/src/inst/scripts/demo_data.R /demo
 ```
 
@@ -209,7 +209,7 @@ a rebuild.
 
 ```bash
 docker run --rm -v "$PWD:/src:ro" -v "$PWD/results:/results" \
-  -e CYRAVEN_SOURCE=/src cyraven:1.1.0 --dir /data/fcs --outdir /results
+  -e CYRAVEN_SOURCE=/src cyraven:1.0.0 --dir /data/fcs --outdir /results
 ```
 
 Full build detail, resource tuning, Windows path handling and container-specific

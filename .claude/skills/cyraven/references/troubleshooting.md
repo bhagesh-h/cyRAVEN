@@ -10,7 +10,7 @@ seconds and writes nothing:
 
 ```bash
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.1.0 --dir /data/fcs --samples /data/samples.csv \
+  cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
   --config /data/analysis.yaml --outdir /results --check
 ```
 
@@ -47,7 +47,7 @@ nothing downstream reveals it.
 Regenerate a sheet covering everything, then merge your columns into it:
 
 ```bash
-docker run --rm -v "$PWD/data:/data" cyraven:1.1.0 \
+docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
   --dir /data/fcs --recursive --write-samples /data/samples_new.csv
 ```
 

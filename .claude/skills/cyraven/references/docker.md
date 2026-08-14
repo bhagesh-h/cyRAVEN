@@ -35,11 +35,11 @@ The released image is published at
 about 650 MB compressed.
 
 ```bash
-docker pull bhagesh/cyraven:1.1.0
-docker tag bhagesh/cyraven:1.1.0 cyraven:1.1.0
+docker pull bhagesh/cyraven:1.0.0
+docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
 ```
 
-`1.1.0` and `latest` are currently the same digest. Pin the version for anything
+`1.0.0` and `latest` are currently the same digest. Pin the version for anything
 that will be published; `latest` moving under a study is the reproducibility
 failure the pinned image exists to prevent.
 
@@ -52,7 +52,7 @@ From the package root, the directory containing `DESCRIPTION`, not
 `inst/scripts/`:
 
 ```bash
-docker build -f inst/scripts/Dockerfile -t cyraven:1.1.0 .
+docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
 ```
 
 The build copies `DESCRIPTION` and `install_deps.R` before anything else, so the
@@ -73,7 +73,7 @@ image fails here.
 docker run --rm \
   -v "$PWD:/data:ro" \
   -v "$PWD/results:/results" \
-  cyraven:1.1.0 \
+  cyraven:1.0.0 \
   --dir /data --recursive \
   --config /data/panel.yaml \
   --sample-map /data/sample_map.csv \
@@ -102,7 +102,7 @@ PowerShell expands `${PWD}`, not `$PWD`:
 docker run --rm `
   -v "${PWD}:/data:ro" `
   -v "${PWD}/results:/results" `
-  cyraven:1.1.0 `
+  cyraven:1.0.0 `
   --dir /data --recursive --outdir /results
 ```
 
@@ -149,7 +149,7 @@ docker run --rm \
   -v "$PWD/data:/data:ro" \
   -v "$PWD/results:/results" \
   -e CYRAVEN_SOURCE=/src \
-  cyraven:1.1.0 --dir /data --outdir /results
+  cyraven:1.0.0 --dir /data --outdir /results
 ```
 
 `entrypoint.sh` sees `CYRAVEN_SOURCE` and loads that tree with
@@ -164,12 +164,12 @@ does not have. R says so plainly at startup: "there is no package called ...".
 ## Docker-specific failures
 
 **`Rscript: not a valid option`, or the container ignores your command.**
-The image has an `ENTRYPOINT`, so `docker run cyraven:1.1.0 Rscript foo.R` passes
+The image has an `ENTRYPOINT`, so `docker run cyraven:1.0.0 Rscript foo.R` passes
 `Rscript foo.R` as *arguments to the entrypoint*. Override it:
 
 ```bash
-docker run --rm --entrypoint Rscript cyraven:1.1.0 -e 'sessionInfo()'
-docker run --rm -it --entrypoint bash cyraven:1.1.0
+docker run --rm --entrypoint Rscript cyraven:1.0.0 -e 'sessionInfo()'
+docker run --rm -it --entrypoint bash cyraven:1.0.0
 ```
 
 **`R CMD INSTALL -l /tmp/rlib: cannot cd to directory`.**
@@ -196,10 +196,10 @@ directory, or `chown` it afterwards.
 ## Checking what an image actually contains
 
 ```bash
-docker run --rm --entrypoint Rscript cyraven:1.1.0 \
+docker run --rm --entrypoint Rscript cyraven:1.0.0 \
   -e 'cat(as.character(packageVersion("cyRAVEN")), "\n")'
 
-docker run --rm cyraven:1.1.0 --help
+docker run --rm cyraven:1.0.0 --help
 ```
 
 The manifest written by every run (`run_manifest.txt`) records the R version, the
