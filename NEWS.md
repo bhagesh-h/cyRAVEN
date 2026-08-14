@@ -88,11 +88,92 @@ numbers, because the numbers it changes were wrong.
 * These sit beside the rank tests and never replace them. No existing table
   changes. `--no-parametric` turns them off.
 
+## Figures are written on white, not on transparency
+
+* Every figure now carries an opaque white background. `ggsave()` takes its
+  background from the theme, and the theme left `plot.background` unset, so PNGs
+  were written RGBA with a transparent ground. **Measured on one run: 11 of 20
+  figures.**
+* That is fine inside a white report and unreadable anywhere else. Expand a
+  figure in a dark viewer, or drop it on a dark slide, and black axis text sits
+  on whatever is behind it.
+* Set in three places: `safe_ggsave()`, which every one of the 43 figure writes
+  passes through; `theme_cyto()`, so the plot object itself carries a white
+  ground however it is rendered; and the raw `png()` device the multigraph
+  overlay draws on, which does not go through `ggsave()` at all. A caller
+  passing its own `bg` still wins.
+
+## Legends sit top-left on the large multi-panel figures
+
+* `functional_markers.png`, `population_frequencies.png`,
+  `population_ratios.png`, `group_comparison.png`, `marker_state.png` and
+  `umap_multigraph_overlay.png` put their key at the top left instead of the
+  right.
+* patchwork collects the guide once for a whole composition and centres it
+  vertically on the right. On a tall grid that is thousands of pixels from the
+  top: `functional_markers.png` runs to 26 panels and six thousand pixels, so
+  finding out what a colour means meant scrolling away from the panels and back.
+* **The standalone UMAP figures are unchanged.** They are single panels where
+  the key already sits beside what it describes, and `threshold_drift.png` keeps
+  its right-hand key for the same reason.
+
+## Group colours are separated hues, and no two groups share one
+
+* Study, cohort and timepoint groups take green, red, purple, amber, blue, pink
+  in that order, with green anchoring the reference. Each is roughly a sixth of
+  the colour wheel from the last.
+* **A fourth group used to be drawn in the reference's green.** The palette held
+  three colours and was recycled with `rep_len()`, so with four or more groups
+  two of them came out identical, with nothing said about it. Past the palette
+  the run now generates additional hues instead of repeating. The same bug and
+  the same fix applied to the multigraph overlay, where overlaid curves sharing
+  a colour are unreadable rather than merely ambiguous.
+* Small non-study category sets no longer get red, orange and yellow. Those are
+  the first three entries of the population palette, which is ordered by hue, so
+  taking the first *n* handed two or three categories three neighbouring
+  colours: the hardest triple to separate at bar-chart size and nearly identical
+  under red-green colour vision deficiency. Up to six categories the picks are
+  now spread across the palette instead.
+* `fig_group_comparison()` passes the reference it resolved rather than relying
+  on the global default, so a figure's colours no longer depend on what an
+  earlier call happened to leave set.
+
+## Long panel keys no longer overrun the panel beside them
+
+* A panel's key is its y-axis title, and a y-axis title is rotated, so the space
+  it has is the panel's height rather than its width. Population names fit. The
+  keys `functional_markers.png` uses are `block: population, marker`, reaching
+  60 characters, and they ran out of the panel onto the neighbour's axis numbers
+  and tag letter.
+* Long titles now wrap onto two or three lines, with the left margin growing to
+  match, so the tag letters stay legible. Short titles are untouched, so
+  `population_frequencies.png` and `population_ratios.png` are unchanged.
+* Lines are balanced rather than wrapped at a fixed width: wrapping a
+  47-character title at 30 leaves one full line and a stub, which reads badly
+  rotated.
+
 ## A full-size UMAP for every marker
 
-* `marker_umaps_by_group/` holds one PNG per marker. Where a group column
-  resolves to two or more groups each marker is faceted by it; where it does
-  not, the folder holds one unfaceted panel per marker. Written by every run.
+* `marker_umaps_by_group/` holds full-size UMAPs per marker, written by every
+  run. `umap_<marker>.png` pools every sample, and
+  `umap_<marker>_by_<category>.png` is written beside it for **every category
+  present**, not only the one named by `--group-column`.
+* Naming a group column decides what is tested. It says nothing about what is
+  worth seeing, and a cohort usually carries several categories: timepoint,
+  infection focus, phenotype, sex. Before this, a run grouped by timepoint drew
+  a single merged panel for infection focus even though the column was in the
+  sheet and already panelled on `umap_overview.png`, and an ungrouped run drew
+  no split at all.
+* Pooled and split are both kept, because they answer different questions.
+  Splitting asks whether a marker sits differently between categories; pooling
+  asks where the marker is at all, which no split figure can show, because each
+  facet holds only a subset of the cells.
+* What is never faceted: numeric columns, which would give one panel per
+  distinct value; identifiers such as `sample_id` and `patient_id`, which are
+  not categories and would multiply the folder by the donor count; and
+  single-level columns, since one facet is not a comparison. Past four
+  categories the extras are named in the log rather than dropped silently, and
+  `--group-column` moves one to the front.
 * Neither existing figure covers this. `umap_markers.png` colours by intensity
   but pools the groups and shrinks each marker into a grid cell.
   `umap_overview_by_group.png` splits by group but colours by population or
@@ -102,8 +183,8 @@ numbers, because the numbers it changes were wrong.
   the 1st-99th percentile of the cells drawn, so a colour difference between two
   panels is a real intensity difference. It is not shared between files, for the
   reason `fig_marker_grid()` gives.
-* `--no-marker-group-umaps` turns it off. One PNG per marker is a folder you may
-  not want on a panel of forty.
+* `--no-marker-group-umaps` turns it off. Two PNGs per marker on a grouped run is
+  a folder you may not want on a panel of forty.
 
 ## Batch correction per cell type, not per file
 

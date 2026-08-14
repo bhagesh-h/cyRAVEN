@@ -55,9 +55,13 @@ shared between files, for the reason given in \code{\link[=fig_marker_grid]{fig_
 Panel density is comparable only because the embedding draws the same
 number of cells from every sample; see \code{\link[=plan_subsample]{plan_subsample()}}.
 
-WITH NO GROUP the folder is still written, one unfaceted panel per
-marker. That is not a degraded version of the figure, it is the other
-half of the same need: \code{umap_markers.png} shrinks every marker into a
-grid cell, and this is the same marker at full size. A run with no
-\code{--group-column} has no other way to look at one marker properly.
+TWO FILES PER MARKER ON A GROUPED RUN, not one. \code{umap_<marker>.png}
+pools every sample; \code{umap_<marker>_by_<group>.png} splits by group. They
+answer different questions -- where the marker is at all, against whether
+it sits differently in one group -- and the first has no other home.
+Each facet of the split figure holds only a subset of the cells, and
+\code{umap_markers.png} shrinks every marker into one cell of a grid, so
+without the pooled panel no figure shows one marker over the whole
+cohort at full size. With no group column resolved, only the pooled
+panel is written.
 }

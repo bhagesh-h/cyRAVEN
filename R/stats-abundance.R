@@ -212,7 +212,13 @@ fig_group_comparison <- function(freq, outfile, group_of, stats = NULL,
   # Reference group unfilled (white), others take hues. Matches the convention in
   # this literature and keeps the reference visually neutral.
   fills <- if (length(glev) == 1L) setNames(colors$reference_fill, glev)
-           else population_colours(glev, colors = colors)
+           # Pass the reference this figure actually resolved, not the global
+           # default. population_colours() only reaches the separated
+           # study palette when the reference is one of the levels, and the
+           # global default is whatever some earlier call left set -- so the
+           # same cohort could come out green/red/purple in one run and
+           # red/orange/yellow in another, purely on call order.
+           else population_colours(glev, reference = reference, colors = colors)
   # One group needs no key -- it would label a single bar with what the title
   # already says -- and a full-width bar reads as a filled panel rather than a bar.
   show_key <- length(glev) > 1L
@@ -235,6 +241,15 @@ fig_group_comparison <- function(freq, outfile, group_of, stats = NULL,
   panels <- list()
   for (i in seq_along(pops)) {
     pop <- pops[i]
+    # The panel key is the y-axis title, and a y-axis title is ROTATED, so the
+    # space it has is the panel's HEIGHT, not its width. A population name like
+    # "CD4 T cells" fits; the key fig_functional_markers() supplies does not --
+    # "Homing receptors on T cells: CD8 T cells, CXCR3" is 47 characters and
+    # overflowed into the neighbouring panel, landing on its axis numbers and
+    # its tag letter. Wrapping trades length for lines, which the panel has
+    # room for.
+    ylab_wrapped <- wrap_axis_title(pop)
+    ylab_lines <- length(strsplit(ylab_wrapped, "\n", fixed = TRUE)[[1]])
     dp <- d[d$population == pop, , drop = FALSE]
     smry <- do.call(rbind, lapply(glev, function(g) {
       v <- dp[[meas$col]][dp$group == g]
@@ -293,12 +308,16 @@ fig_group_comparison <- function(freq, outfile, group_of, stats = NULL,
       scale_fill_manual(values = fills, name = NULL, drop = FALSE) +
       scale_y_continuous(labels = sci_labels, expand = expansion(mult = c(0, 0.02)),
                          limits = c(0, headroom)) +
-      labs(x = NULL, y = pop) +
+      labs(x = NULL, y = ylab_wrapped) +
       theme_cyto(colors = colors) +
       theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
             legend.position = "none",
-            axis.title.y = element_text(size = 7.5, lineheight = 0.95),
-            plot.margin = margin(2, 4, 2, 2))
+            axis.title.y = element_text(size = 7.5, lineheight = 0.95,
+                                        margin = margin(r = 3)),
+            # A rotated title grows LEFTWARD into whatever sits beside it, so
+            # each extra wrapped line needs its own strip of left margin or the
+            # text lands on the neighbouring panel's axis numbers and tag.
+            plot.margin = margin(2, 5, 2, 2 + 7 * (ylab_lines - 1L)))
     if (!is.null(ann)) {
       for (r in seq_len(nrow(ann))) {
         yy <- ann$y[r]; tick <- ymax * 0.030
@@ -322,8 +341,17 @@ fig_group_comparison <- function(freq, outfile, group_of, stats = NULL,
   # patchwork collects it from the panels, so the guide always matches the fills
   # actually drawn rather than a separately-constructed copy that could drift.
   if (show_key)
+    # TOP-LEFT, NOT RIGHT. patchwork collects the guide once for the whole
+    # composition and centres it vertically on the right. On a tall grid --
+    # functional_markers.png runs to 26 panels and six thousand pixels -- that
+    # puts the key thousands of pixels below the top of the image, so a reader
+    # has to scroll away from the figure to find out what the colours mean and
+    # scroll back. Top-left puts it where reading starts.
     panels[[1]] <- panels[[1]] +
-      theme(legend.position = "right", legend.key.size = unit(9, "pt"),
+      theme(legend.position = "top", legend.justification = "left",
+            legend.direction = "horizontal",
+            legend.key.size = unit(9, "pt"),
+            legend.margin = margin(b = 2),
             legend.text = element_text(size = 7))
 
   nr <- ceiling(length(panels) / ncol)
@@ -366,6 +394,38 @@ fig_group_comparison <- function(freq, outfile, group_of, stats = NULL,
   log_msg("[fig] wrote ", outfile, " (", length(panels), " populations, ",
           length(glev), " groups, y = ", meas$col, ")")
   invisible(fig)
+}
+
+#' Wrap a panel's axis title so a long key does not overrun its neighbour
+#'
+#' WHY THIS IS NEEDED. The panel key becomes the y-axis title, and a y-axis
+#' title is rotated, so the room it has is the panel's HEIGHT rather than its
+#' width. A population name fits comfortably. The key
+#' [fig_functional_markers()] supplies does not: it is
+#' "block: population, marker", which reaches 47 characters and more, and an
+#' unwrapped title of that length runs out of the panel and lands on the axis
+#' numbers and tag letter of the panel beside it.
+#'
+#' WHY IT REBALANCES RATHER THAN WRAPPING AT A FIXED WIDTH. `strwrap()` at a
+#' fixed width leaves the last line short, so a 47-character title at width 30
+#' gives one full line and one stub. Choosing the line count first and then
+#' dividing gives lines of roughly equal length, which reads better rotated and
+#' keeps the block from looking ragged.
+#'
+#' @param x Character scalar, the title to wrap.
+#' @param width Target characters per line before wrapping starts.
+#' @param max_lines Ceiling on line count. Beyond this the lines get longer
+#'   rather than more numerous, because a title taller than the panel is wide is
+#'   worse than a slightly long one.
+#' @return `x` with newlines inserted, unchanged when it already fits.
+#' @keywords internal
+wrap_axis_title <- function(x, width = 30L, max_lines = 3L) {
+  x <- as.character(x)
+  if (length(x) != 1L || is.na(x) || !nzchar(x)) return(x)
+  if (nchar(x) <= width) return(x)
+  n <- min(max_lines, ceiling(nchar(x) / width))
+  w <- max(width, ceiling(nchar(x) / n))
+  paste(strwrap(x, width = w), collapse = "\n")
 }
 
 #' Axis labels in the 1x10^7 form these figures conventionally use

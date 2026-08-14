@@ -761,7 +761,21 @@ the panel split.
 | `--no-threshold-drift` | on | Skip the check for thresholds that differ systematically between groups |
 | `--no-heatmaps` | on | Skip the phenotype and cohort composition heatmaps |
 | `--other` | off | Draw the `Other CD45+` catch-all on the UMAP figures. A display choice only: those cells are always gated, counted and tabulated |
-| `--no-marker-group-umaps` | off | Skip `marker_umaps_by_group/`, one full-size UMAP per marker. Written by every run: split by group where a group column resolves to two or more groups, one panel per marker where it does not. Turn it off for a panel wide enough that one PNG per marker is a folder you do not want |
+| `--no-marker-group-umaps` | off | Skip `marker_umaps_by_group/`. Written by every run: one pooled UMAP per marker over all samples, plus the same marker split by **every category present**. Turn it off for a panel wide enough that this is a folder you do not want |
+
+The pooled panel and the split panels answer different questions. Splitting asks
+whether a marker sits differently between categories; pooling asks where the
+marker is at all. The second has no other home: each facet holds only a subset of
+the cells, and `umap_markers.png` shrinks every marker into one cell of a grid,
+so no other figure shows a single marker over the whole cohort at full size.
+
+Every category is drawn, not only the one named by `--group-column`. That flag
+decides what is *tested*; it says nothing about what is worth *seeing*, and a
+cohort usually carries several categories. Numeric columns are never faceted (one
+panel per distinct value), nor are identifiers such as `sample_id` and
+`patient_id`, nor single-level columns. Past four categories the extras are named
+in the log rather than dropped silently, and `--group-column` moves one to the
+front of the list.
 
 ## 3.10 Batch structure
 

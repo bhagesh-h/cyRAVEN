@@ -34,7 +34,19 @@ default_colors <- function() list(
   other_grey       = "#7A5C00",
   # Study/cohort curves in the multigraph overlay: reference first (green), then
   # the patient studies. Fixed so a colour means the same study in every panel.
-  study_palette    = c("#00A651", "#E8112D", "#8E44E8"),
+  # WHY THESE SIX AND IN THIS ORDER. Study/cohort/timepoint groups are almost
+  # always few, and with few categories the eye needs SEPARATED hues, not
+  # neighbouring ones: red, orange and yellow sit next to each other on the
+  # wheel, are the hardest triple to tell apart at bar-chart size, and collapse
+  # almost completely under red-green colour vision deficiency. Green anchors
+  # the reference group, then red, purple, amber, blue, pink -- each roughly a
+  # sixth of the wheel from the last.
+  #
+  # Six rather than three because the list used to be three and was recycled
+  # with rep_len(), so a fourth group was drawn in the SAME green as the
+  # reference. Two different groups, one colour, no warning.
+  study_palette    = c("#00A651", "#E8112D", "#8E44E8",
+                       "#FFC800", "#0072F0", "#FF3D9E"),
   # Sex, fixed everywhere it is drawn.
   sex_palette      = c(male = "#00A651", female = "#E8112D"),
   reference_fill   = "white",   # unfilled bar for the group_comparison reference
@@ -147,7 +159,26 @@ apply_color_config <- function(cfg_colors) {
 #' @keywords internal
 pop_palette <- function(n, colors = fcs_colors()) {
   base <- colors$population_palette
-  if (n <= length(base)) return(base[seq_len(n)])
+  # SPREAD, DON'T TAKE THE FIRST n. The palette is ordered by hue, so the first
+  # three entries are red, orange and yellow -- neighbours on the wheel, the
+  # hardest triple to separate at bar-chart size, and nearly identical under
+  # red-green colour vision deficiency. Taking every k-th entry instead gives a
+  # handful of categories the full width of the wheel, which is what a figure
+  # with two or three groups needs.
+  #
+  # Above about six categories the spread stops mattering (there is no room to
+  # separate them further) and the ordered palette reads better in a legend, so
+  # the original behaviour resumes.
+  if (n <= 0L) return(character(0))
+  if (n <= length(base)) {
+    if (n <= 6L) {
+      idx <- unique(round(seq(1, length(base), length.out = n)))
+      # Rounding can collide on small palettes; fall back rather than return
+      # fewer colours than asked for.
+      if (length(idx) == n) return(base[idx])
+    }
+    return(base[seq_len(n)])
+  }
   c(base, grDevices::hcl.colors(n - length(base), "Dark 3"))
 }
 
@@ -190,9 +221,16 @@ semantic_colours <- function(levels, reference = reference_group(), colors = fcs
   # Study/cohort: the reference group anchors green, the rest take red then
   # purple in sorted order so the assignment is stable across figures and runs.
   if (!is.null(reference) && length(reference) == 1L && reference %in% lv) {
-    stp <- colors$study_palette %||% c("#00A651", "#E8112D", "#8E44E8")
+    stp <- colors$study_palette %||% c("#00A651", "#E8112D", "#8E44E8",
+                                       "#FFC800", "#0072F0", "#FF3D9E")
     ord <- c(reference, sort(setdiff(lv, reference)))
-    return(setNames(rep_len(stp, length(ord)), ord)[lv])
+    # NEVER rep_len() HERE. Recycling gives two groups the same colour, which
+    # reads as one group split across two bars. Past the palette, generate more
+    # hues instead, which is honest about being an extension while staying
+    # distinguishable.
+    if (length(ord) > length(stp))
+      stp <- c(stp, grDevices::hcl.colors(length(ord) - length(stp), "Dark 3"))
+    return(setNames(stp[seq_along(ord)], ord)[lv])
   }
   NULL
 }
@@ -634,7 +672,46 @@ fig_marker_grid <- function(cells, markers, outfile, panel_label = "",
   invisible(fig)
 }
 
-#' One UMAP per marker, faceted by study group
+#' Categorical columns worth splitting a per-marker UMAP by
+#'
+#' WHY IT AUTO-DETECTS RATHER THAN TAKING ONLY `--group-column`. A cohort
+#' usually carries several categories that all deserve looking at -- timepoint,
+#' infection focus, phenotype, sex -- and naming one of them as the statistical
+#' group column says nothing about which are worth SEEING. A run grouped by
+#' timepoint would otherwise draw a single pooled panel for infection focus, and
+#' the category would be invisible in the figures even though it is in the sheet
+#' and on the UMAP overview.
+#'
+#' WHAT IS EXCLUDED, AND WHY. Numeric columns: faceting an age in years gives one
+#' facet per distinct age. Identifiers (`sample_id`, `patient_id`, `file`): they
+#' are not categories, and `patient_id` alone would multiply the folder by the
+#' donor count. Anything above `max_levels`: past that the facets are too narrow
+#' to read, and the figure stops being a comparison.
+#'
+#' @param cells Embedded cell table.
+#' @param feature_cols Marker columns, excluded from consideration.
+#' @param max_levels Most distinct values a column may have and still be split by.
+#' @param max_cols Most categories to draw, so the folder cannot explode. What
+#'   is dropped is returned in the `skipped` attribute rather than silently lost.
+#' @return Character vector of column names, with a `skipped` attribute.
+#' @keywords internal
+marker_facet_cols <- function(cells, feature_cols = character(0),
+                              max_levels = 8L, max_cols = 4L) {
+  structural <- c("umap_1", "umap_2", "population_label", "sample_id", "panel",
+                  "event_index", "file", "is_control", "patient_id_matched",
+                  "patient_id", feature_cols)
+  cand <- setdiff(names(cells), structural)
+  ok <- cand[vapply(cand, function(cv) {
+    v <- cells[[cv]]
+    if (is.numeric(v)) return(FALSE)
+    u <- unique(v[!is.na(v)])
+    length(u) >= 2L && length(u) <= max_levels
+  }, logical(1))]
+  skipped <- if (length(ok) > max_cols) ok[-seq_len(max_cols)] else character(0)
+  structure(utils::head(ok, max_cols), skipped = skipped)
+}
+
+#' One UMAP per marker, pooled and split by every category present
 #'
 #' WHY: the two existing by-group figures answer different questions.
 #'      `umap_markers.png` colours by marker intensity but pools the groups, so
@@ -656,17 +733,26 @@ fig_marker_grid <- function(cells, markers, outfile, panel_label = "",
 #'      Panel density is comparable only because the embedding draws the same
 #'      number of cells from every sample; see [plan_subsample()].
 #'
-#'      WITH NO GROUP the folder is still written, one unfaceted panel per
-#'      marker. That is not a degraded version of the figure, it is the other
-#'      half of the same need: `umap_markers.png` shrinks every marker into a
-#'      grid cell, and this is the same marker at full size. A run with no
-#'      `--group-column` has no other way to look at one marker properly.
-#' @param cells Data frame of embedded cells with `umap_1`, `umap_2` and the
-#'   marker columns, plus the group column when there is one.
+#'      ONE POOLED FILE PLUS ONE PER CATEGORY. `umap_<marker>.png` pools every
+#'      sample; `umap_<marker>_by_<category>.png` splits it. They answer
+#'      different questions -- where the marker is at all, against whether it
+#'      sits differently between categories -- and the pooled one has no other
+#'      home, because each facet of a split figure holds only a subset of the
+#'      cells and `umap_markers.png` shrinks every marker into one cell of a
+#'      grid.
+#'
+#'      EVERY category present is drawn, not only the statistical group column.
+#'      A cohort usually carries several -- timepoint, infection focus,
+#'      phenotype -- and naming one of them as `--group-column` says nothing
+#'      about which are worth seeing. See [marker_facet_cols()] for what counts
+#'      as a category and what is excluded.
+#' @param cells Data frame of embedded cells with `umap_1`, `umap_2`, the marker
+#'   columns and any category columns.
 #' @param markers Character vector of marker columns to draw.
 #' @param outdir Directory to write into; created if absent.
-#' @param group_col Name of the column to facet by, or NULL for one unfaceted
-#'   panel per marker. A column resolving to a single level is treated as NULL.
+#' @param group_col Category column to draw first, normally the run's
+#'   `--group-column`. Further categories are detected automatically. NULL is
+#'   fine: detection still runs. A column resolving to one level is skipped.
 #' @param panel_label Marker-panel name added to each title; empty for none. Default `""`.
 #' @param dpi Resolution in dots per inch. Default `170`.
 #' @param colors Named list of colours; defaults to the package palette. Default `fcs_colors()`.
@@ -677,42 +763,80 @@ fig_marker_umaps_by_group <- function(cells, markers, outdir, group_col = NULL,
                                       colors = fcs_colors()) {
   markers <- markers[markers %in% names(cells)]
   if (!length(markers) || !nrow(cells)) return(invisible(character(0)))
-  # A group column that is absent, all NA, or holds one level is treated as no
-  # group at all -- faceting into a single panel would add a strip label saying
-  # nothing and make the file look like a comparison it is not.
-  grps <- if (!is.null(group_col) && group_col %in% names(cells))
-    unique(stats::na.omit(cells[[group_col]])) else NULL
-  faceted <- length(grps) > 1L
-  ng <- if (faceted) length(grps) else 1L
+
+  # EVERY CATEGORY, NOT JUST --group-column. The run's group column goes first
+  # when it resolves to more than one level; the rest are detected. A column
+  # that is absent, all NA, or single-level is dropped here, because faceting
+  # into one panel adds a strip label saying nothing and makes the file look
+  # like a comparison it is not.
+  .cap <- 4L
+  auto <- marker_facet_cols(cells, feature_cols = markers, max_cols = .cap)
+  cats <- unique(c(
+    if (!is.null(group_col) && group_col %in% names(cells)) group_col,
+    as.character(auto), attr(auto, "skipped")))
+  cats <- cats[vapply(cats, function(cv)
+    length(unique(stats::na.omit(cells[[cv]]))) > 1L, logical(1))]
+  # Cap AFTER the group column is prepended, not before, or a run naming a
+  # category that detection ranked fifth would draw five and quietly exceed it.
+  # The group column keeps its place at the front either way.
+  dropped <- if (length(cats) > .cap) cats[-seq_len(.cap)] else character(0)
+  cats <- utils::head(cats, .cap)
+  if (length(dropped))
+    log_msg("  NOTE marker UMAPs: ", length(cats), " categor(y/ies) drawn (",
+            paste(cats, collapse = ", "), "); not splitting by ",
+            paste(dropped, collapse = ", "),
+            " -- past the cap of ", .cap, ". Name one with --group-column to ",
+            "move it to the front.")
+
   dir.create(outdir, showWarnings = FALSE, recursive = TRUE)
   ps <- auto_point_aes(nrow(cells))$size * 0.8
   written <- character(0)
-  for (m in markers) {
-    msafe <- gsub("[^A-Za-z0-9]+", "_", m)
-    f <- file.path(outdir, if (faceted)
-      sprintf("umap_%s_by_%s.png", msafe, gsub("[^A-Za-z0-9]+", "_", group_col))
-      else sprintf("umap_%s.png", msafe))
-    ttl <- paste0(m, if (faceted) paste0(" by ", group_col) else "",
+  # KEEP SUBTITLES SHORT. The subtitle is drawn at the panel's full width with no
+  # wrapping, so a long one is silently clipped at the right edge -- the plot
+  # still writes, it just loses the end of the sentence. Measured: 96 characters
+  # ran off a 6.2-inch canvas.
+  .draw <- function(m, by) {
+    ttl <- paste0(m, if (!is.null(by)) paste0(" by ", by) else "",
                   if (nzchar(panel_label)) paste0(", ", panel_label) else "")
-    # KEEP THESE SHORT. The subtitle is drawn at the panel's full width with no
-    # wrapping, so a long one is silently clipped at the right edge -- the plot
-    # still writes, it just loses the end of the sentence. Measured: 96
-    # characters ran off a 6.2-inch canvas.
-    sub <- if (faceted)
+    sub <- if (!is.null(by))
       "one embedding split by group; colour scale shared across panels"
     else
-      "all samples; colour is asinh intensity, 1st-99th percentile"
+      "all samples pooled; colour is asinh intensity, 1st-99th percentile"
     p <- umap_continuous(cells, m, title = ttl, subtitle = sub,
                          point_size = ps, legend_name = m, colors = colors)
-    if (faceted) p <- p + facet_wrap(vars(.data[[group_col]]))
-    safe_ggsave(f, plot = p,
-                width = if (faceted) max(7.6, 3.1 * ng + 1.4) else 7,
-                height = 4.2, dpi = dpi, limitsize = FALSE)
-    written <- c(written, f)
+    if (!is.null(by)) p <- p + facet_wrap(vars(.data[[by]]))
+    p
   }
-  message("[fig] wrote ", basename(outdir), "/ (", length(written),
-          " marker(s)", if (faceted) paste0(" x ", ng, " group(s)") else
-            ", no group column resolved", ")")
+  for (m in markers) {
+    msafe <- gsub("[^A-Za-z0-9]+", "_", m)
+    # THE POOLED PANEL IS ALWAYS WRITTEN. Splitting answers "does this marker sit
+    # differently between categories"; pooling answers "where is this marker at
+    # all". Each facet of a split figure holds only a subset of the cells, so
+    # without this file no figure shows the marker over the whole cohort at full
+    # size -- umap_markers.png shrinks every marker into one cell of a grid.
+    f1 <- file.path(outdir, sprintf("umap_%s.png", msafe))
+    safe_ggsave(f1, plot = .draw(m, NULL), width = 7, height = 4.2,
+                dpi = dpi, limitsize = FALSE)
+    written <- c(written, f1)
+    for (cv in cats) {
+      nlev <- length(unique(stats::na.omit(cells[[cv]])))
+      f2 <- file.path(outdir, sprintf("umap_%s_by_%s.png", msafe,
+                                      gsub("[^A-Za-z0-9]+", "_", cv)))
+      safe_ggsave(f2, plot = .draw(m, cv),
+                  width = max(7.6, 3.1 * nlev + 1.4), height = 4.2,
+                  dpi = dpi, limitsize = FALSE)
+      written <- c(written, f2)
+    }
+  }
+  log_msg("  [fig] ", basename(outdir), "/: ", length(markers),
+          " marker(s) pooled",
+          if (length(cats))
+            paste0(" + split by ", paste(sprintf("%s (%d)", cats,
+                   vapply(cats, function(cv)
+                     length(unique(stats::na.omit(cells[[cv]]))), integer(1))),
+                   collapse = ", "))
+          else "; no category resolved",
+          "; ", length(written), " file(s)")
   invisible(written)
 }
 
@@ -1408,7 +1532,15 @@ fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort"
                           "only where they would overprint"),
          x = "UMAP 1", y = "UMAP 2") +
     theme_cyto(9, colors = colors) +
-    theme(legend.position = "right", strip.text = element_text(size = 8))
+    # Top-left, not right. This figure runs to several thousand pixels tall, and
+    # a right-hand key is centred vertically inside its own pane, so the reader
+    # has to scroll away from the panels to see what a colour means. Both panes
+    # of the overlay put their key where reading starts instead. The standalone
+    # UMAP figures keep theirs on the right: they are single panels where the
+    # key is already beside what it describes.
+    theme(legend.position = "top", legend.justification = "left",
+          legend.direction = "horizontal", legend.margin = margin(b = 2),
+          strip.text = element_text(size = 8))
   # Plain text, no box. The boxes were opaque enough to hide the very points they
   # sat on, and with one label per subcluster there are three times as many of
   # them. A short halo -- the same string drawn in the background colour at four
@@ -1449,9 +1581,15 @@ fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort"
   # used here deliberately even though the population palette excludes violet --
   # three thick overlaid lines are a different discrimination problem from a
   # dozen point clouds, and green/red/purple are maximally separated for it.
-  sp  <- colors$study_palette %||% c("#00A651", "#E8112D", "#8E44E8")
+  sp  <- colors$study_palette %||% c("#00A651", "#E8112D", "#8E44E8",
+                                     "#FFC800", "#0072F0", "#FF3D9E")
   ord <- c(intersect(reference, groups), setdiff(groups, reference))
-  pal <- setNames(rep_len(sp, length(ord)), ord)
+  # Same recycling trap as semantic_colours(): rep_len() would draw the fourth
+  # study in the reference's green, and on overlaid curves two studies sharing a
+  # colour is unreadable rather than merely ambiguous.
+  if (length(ord) > length(sp))
+    sp <- c(sp, grDevices::hcl.colors(length(ord) - length(sp), "Dark 3"))
+  pal <- setNames(sp[seq_along(ord)], ord)
 
   # npp counts cluster-SUBCLUSTER rows, not clusters: with subclustering on, the
   # grid has one row per compartment (37 here, not 12), and sizing off the
@@ -1468,7 +1606,8 @@ fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort"
                           "group_comparison.png"),
          x = "asinh-transformed intensity", y = "% of mode") +
     theme_cyto(9, colors = colors) +
-    theme(legend.position = "right",
+    theme(legend.position = "top", legend.justification = "left",
+          legend.direction = "horizontal", legend.margin = margin(b = 2),
           strip.text = element_text(size = 6.5),
           axis.text = element_text(size = 5.5))
 
@@ -1493,7 +1632,11 @@ fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort"
                 "Cluster numbers match population_codes.csv and the Population channel of the FlowJo export. ",
                 "Curves omitted where a study had fewer than ", min_cells, " cells in the compartment.")
 
-  grDevices::png(outfile, width = W, height = H, units = "in", res = dpi_use, type = "cairo")
+  # bg = "white" for the reason given in safe_ggsave(): this figure is drawn on
+  # a raw device rather than through ggsave(), and the cairo default leaves the
+  # ground transparent, so the labels vanish against a dark viewer.
+  grDevices::png(outfile, width = W, height = H, units = "in", res = dpi_use,
+                 type = "cairo", bg = "white")
   ok_dev <- TRUE
   tryCatch({
     grid::grid.newpage()

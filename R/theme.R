@@ -18,6 +18,10 @@ theme_cyto <- function(base_size = 11, colors = fcs_colors()) {
       axis.ticks.length = unit(-0.12, "lines"),
       legend.key       = element_blank(),
       legend.background = element_blank(),
+      # An explicit white ground on the plot object itself, so a figure is
+      # readable however it is rendered rather than only when safe_ggsave()
+      # writes it. theme_minimal() leaves this transparent.
+      plot.background  = element_rect(fill = "white", colour = NA),
       strip.text       = element_text(face = "bold", size = rel(0.9)),
       plot.title       = element_text(face = "bold", size = rel(1.05)),
       plot.subtitle    = element_text(colour = colors$subtitle_text, size = rel(0.85))

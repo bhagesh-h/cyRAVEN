@@ -44,8 +44,28 @@ whether the gating specification held.
 |---|---|
 | `1.1.0` | cyRAVEN 1.1.0. Pin this for anything you intend to publish |
 | `latest` | The most recent release. Currently identical to `1.1.0` |
+| `1.0.0` | Superseded. **Do not use it for new work**, and see the warning below if you have results from it |
 
-`linux/amd64`, about 650 MB compressed.
+`linux/amd64`, about 685 MB compressed.
+
+### If you have results from `1.0.0`
+
+1.0.0 read an **absent** `is_control` column in the sample sheet as "this file
+might be an unstained control", because only `is_control = FALSE` positively
+asserts that a file is a biological sample. On a sheet without that column, any
+sample whose CD45 gate found no density minimum was promoted to the unstained
+reference for its whole panel, and every threshold there became the 99.5th
+percentile of that one sample. Where it was really a stained sample, every
+population collapsed, with no error raised and no warning printed.
+
+**How to check.** Open `thresholds_used.csv` from the run. If the `source` column
+reads `control_q995` on most markers, those thresholds came from a reference;
+find out which sample supplied it before reading a single frequency. A cohort
+that declared no control should show only `valley` and `quantile_fallback`.
+
+1.1.0 believes a control only when the sample sheet declares one, and names any
+sample it declines to promote. `--discover-controls` restores the old behaviour
+for anyone who needs it.
 
 ## Quick start
 
@@ -76,8 +96,9 @@ docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
   --batch-column visit --cluster --outdir /results
 ```
 
-That writes 22 figures and 36 tables at the top level, one full-size UMAP per
-marker in `marker_umaps_by_group/`, and a self-contained `results/report.html` —
+That writes 22 figures and 36 tables at the top level, full-size UMAPs per marker
+in `marker_umaps_by_group/` (each marker pooled, and split by every category the
+sample sheet carries), and a self-contained `results/report.html` —
 one file carrying every figure and table, linking to nothing and loading nothing
 from a network. Nothing is downloaded: the demonstration cohort ships inside a
 package cyRAVEN already depends on.
@@ -99,6 +120,19 @@ docker run --rm --entrypoint sh bhagesh/cyraven:1.1.0 -c \
 ```
 
 Edit both, run with `--check` until it reports no problems, then run.
+
+Run `--list-channels` before you write the config. It prints what each channel
+resolves to, which is the name a population definition has to use, and on a
+spectral panel that differs from what the file stores: `$PnS` reads
+`CD45 : SparkUV-387 - Area` while the run uses `CD45`. Writing the raw string
+produces a table of zeros.
+
+It reads every file rather than the first, so it also catches a cohort splitting
+into separate panels — which happens silently, because every file still loads and
+every table is still written. Where the files disagree it names the fix rather
+than the symptom, separating autofluorescence and unmixing artefacts from a real
+marker stained in only some files, and printing the exact `--ignore-channels`
+pattern that merges the cohort.
 
 Every path inside a flag is a path **inside the container**, and `--outdir` must
 fall within a mounted volume or the output is discarded when the container exits.
