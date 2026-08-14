@@ -288,11 +288,21 @@ interpretation and changes sign without a change in biology.
 p-values, hypothesis-generating. Event counts are set by acquisition duration, so
 a test over pooled events derives its degrees of freedom from instrument time.
 
-**`marker_umaps_by_group/`** is the picture that goes with those tables: one
-full-size UMAP per marker, in its own folder, written by every run. Where a group
-column resolves to two or more groups each marker is faceted by it
-(`umap_CD3_by_timepoint.png`); where it does not, the folder holds one panel per
-marker (`umap_CD3.png`).
+**`marker_umaps_by_group/`** is the picture that goes with those tables:
+full-size UMAPs per marker, in their own folder, written by every run.
+`umap_CD3.png` pools every sample, and `umap_CD3_by_<category>.png` sits beside
+it for **every** category the sheet carries, not only the one named by
+`--group-column`. On a cohort with timepoint, infection focus and sex that is
+four files per marker.
+
+Read them together. A split figure answers whether a marker sits differently
+between categories; the pooled figure answers where the marker is at all, which
+no split figure can show because each facet holds only a subset of the cells.
+
+When reporting on this folder, say which categories were drawn: `--group-column`
+governs what is tested, not what is drawn, so the figures may split by a variable
+no test used. Numeric columns, identifiers and single-level columns are never
+faceted, and past four categories the run names the extras in the log.
 
 It answers a question neither of the other UMAP figures can. `umap_markers.png`
 colours by intensity but pools the groups and shrinks each marker into a grid

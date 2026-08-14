@@ -298,7 +298,8 @@ number are opt-in. That rule is deliberate and worth preserving in any change.
 --batch-column run_date    # quantify batch structure, per marker and overall
 --correct-batch            # correct it, subject to the confounding refusal
 --batch-method cluster     # fit the correction per cell type, not per file
---no-marker-group-umaps    # skip marker_umaps_by_group/, one PNG per marker
+--no-marker-group-umaps    # skip marker_umaps_by_group/: each marker pooled,
+                           # and split by EVERY category the sheet carries
 --lod-events 20            # events below which a population is not detected
 --loq-events 50            # events below which it is detected but not quantified
 --drop-unstable-events     # exclude flagged acquisition intervals; changes counts

@@ -137,7 +137,7 @@ abundance. Report `pct_of_cd45_pos` unless absolute counts were supplied through
 | `umap_density.png` | Cell density in embedding space |
 | `umap_density_by_group.png` | The same, faceted by study group |
 | `umap_overview_by_group.png` | Combined embedding with one column per group |
-| `marker_umaps_by_group/` | One full-size UMAP per marker, in its own folder. Split by group where a group column resolves to two or more groups (`umap_CD3_by_timepoint.png`), one panel per marker where it does not (`umap_CD3.png`) |
+| `marker_umaps_by_group/` | Full-size UMAPs per marker, in its own folder. `umap_CD3.png` pools every sample, and `umap_CD3_by_<category>.png` is written beside it for **every** category present, not only the `--group-column` one. Numeric columns, identifiers and single-level columns are not faceted; past four categories the extras are named in the log |
 | `umap_multigraph_overlay.png` | Per-compartment marker distributions against the reference group |
 | `umap.model`, `umap.model.meta.rds` | Persisted model, written by `--save-umap-model` |
 

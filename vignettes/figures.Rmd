@@ -104,6 +104,41 @@ The defaults supply everything else: gate uncertainty, detection limits,
 acquisition QC and the spreading report are all on unless switched off, because
 an analysis that has to be requested is one that does not get run.
 
+### What the colours mean, and why they are those colours
+
+Study, cohort and timepoint groups take **green, red, purple, amber, blue,
+pink** in that order, with green always the reference group. The assignment is
+fixed, so a colour means the same group in every panel of every figure in a run.
+
+The order is chosen for separation rather than aesthetics. Groups are usually
+few, and with few categories the eye needs hues that are far apart: red, orange
+and yellow are neighbours on the colour wheel, are the hardest triple to tell
+apart at bar-chart size, and collapse almost completely under red-green colour
+vision deficiency. Each colour here sits roughly a sixth of the wheel from the
+last.
+
+Two groups are never given the same colour. Past six the run generates further
+hues rather than starting the list again, because a repeated colour reads as one
+group split across two bars.
+
+The same reasoning applies to small non-study category sets, where the picks are
+spread across the population palette instead of taken in order.
+
+### Two more things about how the figures are drawn
+
+**Backgrounds are opaque white.** Figures used to be written with a transparent
+ground, 11 of 20 in one run. That is invisible inside `report.html`, which is
+white, and breaks everywhere else: expand a figure in a dark viewer, or drop it
+on a dark slide, and the black axis text sits on whatever is behind it.
+
+**Legends sit at the top left on the large multi-panel figures** -
+`functional_markers.png`, `population_frequencies.png`, `population_ratios.png`,
+`group_comparison.png`, `marker_state.png` and `umap_multigraph_overlay.png`. A
+collected guide is otherwise centred vertically on the right, which on a figure
+several thousand pixels tall is a long way from the panels it explains. The
+single-panel UMAP figures keep theirs on the right, where it already sits beside
+what it describes.
+
 ## 0.4 Why your figures should match
 
 The container pins R 4.4.3, a dated CRAN snapshot and Bioconductor 3.20, and the
@@ -290,6 +325,40 @@ The embedding coloured by each marker's intensity in turn.
 ```{r, fig.alt="Shared UMAP embedding coloured by each marker's intensity in turn"}
 knitr::include_graphics("figures/demo_umap_markers.png")
 ```
+
+## marker_umaps_by_group/
+
+A folder rather than a single file, written by every run: the same markers as
+above, one per file at full size instead of shrunk into a grid cell.
+
+Two kinds of file per marker.
+
+| File | What it shows |
+|---|---|
+| `umap_CD3.png` | Every sample pooled |
+| `umap_CD3_by_<category>.png` | The same marker split by a category from the sample sheet |
+
+**A split file is written for every category present, not only the one named by
+`--group-column`.** That flag decides what is tested; it says nothing about what
+is worth looking at, and a cohort usually carries several categories at once. A
+run grouped by timepoint still gets its infection-focus and sex splits.
+
+The pooled file is kept alongside them because it answers a different question.
+Splitting asks whether a marker sits differently between categories; pooling
+asks where the marker is at all, and no split figure can show that, because each
+facet holds only a subset of the cells.
+
+Within one file the colour scale is shared across the facets and clipped to the
+1st and 99th percentile of the cells drawn, so a colour difference between two
+panels is a real intensity difference. It is not shared between files: markers
+differ by orders of magnitude in brightness, and one scale would flatten every
+dim one.
+
+Not faceted, deliberately: numeric columns, which would give one panel per
+distinct value; identifiers such as `sample_id` and `patient_id`, which are not
+categories; and single-level columns, since one facet is not a comparison. Past
+four categories the run draws four and names the rest in the log.
+`--no-marker-group-umaps` skips the folder.
 
 ## umap_density.png and umap_density_by_group.png
 

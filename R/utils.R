@@ -53,8 +53,21 @@ safe_ggsave <- function(filename, plot, width, height, dpi = 300, ...) {
             max_px, "px raster limit; writing at ", dpi_use,
             " dpi instead (physical size, and everything's relative size,",
             " is unchanged)")
-  ggplot2::ggsave(filename, plot = plot, width = width, height = height,
-                  dpi = dpi_use, ...)
+  # WHITE, NOT TRANSPARENT. ggsave() takes its background from the theme, and a
+  # theme that leaves plot.background unset writes an RGBA PNG with a
+  # transparent ground. That looks fine in a white report and is unreadable
+  # anywhere else: click a figure to expand it in a dark viewer, or drop it on a
+  # dark slide, and black axis text sits on whatever is behind it. Measured on
+  # one run: 11 of 20 figures were written RGBA.
+  #
+  # Set here rather than only in theme_cyto() because this is the single point
+  # every figure passes through, including the few that build their own theme.
+  # An explicit bg from the caller still wins.
+  dots <- list(...)
+  if (!"bg" %in% names(dots)) dots$bg <- "white"
+  do.call(ggplot2::ggsave,
+          c(list(filename = filename, plot = plot, width = width,
+                 height = height, dpi = dpi_use), dots))
   invisible(filename)
 }
 
