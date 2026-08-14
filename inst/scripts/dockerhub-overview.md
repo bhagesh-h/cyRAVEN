@@ -42,55 +42,56 @@ whether the gating specification held.
 
 | Tag | Contents |
 |---|---|
-| `1.1.0` | cyRAVEN 1.1.0. Pin this for anything you intend to publish |
-| `latest` | The most recent release. Currently identical to `1.1.0` |
-| `1.0.0` | Superseded. **Do not use it for new work**, and see the warning below if you have results from it |
+| `1.0.0` | cyRAVEN 1.0.0. Pin this for anything you intend to publish |
+| `latest` | The most recent release. Currently identical to `1.0.0` |
 
 `linux/amd64`, about 685 MB compressed.
 
-### If you have results from `1.0.0`
+### If you pulled this image before today, re-pull it
 
-1.0.0 read an **absent** `is_control` column in the sample sheet as "this file
-might be an unstained control", because only `is_control = FALSE` positively
-asserts that a file is a biological sample. On a sheet without that column, any
-sample whose CD45 gate found no density minimum was promoted to the unstained
-reference for its whole panel, and every threshold there became the 99.5th
-percentile of that one sample. Where it was really a stained sample, every
-population collapsed, with no error raised and no warning printed.
+The `1.0.0` tag has been republished. An earlier image under the same tag read an
+**absent** `is_control` column in the sample sheet as "this file might be an
+unstained control", because only `is_control = FALSE` positively asserts that a
+file is a biological sample. On a sheet without that column, any sample whose
+CD45 gate found no density minimum was promoted to the unstained reference for
+its whole panel, and every threshold there became the 99.5th percentile of that
+one sample. Where it was really a stained sample, every population collapsed,
+with no error raised and no warning printed.
 
-**How to check.** Open `thresholds_used.csv` from the run. If the `source` column
-reads `control_q995` on most markers, those thresholds came from a reference;
-find out which sample supplied it before reading a single frequency. A cohort
-that declared no control should show only `valley` and `quantile_fallback`.
+**The version number cannot tell you which image you have, so check the output.**
+Open `thresholds_used.csv` from the run. If the `source` column reads
+`control_q995` on most markers, those thresholds came from a reference; find out
+which sample supplied it before reading a single frequency. A cohort that
+declared no control should show only `valley` and `quantile_fallback`.
 
-1.1.0 believes a control only when the sample sheet declares one, and names any
-sample it declines to promote. `--discover-controls` restores the old behaviour
-for anyone who needs it.
+The current image believes a control only when the sample sheet declares one, and
+names any sample it declines to promote. `--discover-controls` restores the old
+behaviour for anyone who needs it.
 
 ## Quick start
 
 ```bash
-docker pull bhagesh/cyraven:1.1.0
+docker pull bhagesh/cyraven:1.0.0
 
 # what the flags are
-docker run --rm bhagesh/cyraven:1.1.0 --help
+docker run --rm bhagesh/cyraven:1.0.0 --help
 
 # write the demonstration cohort, its sample sheet and its config
 mkdir -p demo results
 docker run --rm -v "$PWD/demo:/demo" \
-  --entrypoint Rscript bhagesh/cyraven:1.1.0 \
+  --entrypoint Rscript bhagesh/cyraven:1.0.0 \
   /opt/cyraven/src/inst/scripts/demo_data.R /demo
 
 # validate the inputs from the FCS headers alone. Seconds. Analyses nothing.
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
-  bhagesh/cyraven:1.1.0 --dir /data/fcs \
+  bhagesh/cyraven:1.0.0 --dir /data/fcs \
   --samples /data/samples.csv --config /data/panel.yaml \
   --group-column cohort --reference-group "GvHD grade 1" \
   --batch-column visit --outdir /results --check
 
 # run it
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
-  bhagesh/cyraven:1.1.0 --dir /data/fcs \
+  bhagesh/cyraven:1.0.0 --dir /data/fcs \
   --samples /data/samples.csv --config /data/panel.yaml \
   --group-column cohort --reference-group "GvHD grade 1" \
   --batch-column visit --cluster --outdir /results
@@ -110,11 +111,11 @@ declaring what to score.
 
 ```bash
 # a sheet listing every file, which you then fill in
-docker run --rm -v "$PWD/data:/data" bhagesh/cyraven:1.1.0 \
+docker run --rm -v "$PWD/data:/data" bhagesh/cyraven:1.0.0 \
   --dir /data/fcs --recursive --write-samples /data/samples.csv
 
 # the annotated config template
-docker run --rm --entrypoint sh bhagesh/cyraven:1.1.0 -c \
+docker run --rm --entrypoint sh bhagesh/cyraven:1.0.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml' \
   > data/analysis.yaml
 ```
@@ -164,7 +165,7 @@ on an air-gapped host, or would rather not run a third-party image.
 ```bash
 git clone https://github.com/bhagesh-h/cyRAVEN.git
 cd cyRAVEN
-docker build -f inst/scripts/Dockerfile -t cyraven:1.1.0 .
+docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
 ```
 
 The build context is the repository root, the directory holding `DESCRIPTION`.

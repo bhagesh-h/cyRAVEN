@@ -15,7 +15,7 @@
 # to disagree about it.
 #
 #   docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-#     cyraven:1.1.0 --dir /data/fcs --samples /data/samples.csv \
+#     cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
 #     --config /data/analysis.yaml --outdir /results --check
 #
 # Run with --check first. It validates the pair against the FCS headers in

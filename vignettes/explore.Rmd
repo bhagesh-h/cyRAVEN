@@ -58,7 +58,7 @@ pooled medians. That is the right default, and section 6 explains why.
 
 ```bash
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.1.0 --dir /data/fcs \
+  cyraven:1.0.0 --dir /data/fcs \
   --samples /data/samples.csv --config /data/panel.yaml \
   --group-column cohort --reference-group "Healthy controls" \
   --cluster --explore --outdir /results
@@ -79,7 +79,7 @@ The two inform each other, in both directions. See section 6.
 
 ```bash
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.1.0 --dir /data/fcs --explore-only --outdir /results
+  cyraven:1.0.0 --dir /data/fcs --explore-only --outdir /results
 ```
 
 No `--config`, no `--samples`, no populations. Just a folder of FCS files. This
