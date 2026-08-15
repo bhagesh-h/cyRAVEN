@@ -375,18 +375,38 @@ fig_group_comparison <- function(freq, outfile, group_of, stats = NULL,
         if (!is.null(meas$caveat)) paste0("\n", meas$caveat) else ""),
       # Newline-separated, not one long line: a single-line caption is silently
       # CLIPPED at the device edge, losing the significance key entirely.
-      caption = paste0(
-        sprintf("n = %s samples.", paste(sprintf("%s: %d", glev,
-                vapply(glev, function(g) length(unique(d$sample_id[d$group == g])),
-                       integer(1))), collapse = ", ")),
-        if (length(glev) > 1L)
-          paste0("  Bars left to right: ", paste(glev, collapse = ", "), ".") else "",
-        if (!is.null(stats))
-          "\n* p<0.05   ** p<0.01   *** p<0.001   **** p<0.0001;   0.05 <= p < 0.10 printed as an exact value."
-        else ""),
+      # Splitting on semantic boundaries alone is not enough -- with long group
+      # names the "n = ..." and "Bars left to right: ..." line reached 205
+      # characters on this cohort and ran off the canvas mid-name. Each line is
+      # wrapped to what the figure's own width can hold, so the caption grows
+      # downwards rather than off the edge.
+      caption = local({
+        cap_w <- max(60L, floor((2.75 * ncol + 0.6) * 16))
+        ln <- c(
+          sprintf("n = %s samples.", paste(sprintf("%s: %d", glev,
+                  vapply(glev, function(g) length(unique(d$sample_id[d$group == g])),
+                         integer(1))), collapse = ", ")),
+          if (length(glev) > 1L)
+            paste0("Bars left to right: ", paste(glev, collapse = ", "), ".")
+          else NULL,
+          if (!is.null(stats))
+            "* p<0.05   ** p<0.01   *** p<0.001   **** p<0.0001;   0.05 <= p < 0.10 printed as an exact value."
+          else NULL)
+        paste(unlist(lapply(ln, strwrap, width = cap_w)), collapse = "\n")
+      }),
+      # legend.position BELONGS HERE, not only on panels[[1]]. `guides =
+      # "collect"` lifts the guide out of the panel and draws it against the
+      # COMPOSITION, so the panel's own legend.position stops applying and
+      # patchwork falls back to its default -- right, centred vertically over
+      # the whole grid. On absolute_counts.png that put the key halfway down a
+      # 5500-pixel image with its last label clipped off the canvas. Setting it
+      # on the patchwork theme is what actually moves it.
       theme = ggplot2::theme(
         plot.title = element_text(size = 11, face = "bold"),
         plot.subtitle = element_text(size = 8, lineheight = 1.15),
+        legend.position = "top", legend.justification = "left",
+        legend.direction = "horizontal", legend.margin = margin(b = 2),
+        legend.key.size = unit(9, "pt"), legend.text = element_text(size = 7),
         plot.caption = element_text(size = 7, hjust = 0, colour = colors$caption_text))) &
     ggplot2::theme(plot.tag = element_text(size = 10, face = "bold"))
   safe_ggsave(outfile, plot = fig, width = 2.75 * ncol + 0.6, height = 2.15 * nr + 1.1,
