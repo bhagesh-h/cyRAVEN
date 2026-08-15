@@ -425,8 +425,15 @@ fig_threshold_drift <- function(thr, outfile, group_of, stats = NULL,
            "defines is a difference in the DEFINITION, see threshold_drift_stats.csv ",
            "for which populations are affected.")) +
     theme_cyto(colors = colors) +
+    # Top-left, not right: this is a facet grid whose height grows with the
+    # marker count, and a right-hand key is centred vertically in its own strip,
+    # so it drifts to the middle of a tall image and away from where reading
+    # starts. The UMAP figures keep theirs on the right -- there the key sits
+    # beside the single panel it describes.
     theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
-          legend.position = "right", legend.key.size = unit(9, "pt"),
+          legend.position = "top", legend.justification = "left",
+          legend.direction = "horizontal",
+          legend.key.size = unit(9, "pt"), legend.margin = margin(b = 2),
           legend.text = element_text(size = 7),
           strip.text = element_text(size = 7.5, face = "bold"),
           plot.caption = element_text(size = 7, hjust = 0, colour = colors$caption_text))

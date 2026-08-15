@@ -114,9 +114,25 @@ were wrong.
   vertically on the right. On a tall grid that is thousands of pixels from the
   top: `functional_markers.png` runs to 26 panels and six thousand pixels, so
   finding out what a colour means meant scrolling away from the panels and back.
+* **This did not work on the first attempt, and the figures shipped with the key
+  still on the right.** Setting `legend.position` on a panel has no effect once
+  `guides = "collect"` lifts the guide out of that panel: the guide is drawn
+  against the composition, which falls back to its own default. The position has
+  to be set on the patchwork theme, and now is.
+* `umap_multigraph_overlay.png` had a second, worse form of the same problem.
+  Its cluster key was built with `ncol = 1`, so a twelve-cluster cohort stacked
+  twelve rows into the height reserved for the UMAP row and **collapsed those
+  panels to a sliver**. The key now flows across in rows of six, and the row's
+  height grows with it.
+* `threshold_drift.png` also moves to a top-left key. An earlier note here said
+  it kept a right-hand one "for the same reason" as the UMAP figures; that was
+  wrong, because it is a facet grid whose height grows with the marker count and
+  not a single panel.
 * **The standalone UMAP figures are unchanged.** They are single panels where
-  the key already sits beside what it describes, and `threshold_drift.png` keeps
-  its right-hand key for the same reason.
+  the key already sits beside what it describes.
+* Captions on those grids are wrapped to the figure's own width. The line naming
+  the groups reached 205 characters on a three-cohort study and was silently
+  clipped mid-name at the canvas edge.
 
 ## Group colours are separated hues, and no two groups share one
 

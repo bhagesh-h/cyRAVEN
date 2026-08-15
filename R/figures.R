@@ -1444,6 +1444,15 @@ fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort"
   keylab  <- setNames(sprintf("%d \u00b7 %s", num, names(num)), names(num))
   pal_pop <- population_colours(lv, colors = colors)
 
+  # The key sits ABOVE the panels, so it has to flow across rather than down.
+  # A single column of one entry per cluster is as tall as the UMAP row's whole
+  # allocation -- twelve clusters collapsed the panels to a sliver of pixels
+  # with the key occupying the rest -- and the taller the cohort's cluster
+  # count, the worse it gets. Six per row keeps the longest label readable at
+  # this figure's width; h_umap below grows by the number of rows so the panels
+  # keep their space instead of paying for the key.
+  lg_nrow <- max(1L, ceiling(length(lv) / 6L))
+
   # --- UMAP row: pooled, then one panel per STUDY GROUP ----------------------
   # All panels are the SAME shared embedding restricted to different cells, so a
   # cluster keeps its position everywhere and the numbers can be read across.
@@ -1524,7 +1533,8 @@ fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort"
   p_umap <- ggplot(dd, aes(umap_1, umap_2, colour = population_label)) +
     geom_point(size = ap$size, alpha = ap$alpha, stroke = 0) +
     scale_colour_manual(values = pal_pop, labels = keylab, name = "Cluster",
-      guide = guide_legend(override.aes = list(size = 2.5, alpha = 1), ncol = 1)) +
+      guide = guide_legend(override.aes = list(size = 2.5, alpha = 1),
+                           nrow = lg_nrow)) +
     facet_wrap(~ .panel, nrow = 1) +
     labs(title = "Shared CD45+ embedding, pooled, then one panel per study",
          subtitle = paste("labels are cluster+subcluster (4a, 4b, ...) and key the peak panels",
@@ -1620,7 +1630,7 @@ fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort"
   # (verified), so it is the composition step, not the plot. Laying the two
   # gtables into an explicit grid layout sidesteps patchwork's panel-alignment
   # logic entirely and is deterministic at any panel count.
-  h_umap <- 4.6; h_pk <- max(4, 1.30 * npp)
+  h_umap <- 4.6 + 0.22 * lg_nrow; h_pk <- max(4, 1.30 * npp)
   W <- max(15, 1.95 * nmk + 2.4); H <- h_umap + h_pk + 1.15
   # Same raster ceiling safe_ggsave enforces, applied here since we drive the
   # device directly.
