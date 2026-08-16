@@ -225,6 +225,23 @@ why, so the same arguments do not get relitigated.
 | [Worked example](https://bhagesh-h.github.io/cyRAVEN/articles/figures.html) | All 22 figures from a run on public data, each with what it measures and what that run shows |
 | [Scope](https://bhagesh-h.github.io/cyRAVEN/articles/scope.html) | Nine excluded methods with the reasoning and the condition under which each becomes appropriate |
 
+**These pages are the website, not the install.** The package sources carry all
+fifteen vignettes, but they are not built into the installed copy, so
+`browseVignettes("cyRAVEN")` returns nothing inside the image and on a plain
+install. Building them would add several megabytes of rendered HTML and figures
+to a package whose footprint is already deliberate, and the site is always
+current with `main`. Function help is installed and complete — `?run_cyraven`
+and 192 other topics work offline. For the prose, use the links above or build
+the vignettes yourself from a source checkout with
+`devtools::build_vignettes()`.
+
+One consequence worth knowing if you check the package yourself: because
+`inst/doc` is absent, `R CMD check` reports two warnings —
+`Files in the 'vignettes' directory but no files in 'inst/doc'` and
+`Directory 'inst/doc' does not exist`. Both are consequences of not building
+vignettes rather than defects, and every other check, including all 248 tests,
+passes.
+
 ## Installation without Docker
 
 Reproducibility of numerical output is not guaranteed outside the pinned

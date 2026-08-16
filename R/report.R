@@ -116,6 +116,42 @@ html_table <- function(d, max_rows = 20L) {
          paste(body, collapse = ""), "</tbody></table>", note)
 }
 
+#' The package logo as a data URI, or NA when it cannot be found
+#'
+#' An installed package keeps `man/figures/` at `help/figures/`, while a source
+#' tree loaded with pkgload keeps the original path, so both are tried rather
+#' than assumed. Returns NA rather than failing: a report is worth writing
+#' without its logo, and this runs at the end of an analysis that may have taken
+#' an hour.
+#' @keywords internal
+report_logo_uri <- function() {
+  for (p in c(system.file("help", "figures", "logo.png", package = "cyRAVEN"),
+              system.file("man", "figures", "logo.png", package = "cyRAVEN"))) {
+    if (nzchar(p) && file.exists(p)) return(file_data_uri(p, "image/png"))
+  }
+  NA_character_
+}
+
+#' The per-marker embeddings, pooled first and then split by category
+#'
+#' WHY A HELPER. A run writes one figure per marker and then one per marker per
+#' category, so the count is a property of the cohort rather than something a
+#' section can name in advance. Returned as paths relative to `outdir`, which is
+#' what [report_section()] and the catch-all both work in.
+#'
+#' Ordering is deliberate: the pooled view of a marker comes before its splits,
+#' so the reader sees the whole embedding before any comparison drawn on it.
+#' @param outdir The run directory.
+#' @keywords internal
+marker_umap_files <- function(outdir) {
+  d <- file.path(outdir, "marker_umaps_by_group")
+  if (!dir.exists(d)) return(character(0))
+  f <- list.files(d, "[.]png$")
+  if (!length(f)) return(character(0))
+  split_by <- grepl("_by_", f, fixed = TRUE)
+  file.path("marker_umaps_by_group", c(sort(f[!split_by]), sort(f[split_by])))
+}
+
 #' Build one report section, embedding its figures and tables
 #'
 #' @param outdir the results directory.
@@ -172,7 +208,13 @@ report_section <- function(outdir, id, title, description, figures = character(0
     uri <- file_data_uri(p, "image/png")
     if (is.na(uri)) next
     bytes <- bytes + file.size(p)
+    # The id keeps the full relative path so two figures with the same file name
+    # in different directories cannot collide. Everything the READER sees is the
+    # base name: a caption reading marker_umaps_by_group/umap_CD3.png tells them
+    # about this report's directory layout, which is not what they are looking
+    # at, and the same string was being used as the download file name.
     fid <- paste0("fig-", gsub("[^A-Za-z0-9]+", "-", sub("[.]png$", "", f)))
+    fb  <- basename(f)
     h <- c(h, sprintf(paste0(
       "<figure class='fig' id='%s'>",
       "<div class='figbox'><img src='%s' alt='%s' loading='lazy' ",
@@ -182,9 +224,9 @@ report_section <- function(outdir, id, title, description, figures = character(0
       "<figcaption><span class='fn'>%s</span>",
       "<a class='dl' download='%s' href='%s'>Full resolution PNG</a>",
       "</figcaption></figure>"),
-      fid, uri, html_escape(f), html_escape(f), html_escape(f), uri))
+      fid, uri, html_escape(fb), html_escape(fb), html_escape(fb), uri))
     nav <- c(nav, sprintf("<a class='nav-fig' href='#%s'>%s</a>", fid,
-                          html_escape(sub("[.]png$", "", f))))
+                          html_escape(sub("[.]png$", "", fb))))
   }
 
   for (t in tab_present) {
@@ -207,11 +249,12 @@ report_section <- function(outdir, id, title, description, figures = character(0
       "<button class='dl' onclick='cyCsv(\"%s\")'>Export CSV</button>",
       "</div><div class='tabwrap'><table></table></div>",
       "<p class='none shown'></p></div>"),
-      tid, html_escape(t), nrow(d), ncol(d), tid, html_escape(t), tid, tid))
+      tid, html_escape(basename(t)), nrow(d), ncol(d), tid,
+      html_escape(basename(t)), tid, tid))
     h <- c(h, sprintf("<script type='application/json' id='%s-data'>%s</script>",
                       tid, json_table(d)))
     nav <- c(nav, sprintf("<a class='nav-tab' href='#%s'>%s</a>", tid,
-                          html_escape(t)))
+                          html_escape(basename(t))))
   }
 
   for (t in oversize) {
@@ -223,17 +266,31 @@ report_section <- function(outdir, id, title, description, figures = character(0
       "here: %s row(s), %s MB. It is a per-cell export, one row per cell, read ",
       "by software rather than read in a report; carrying it would multiply the ",
       "size of this file. Every summary derived from it is embedded above.</p>"),
-      html_escape(t), format(nr, big.mark = ","),
+      html_escape(basename(t)), format(nr, big.mark = ","),
       format(round(file.size(p) / 1024^2, 1), nsmall = 1)))
   }
 
   h <- c(h, "</div></details></section>")
   list(html = paste(h, collapse = "\n"),
-       nav = paste0(sprintf("<div class='nav-sec'><a class='nav-h' href='#%s'>%s</a>",
-                            id, html_escape(title)),
-                    paste(nav, collapse = ""), "</div>"),
+       # The per-figure and per-table links live in their own container so the
+       # sidebar can show section titles alone until a section is opened. A
+       # twelve-section run lists over a hundred entries otherwise, and the
+       # structure of the document -- which is what a contents list is for --
+       # disappears into them.
+       nav = paste0(sprintf(paste0("<div class='nav-sec' data-sec='%s'>",
+                                   "<a class='nav-h' href='#%s'>%s</a>"),
+                            id, id, html_escape(title)),
+                    "<div class='nav-kids'>", paste(nav, collapse = ""),
+                    "</div></div>"),
        n_fig = length(fig_present), n_tab = length(tab_present), bytes = bytes,
-       used = c(fig_present, tab_present))
+       # `oversize` belongs in `used`. It was handled by this section -- named
+       # with its size rather than embedded -- which is exactly what "covered"
+       # means for a table too large to read here. Leaving it out sent every
+       # per-cell export to the catch-all as well, so cells_umap.csv was named
+       # twice in every report and section 11 was never empty, which destroyed
+       # the one invariant that section exists to provide: if it has anything in
+       # it, a named section is missing an entry.
+       used = c(fig_present, tab_present, oversize))
 }
 
 #' Stylesheet for the run report
@@ -264,12 +321,42 @@ report_css <- function() {
   "white-space:nowrap}",
   "nav.side a:hover{background:#e8ebf0}",
   "a.nav-h{font-weight:600;font-size:.87rem}",
+  # The entry for the section being read. Without it the sidebar looks identical
+  # at the top of section 1 and the bottom of section 9, so a twelve-section
+  # report gives no cue where you are or how much is left. Tinted fill plus an
+  # accent rule down the left edge, which survives being scrolled past at a
+  # glance better than colour alone.
+  ".nav-sec.cur>a.nav-h{background:#e6f1eb;color:var(--accent);",
+  "box-shadow:inset 3px 0 0 var(--accent)}",
+  # The contents list shows section titles only until a section is opened, and
+  # then shows that section's figures and tables. It mirrors the document rather
+  # than duplicating it: over a hundred entries at once buries the twelve-line
+  # structure a reader actually navigates by.
+  ".nav-kids{display:none}",
+  ".nav-sec.open>.nav-kids{display:block}",
+  # A caret on the title, turned down when the section is open, so the sidebar
+  # says which sections are expanded even where the entry is scrolled past.
+  "a.nav-h:before{content:'\\25B8';color:var(--mut);display:inline-block;",
+  "width:.85em;transition:transform .12s ease}",
+  ".nav-sec.open>a.nav-h:before{transform:rotate(90deg)}",
   "a.nav-fig,a.nav-tab{padding-left:1.35rem;color:var(--mut);font-family:var(--mono);",
   "font-size:.76rem}",
   "a.nav-fig:before{content:'\\25A6\\00a0';color:var(--accent)}",
   "a.nav-tab:before{content:'\\2263\\00a0';color:var(--mut)}",
   "main{flex:1 1 auto;min-width:0;max-width:1180px;padding:1.5rem 2rem 5rem}",
   "h1{font-size:1.6rem;margin:0 0 .15rem}",
+  # Masthead: mark, identity, document-level actions, on one rule.
+  "header.masthead{display:flex;align-items:flex-start;gap:1.3rem;",
+  "flex-wrap:wrap;padding:0 0 1.1rem;margin:0 0 .4rem;",
+  "border-bottom:2px solid var(--line)}",
+  "img.brand{width:104px;height:104px;flex:0 0 auto;object-fit:contain}",
+  ".mast-id{flex:1 1 340px;min-width:0}",
+  ".mast-id h1{margin:0 0 .1rem;line-height:1.1}",
+  "p.meta{color:var(--mut);margin:0;font-size:.86rem}",
+  # The note sits under the run line inside the same column, so it reads as part
+  # of the masthead rather than as the first content of the document.
+  ".mast-note{margin:.6rem 0 0}",
+  ".mast-actions{flex:0 0 auto;display:flex;gap:.45rem;align-items:center}",
   # Collapsible sections.
   "section.sec{border:1px solid var(--line);border-radius:8px;margin:.7rem 0;",
   "background:var(--bg);overflow:hidden}",
@@ -305,11 +392,23 @@ report_css <- function() {
   "background:none;cursor:pointer;white-space:nowrap}",
   "a.dl:hover,button.dl:hover{background:var(--accent);color:#fff}",
   # Lightbox.
+  # --lbbar-h is shared by the toolbar's height and the image's top margin, so
+  # the two cannot drift apart.
   "#lb{position:fixed;inset:0;background:rgba(12,14,18,.93);display:none;",
-  "z-index:99;overflow:auto;cursor:zoom-out}",
+  "z-index:99;overflow:auto;cursor:zoom-out;--lbbar-h:2.6rem}",
   "#lb.on{display:block}",
-  "#lb img{display:block;margin:0 auto;max-width:none}",
-  "#lbbar{position:fixed;top:0;left:0;right:0;padding:.5rem .9rem;display:flex;",
+  # THE IMAGE STARTS BELOW THE TOOLBAR, NOT UNDER IT. The toolbar is fixed so it
+  # stays reachable while a zoomed image is scrolled, which also means it is
+  # painted over the image rather than above it. Every figure carries its title
+  # and subtitle as the first thing inside the PNG, so with the image at y=0 the
+  # bar covered exactly the line saying what the figure is and what to read from
+  # it -- the reader had to scroll a zoomed image up to identify it. A top
+  # margin of the bar's own height clears it at the default view, and the bar
+  # still overlays the middle of a scrolled image, which is what a fixed toolbar
+  # is for.
+  "#lb img{display:block;margin:var(--lbbar-h) auto 0;max-width:none}",
+  "#lbbar{position:fixed;top:0;left:0;right:0;height:var(--lbbar-h);",
+  "box-sizing:border-box;padding:.5rem .9rem;display:flex;",
   "gap:.5rem;align-items:center;background:rgba(12,14,18,.86);color:#eef1f5;",
   "font-size:.8rem;z-index:100}",
   "#lbbar button{background:none;color:#eef1f5;border:1px solid #556;",
@@ -368,7 +467,8 @@ report_js <- function() {
   # so search, paging and export all read the same array.
   "function cyInit(){document.querySelectorAll(\"script[type='application/json']\")",
   ".forEach(function(s){CY[s.id.replace(/-data$/,'')]=JSON.parse(s.textContent);});",
-  "Object.keys(CY).forEach(function(id){CY[id].sort=-1;cyFilter(id);});}\n",
+  "Object.keys(CY).forEach(function(id){CY[id].sort=-1;cyFilter(id);});",
+  "cySync();cyCur();}\n",
   "function cyRows(id){var d=CY[id];var box=document.getElementById(id);",
   "var q=box.querySelector('input.search').value.trim().toLowerCase();",
   "var rows=d.rows;",
@@ -435,7 +535,53 @@ report_js <- function() {
   "if(e.key==='+'||e.key==='=')cyZset(LBZ*1.25);",
   "if(e.key==='-')cyZset(LBZ/1.25);}});\n",
   "function cyAll(open){document.querySelectorAll('details').forEach(function(d){",
-  "d.open=open;});}\n",
+  "d.open=open;});cySync();cyCur();}\n",
+  # THE SIDEBAR MIRRORS THE DOCUMENT. A section's figure and table links are
+  # shown exactly when that section is open, so Expand all and Collapse all move
+  # both at once and the contents list never claims a state the page is not in.
+  "function cySync(){document.querySelectorAll('section.sec').forEach(function(s){",
+  "var d=s.querySelector('details');if(!d)return;",
+  "var n=document.querySelector(\".nav-sec[data-sec='\"+s.id+\"']\");",
+  "if(n)n.classList.toggle('open',d.open);});}\n",
+  # A title in the contents TOGGLES its section: open it if closed, close it if
+  # open. The default anchor jump is suppressed, because scrolling to a section
+  # in the same gesture that collapses it puts the reader somewhere they did not
+  # ask to be; opening still scrolls, which is what a contents entry is for.
+  "document.addEventListener('click',function(e){",
+  "var a=e.target&&e.target.closest?e.target.closest('a.nav-h'):null;if(!a)return;",
+  "var h=a.getAttribute('href')||'';if(h.charAt(0)!=='#')return;",
+  "var s=document.getElementById(h.slice(1));if(!s)return;",
+  "var d=s.querySelector('details');if(!d)return;",
+  "e.preventDefault();d.open=!d.open;",
+  "if(d.open)s.scrollIntoView({block:'start'});",
+  "cySync();cyCur();});\n",
+  # WHICH SECTION AM I IN. The section whose top has most recently passed a line
+  # near the top of the viewport, which is the one filling the screen. Chosen by
+  # scan rather than IntersectionObserver because a collapsed section is only a
+  # heading tall, so several intersect the viewport at once and "most visible"
+  # picks the wrong one; "last one I have scrolled past" does not have that
+  # failure mode and behaves the same whether sections are open or closed.
+  "function cyCur(){var s=document.querySelectorAll('section.sec'),best=null;",
+  "for(var i=0;i<s.length;i++){if(s[i].getBoundingClientRect().top<=140)best=s[i];}",
+  "if(!best&&s.length)best=s[0];",
+  "document.querySelectorAll('.nav-sec.cur').forEach(function(n){",
+  "n.classList.remove('cur');});",
+  "if(!best)return;",
+  "var a=document.querySelector(\".nav-sec a.nav-h[href='#\"+best.id+\"']\");",
+  "if(!a)return;a.parentNode.classList.add('cur');",
+  # Keep the marked entry visible in a sidebar that lists every figure and table
+  # and so runs well past one screen. The nav's own scrollTop is set directly
+  # rather than calling scrollIntoView, which would also scroll the page and
+  # fight the reader.
+  "var nv=a.closest('nav.side');if(!nv)return;var at=a.offsetTop;",
+  "if(at<nv.scrollTop||at+a.offsetHeight>nv.scrollTop+nv.clientHeight)",
+  "nv.scrollTop=Math.max(0,at-nv.clientHeight/3);}\n",
+  "window.addEventListener('scroll',cyCur,{passive:true});\n",
+  "window.addEventListener('resize',cyCur,{passive:true});\n",
+  # Opening or closing a section moves every section below it, so the marked
+  # entry has to be recomputed then too.
+  "document.addEventListener('toggle',function(e){",
+  "if(e.target.tagName==='DETAILS'){cySync();cyCur();}},true);\n",
   "document.addEventListener('DOMContentLoaded',cyInit);\n")
 }
 
@@ -486,7 +632,7 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
   }
 
   secs <- list(
-    report_section(outdir, "s1", "1. Gate placement",
+    report_section(outdir, "s1", "Gate placement",
       paste("Per sample, the scatter gate boundary and every marker threshold,",
             "each drawn on the density it was derived from. A cut sitting in the",
             "trough between two modes is determined by the data. A cut on the",
@@ -496,7 +642,7 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
             "this section comes first."),
       figures = c("recon_diagnostics.png", "gating_qc.png"), open = TRUE),
 
-    report_section(outdir, "s2", "2. Acquisition stability",
+    report_section(outdir, "s2", "Acquisition stability",
       paste("The Time channel binned into equal-width intervals, tracking the",
             "event rate and each channel's median. A sustained trough is a partial",
             "clog, a spike is usually a bubble, a step is a settings change; any",
@@ -511,7 +657,7 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
       tables = c("acquisition_qc.csv", "acquisition_qc_impact.csv",
                  "acquisition_qc_bins.csv")),
 
-    report_section(outdir, "s3", "3. Staining quality control",
+    report_section(outdir, "s3", "Staining quality control",
       paste("One verdict per sample. A sample with no resolvable CD45+ mode has",
             "no usable parent gate, so its percentages are fractions of an",
             "arbitrary scatter region rather than of leukocytes. Such samples are",
@@ -520,7 +666,7 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
             "column still records it while qc_status reads pass."),
       tables = "staining_qc.csv"),
 
-    report_section(outdir, "s4", "4. Phenotype concordance",
+    report_section(outdir, "s4", "Phenotype concordance",
       paste("Measured marker intensity across the declared populations, z-scored",
             "over the run. Identity here is declared before the data are",
             "examined, so this figure serves the inverse function of its",
@@ -532,7 +678,7 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
             "sizes."),
       figures = c("population_marker_heatmap.png", "cohort_composition_heatmap.png")),
 
-    report_section(outdir, "s5", "5. Threshold provenance and spillover spreading",
+    report_section(outdir, "s5", "Threshold provenance and spillover spreading",
       paste("thresholds_used.csv records how every cut was obtained: a density",
             "minimum, a quantile fallback, an unstained or fluorescence-minus-one",
             "control, or a manual override. spreading_receivers.csv pairs each",
@@ -546,7 +692,7 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
                  "fmo_agreement.csv", "spreading_receivers.csv",
                  "spreading_pairs.csv")),
 
-    report_section(outdir, "s6", "6. Gate uncertainty and detection limits",
+    report_section(outdir, "s6", "Gate uncertainty and detection limits",
       paste("Each frequency carries two separate uncertainties. The gate",
             "uncertainty is propagated from the thresholds behind the population",
             "and says how far the number moves when the cut moves;",
@@ -561,7 +707,7 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
                   "detection_limits.png"),
       tables = c("uncertainty_budget.csv", "threshold_uncertainty.csv")),
 
-    report_section(outdir, "s7", "7. Population abundance and the shared embedding",
+    report_section(outdir, "s7", "Population abundance and the shared embedding",
       paste("pct_of_cd45_pos is the reportable quantity. count is an event count,",
             "set by how long the tube was run, and is not a cell number. The UMAP",
             "is computed once across all samples, so positions are comparable",
@@ -581,7 +727,23 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
                  "subcluster_marker_shifts.csv", "unsupervised_clusters.csv",
                  "cells_umap.csv")),
 
-    report_section(outdir, "s8", "8. Between-group differences",
+    # The per-marker embeddings sit in their own directory because a run writes
+    # one per marker and again per category, which is dozens of files. They are
+    # the same shared embedding as section 7 with one marker's intensity on it,
+    # so they belong beside it. Numbered 7b rather than renumbering everything
+    # below, which would break every anchor an existing report already carries.
+    report_section(outdir, "s7b", "The embedding, one marker at a time",
+      paste("The same shared embedding as above, coloured by a single marker's",
+            "intensity and drawn at full size. Each marker appears once pooled",
+            "across every sample, then again split by each category the sample",
+            "sheet carries, so a difference between groups can be read as a",
+            "shift in where the signal sits rather than only as a number in a",
+            "table. Read the pooled panel first: a split panel shows a subset of",
+            "the same cells in the same positions, so anything that looks like a",
+            "new structure there is a difference in density, not in phenotype."),
+      figures = marker_umap_files(outdir)),
+
+    report_section(outdir, "s8", "Between-group differences",
       paste("Tests are on per-sample values with donors as the replicates, not on",
             "pooled cells. Read each row in four steps: the adjusted p-value,",
             "then Cliff's delta as the effect size, then difference_over_gate_u,",
@@ -595,14 +757,24 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
       figures = c("group_comparison.png", "marker_state.png",
                   "functional_markers.png", "population_ratios.png",
                   "absolute_counts.png", "absolute_counts_qc.png"),
-      tables = c("group_comparison_stats.csv", "compositional_concordance.csv",
+      # design_feasibility comes FIRST because it decides which of the tests
+      # below exist at all: a comparison it rules out is absent from the results
+      # rather than negative, and a reader who meets that table after the
+      # p-values has already drawn the wrong conclusion from their absence.
+      # The four tables after it were reaching section 11, the catch-all, whose
+      # own comment says a non-empty section 11 means a named section is missing
+      # an entry. These are those entries.
+      tables = c("design_feasibility.csv",
+                 "group_comparison_stats.csv", "compositional_concordance.csv",
                  "compositional_clr_stats.csv", "marker_state_stats.csv",
                  "functional_markers.csv", "functional_markers_stats.csv",
                  "population_ratios.csv", "population_ratios_stats.csv",
                  "absolute_counts.csv", "absolute_counts_stats.csv",
-                 "absolute_counts_raw.csv")),
+                 "absolute_counts_raw.csv",
+                 "normality_tests.csv", "parametric_tests.csv",
+                 "posthoc_tests.csv", "statistical_methods.csv")),
 
-    report_section(outdir, "s9", "9. Confounding and batch structure",
+    report_section(outdir, "s9", "Confounding and batch structure",
       paste("A variable confounds only when it both differs between the groups",
             "and associates with the outcome, and the two conditions are reported",
             "separately rather than combined into one verdict. threshold_drift",
@@ -616,7 +788,7 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
                  "batch_group_confounding.csv", "batch_mixing_stats.csv",
                  "marker_batch_drift.csv")),
 
-    report_section(outdir, "s10", "10. Agreement with an accepted baseline",
+    report_section(outdir, "s10", "Agreement with an accepted baseline",
       paste("This run's per-sample values against a previously accepted run,",
             "written when --baseline was given. The within-run peer check finds",
             "one deviant tube against its peers. It cannot find a cohort that",
@@ -630,22 +802,46 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
   # while appearing to be covered, so whatever is left over is collected rather
   # than dropped. If this section is ever non-empty for a standard run, a named
   # section is missing an entry.
-  used <- unlist(lapply(secs, `[[`, "used"))
-  rest_fig <- setdiff(list.files(outdir, "[.]png$"), used)
-  rest_tab <- setdiff(list.files(outdir, "[.]csv$"), used)
-  secs <- c(secs, list(report_section(outdir, "s11", "11. Further outputs",
+  # RECURSIVE, deliberately. This section is the safety net for exactly the
+  # failure described above, and a non-recursive listing defeated it for
+  # anything written into a subdirectory. Two whole directories were therefore
+  # absent from every report while appearing to be covered:
+  # marker_umaps_by_group/, which is dozens of figures on every run, and
+  # explore/. The first now has its own section; the second lands here.
+  # Provenance, section 12, names patient_metadata_english.csv -- but it is
+  # built AFTER this sweep, so its table was never in `used` and the catch-all
+  # embedded the same file a second time, at full size, in every report. Name it
+  # here rather than reordering the sections: the order below is the reading
+  # order, and it should not bend around a bookkeeping detail.
+  provenance_tables <- "patient_metadata_english.csv"
+  used <- c(unlist(lapply(secs, `[[`, "used")), provenance_tables)
+  rest_fig <- setdiff(list.files(outdir, "[.]png$", recursive = TRUE), used)
+  rest_tab <- setdiff(list.files(outdir, "[.]csv$", recursive = TRUE), used)
+  # An HTML output cannot be embedded as a figure or a table, so it would be
+  # invisible here however the listing is done. Naming it is the most this
+  # report can honestly do without ceasing to be self-contained.
+  other_html <- setdiff(list.files(outdir, "[.]html$", recursive = TRUE),
+                        "report.html")
+  secs <- c(secs, list(report_section(outdir, "s11", "Further outputs",
     paste("Everything else this run wrote, in no particular order. These files",
           "are produced by optional flags or by stages the sections above do not",
           "cover; each is documented in the Output article."),
-    figures = rest_fig, tables = rest_tab)))
+    figures = rest_fig, tables = rest_tab,
+    body = if (length(other_html)) paste0(
+      "<p>This run also wrote ",
+      paste(sprintf("<span class='mono'>%s</span>", html_escape(other_html)),
+            collapse = ", "),
+      ". A report cannot embed another report without ceasing to be one file, ",
+      "so it is named here and left in the results directory beside this one.</p>")
+      else NULL)))
 
   # Provenance describes the other sections, so it is only worth writing when
   # there are some. A directory holding nothing produces no report rather than
   # a page whose sole content is a note about how to read the content.
   if (length(Filter(function(s) nzchar(s$html), secs)) || failed)
-  secs <- c(secs, list(report_section(outdir, "s12", "12. Provenance",
+  secs <- c(secs, list(report_section(outdir, "s12", "Provenance",
     paste("What produced this folder, and what this file is."),
-    tables = "patient_metadata_english.csv",
+    tables = provenance_tables,
     body = paste0(
       "<p>This report is self-contained. Every figure above is embedded at full",
       " resolution and every table is embedded in full, so the file can be",
@@ -688,27 +884,48 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
     "<nav class='side'><h2>Contents</h2>",
     paste(vapply(secs, `[[`, character(1), "nav"), collapse = "\n"),
     "</nav><main>",
-    sprintf("<h1>cyRAVEN run report%s</h1>", if (failed) " &mdash; FAILED" else ""),
-    sprintf("<p class='q'>%s &middot; cyRAVEN %s &middot; %d figures, %d tables, all embedded</p>",
-            html_escape(format(Sys.time(), tz = "UTC", usetz = TRUE)),
-            html_escape(tryCatch(as.character(utils::packageVersion("cyRAVEN")),
-                                 error = function(e) "unknown")),
-            nfig, ntab),
-    banner,
-    sprintf(paste0("<div class='banner warn'>%s",
-            "<span style='float:right'>",
-            "<button class='dl' onclick='cyAll(true)'>Expand all</button> ",
-            "<button class='dl' onclick='cyAll(false)'>Collapse all</button>",
-            "</span></div>"),
-      if (failed)
-        paste("What follows is everything the run wrote before it stopped, in the",
-              "order a completed run is read in. Stages after the failure are",
-              "absent, so a section missing here did not run rather than finding",
-              "nothing.")
-      else
-        paste("Read the sections in the order given. Each one can invalidate the",
-              "sections after it, so a result taken from the bottom without the",
-              "top is not supported by this run.")))
+    # The masthead is a flex row: mark, identity, actions. The two buttons used
+    # to be a float:right span INSIDE the note below, which is why they hung off
+    # its bottom-right corner and overlapped its border -- a float is taken out
+    # of flow, so a note long enough to wrap pushed them past its own box. They
+    # are controls for the whole document, not part of the note, and now sit
+    # where that is legible.
+    # One masthead block: the mark, and to its right the name, then what this
+    # file is and when, then the note on how to read it. Everything identifying
+    # the document sits in one column against the logo instead of trailing down
+    # the page as three unrelated blocks.
+    local({
+      logo <- report_logo_uri()
+      paste0(
+        "<header class='masthead'>",
+        if (!is.na(logo))
+          sprintf("<img class='brand' src='%s' alt='cyRAVEN'/>", logo) else "",
+        "<div class='mast-id'>",
+        sprintf("<h1>cyRAVEN%s</h1>", if (failed) " &mdash; FAILED" else ""),
+        sprintf(paste0("<p class='meta'>Run report &middot; %s &middot; ",
+                       "cyRAVEN %s &middot; %d figures, %d tables, ",
+                       "all embedded</p>"),
+                html_escape(format(Sys.time(), tz = "UTC", usetz = TRUE)),
+                html_escape(tryCatch(as.character(utils::packageVersion("cyRAVEN")),
+                                     error = function(e) "unknown")),
+                nfig, ntab),
+        sprintf("<div class='banner warn mast-note'>%s</div>",
+          if (failed)
+            paste("What follows is everything the run wrote before it stopped,",
+                  "in the order a completed run is read in. Stages after the",
+                  "failure are absent, so a section missing here did not run",
+                  "rather than finding nothing.")
+          else
+            paste("Read the sections in the order given. Each one can invalidate",
+                  "the sections after it, so a result taken from the bottom",
+                  "without the top is not supported by this run.")),
+        "</div>",
+        "<div class='mast-actions'>",
+        "<button class='dl' onclick='cyAll(true)'>Expand all</button>",
+        "<button class='dl' onclick='cyAll(false)'>Collapse all</button>",
+        "</div></header>")
+    }),
+    banner)
 
   writeLines(c(head, vapply(secs, `[[`, character(1), "html"),
                "</main></div>", sprintf("<script>%s</script>", report_js()),

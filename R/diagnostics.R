@@ -392,7 +392,19 @@ fig_threshold_drift <- function(thr, outfile, group_of, stats = NULL,
   if (!is.null(reference) && reference %in% glev)
     glev <- c(reference, setdiff(glev, reference))
   d$group <- factor(d$group, levels = glev)
+  # semantic_colours() returns NULL when there is no reference to anchor the
+  # study palette (R/figures.R:235), and scale_fill_manual(values = NULL) then
+  # dies inside ggplot with "Insufficient values in manual scale. N needed but
+  # only 0 provided" -- an internal error naming nothing the caller can act on.
+  # run_cyraven() always passes opt$reference_group so a normal run never saw
+  # it, but the argument defaults to NULL and any direct call hits it.
+  # population_colours() applies the same pinned palettes and falls through to
+  # pop_palette() instead of returning NULL, so the reference-anchored result is
+  # byte-identical whenever a reference IS supplied; this only changes the case
+  # that used to abort.
   fills <- semantic_colours(glev, reference = reference, colors = colors)
+  if (is.null(fills))
+    fills <- population_colours(glev, reference = reference, colors = colors)
 
   # Flagged markers first and marked in the facet label, so the eye lands on the
   # ones that matter instead of scanning an alphabetical grid.

@@ -26,6 +26,15 @@ fake_results <- function(files = character(0)) {
 read_report <- function(d) paste(readLines(file.path(d, "report.html"),
                                            warn = FALSE), collapse = "\n")
 
+#' A section heading as it appears in the markup.
+#'
+#' Headings used to carry an ordinal ("1. Gate placement") and the assertions
+#' below matched that string. Without the number a bare title is an ordinary
+#' phrase that also occurs in prose -- "Provenance" and "Population abundance"
+#' both do -- so match the element instead. This is what the reader sees as a
+#' heading, and nothing else in the document produces it.
+sec_title <- function(t) paste0("sec-title'>", t, "<")
+
 test_that("sections appear in the documented reading order", {
   # The order is the product. A directory listing sorts alphabetically and so
   # presents a failed QC and a headline p-value as equals.
@@ -34,19 +43,20 @@ test_that("sections appear in the documented reading order", {
   suppressMessages(write_run_report(d))
   txt <- read_report(d)
 
-  pos <- function(s) regexpr(s, txt, fixed = TRUE)
-  expect_gt(pos("1. Gate placement"), 0)
-  expect_lt(pos("1. Gate placement"), pos("3. Staining quality control"))
-  expect_lt(pos("3. Staining quality control"),
-            pos("7. Population abundance"))
-  expect_lt(pos("7. Population abundance"), pos("8. Between-group differences"))
+  pos <- function(s) regexpr(sec_title(s), txt, fixed = TRUE)
+  expect_gt(pos("Gate placement"), 0)
+  expect_lt(pos("Gate placement"), pos("Staining quality control"))
+  expect_lt(pos("Staining quality control"),
+            pos("Population abundance and the shared embedding"))
+  expect_lt(pos("Population abundance and the shared embedding"),
+            pos("Between-group differences"))
 })
 
 test_that("headings state what the section reports rather than asking", {
   d <- fake_results(c("gating_qc.png", "staining_qc.csv"))
   suppressMessages(write_run_report(d))
   txt <- read_report(d)
-  expect_match(txt, "1. Gate placement", fixed = TRUE)
+  expect_match(txt, sec_title("Gate placement"), fixed = TRUE)
   # The old question form must not survive anywhere in the headings.
   expect_false(grepl("Did the gates land", txt, fixed = TRUE))
   expect_false(grepl("Is the staining usable", txt, fixed = TRUE))
@@ -56,11 +66,11 @@ test_that("a section with no files behind it is omitted", {
   d <- fake_results("staining_qc.csv")
   suppressMessages(write_run_report(d))
   txt <- read_report(d)
-  expect_match(txt, "3. Staining quality control", fixed = TRUE)
+  expect_match(txt, sec_title("Staining quality control"), fixed = TRUE)
   # Nothing was written for these, so claiming them would be a false statement
   # about what the run produced.
-  expect_false(grepl("8. Between-group differences", txt, fixed = TRUE))
-  expect_false(grepl("2. Acquisition stability", txt, fixed = TRUE))
+  expect_false(grepl(sec_title("Between-group differences"), txt, fixed = TRUE))
+  expect_false(grepl(sec_title("Acquisition stability"), txt, fixed = TRUE))
 })
 
 test_that("excluded samples are announced before any result", {
@@ -153,13 +163,13 @@ test_that("no output the run wrote is left out of the report", {
   txt <- read_report(d)
   expect_match(txt, "some_future_output.csv", fixed = TRUE)
   expect_match(txt, "some_future_figure.png", fixed = TRUE)
-  expect_match(txt, "11. Further outputs", fixed = TRUE)
+  expect_match(txt, sec_title("Further outputs"), fixed = TRUE)
 })
 
 test_that("the sweep section is absent when every output is placed", {
   d <- fake_results(c("gating_qc.png", "staining_qc.csv"))
   suppressMessages(write_run_report(d))
-  expect_false(grepl("11. Further outputs", read_report(d), fixed = TRUE))
+  expect_false(grepl(sec_title("Further outputs"), read_report(d), fixed = TRUE))
 })
 
 test_that("the sidebar indexes every section, figure and table", {

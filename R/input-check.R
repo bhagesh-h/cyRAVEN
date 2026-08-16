@@ -58,9 +58,29 @@ report_input_check <- function(fcs, smap, sheet, spec, opt) {
             paste(sort(shared), collapse = ", "))
 
   # ---- does the specification match the panel -------------------------------
-  need <- unique(unlist(lapply(spec, names)))
-  need <- setdiff(need, c("FSC-A", "FSC-H", "SSC-A", "SSC-H"))
-  absent <- setdiff(need, markers)
+  # `any_of` is a RESERVED KEY holding a nested disjunction, not a marker name.
+  # score_populations() strips it before checking anything
+  # (R/populations.R:157), and its members carry weaker semantics: a missing
+  # DIRECT marker makes a population unavailable, whereas a disjunction survives
+  # as long as one member remains. Reading `names(req)` flat counted the literal
+  # key as a marker, so every specification carrying a disjunction -- the shipped
+  # inst/config/config_cohorts.yaml among them -- was reported as naming a marker
+  # no file contains, on a command that then ran to completion. Mirror the
+  # scorer's rule here instead of approximating it.
+  scatter   <- c("FSC-A", "FSC-H", "SSC-A", "SSC-H")
+  direct_of <- function(req) setdiff(names(req), "any_of")
+  anyof_of  <- function(req) if (is.null(req[["any_of"]])) character(0)
+                             else names(req[["any_of"]])
+  need_direct <- setdiff(unique(unlist(lapply(spec, direct_of))), scatter)
+  need_any    <- setdiff(unique(unlist(lapply(spec, anyof_of))), scatter)
+  need   <- unique(c(need_direct, need_any))
+  absent <- setdiff(need_direct, markers)
+  # A disjunction is only fatal when EVERY member is gone, so report those
+  # populations rather than the individual names.
+  dead_any <- names(spec)[vapply(spec, function(req) {
+    m <- anyof_of(req)
+    length(m) > 0L && !length(intersect(m, markers))
+  }, logical(1))]
   log_msg("population specification: ", length(spec), " population(s) needing ",
           length(need), " marker(s)")
   if (length(absent)) {
@@ -71,7 +91,19 @@ report_input_check <- function(fcs, smap, sheet, spec, opt) {
   } else {
     log_msg("  every named marker is present")
   }
-  partial <- setdiff(need, shared)
+  if (length(dead_any))
+    note(length(dead_any), " population(s) whose any_of disjunction has no ",
+         "member in the panel: ", paste(dead_any, collapse = ", "),
+         ". Those would be reported UNAVAILABLE.")
+  # Partial loss inside a disjunction is survivable, so it is a note and not a
+  # problem -- the same distinction score_populations() makes when it logs
+  # "any_of reduced to ...".
+  thin_any <- setdiff(intersect(need_any, markers), shared)
+  if (length(thin_any))
+    log_msg("  NOTE any_of member(s) present in some files but not all: ",
+            paste(sort(thin_any), collapse = ", "),
+            " (the disjunction narrows where they are absent)")
+  partial <- setdiff(need_direct, shared)
   partial <- setdiff(partial, absent)
   if (length(partial))
     log_msg("  NOTE present in some files but not all: ",
@@ -100,10 +132,27 @@ report_input_check <- function(fcs, smap, sheet, spec, opt) {
       log_msg("  ", sum(smap$is_control), " file(s) declared as controls")
   }
 
+  # WHERE THE STUDY COLUMNS LIVE DEPENDS ON THE ROUTE. On the one-sheet route
+  # (--samples) read_samplesheet() has already merged everything, so
+  # sheet$patients is populated by the time this runs. On the three-file route
+  # (--sample-map + --patient-table) `sheet` is NULL and the patient table is
+  # not read until STEP 5 -- long after --check returns -- so a group column
+  # living there looked absent and EVERY such run was told
+  # "--group-column 'cohort' is not a column of the sheet" on a command that
+  # then ran to completion and produced the comparison. Read it here.
+  #
+  # Defensively, and with the default maps: this is a validation stage, so a
+  # patient table that cannot be parsed must not stop the check from reporting
+  # everything else it found.
+  patients <- sheet$patients
+  if (is.null(patients) && !is.null(opt$patient_table))
+    patients <- tryCatch(load_patient_table(opt$patient_table),
+                         error = function(e) NULL)
+
   gcol <- opt$group_column
   if (!is.null(gcol)) {
-    src <- if (!is.null(sheet$patients) && gcol %in% names(sheet$patients))
-      sheet$patients else smap
+    src <- if (!is.null(patients) && gcol %in% names(patients))
+      patients else smap
     if (is.null(src) || !gcol %in% names(src)) {
       note("--group-column '", gcol, "' is not a column of the sheet. ",
            "Available: ", paste(setdiff(names(src %||% smap), "file"),
@@ -128,7 +177,7 @@ report_input_check <- function(fcs, smap, sheet, spec, opt) {
 
   bcol <- opt[["batch_column", exact = TRUE]]
   if (!is.null(bcol)) {
-    src <- if (!is.null(smap) && bcol %in% names(smap)) smap else sheet$patients
+    src <- if (!is.null(smap) && bcol %in% names(smap)) smap else patients
     if (is.null(src) || !bcol %in% names(src))
       note("--batch-column '", bcol, "' is not a column of the sheet.")
     else
