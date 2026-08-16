@@ -280,7 +280,10 @@ is what cyRAVEN resolves from `$PnS`.
 | `report.html` | Every output above embedded in one self-contained file, in the order this documentation says to read them. Written for failed runs too, with a diagnosis |
 | `patient_metadata_english.csv` | Patient table after column mapping and value translation |
 | `absolute_counts.csv`, `absolute_counts.png` | Measured cells per microlitre per sample and population, written by `--absolute-counts` |
-| `absolute_counts_qc.csv`, `absolute_counts_qc.png` | The supplied counts against the frequencies this run measured, same flag |
+| `absolute_counts_raw.csv` | The supplied workbook flattened to CSV exactly as read, before any header or population-name interpretation. Open this first when a population from `--absolute-counts` looks wrong: it separates a reading problem from a mapping one |
+| `absolute_counts_stats.csv` | Between-group tests on the measured counts, on `cells_per_ul`. Written when the run performs group tests, so it needs `--group-column` and is absent under `--no-group-tests` |
+| `absolute_counts_qc.png` | The supplied counts against the frequencies this run measured, same flag. Written unconditionally whenever counts are supplied, and deliberately before the group-comparison figure, because a unit or mapping error has to be visible before the more inviting figure is read as a finding |
+| `populations_unavailable.csv` | One row per sample and population the panel cannot score, with the reason. Written only when there is at least one |
 | `flowjo/` | UMAP-annotated FCS, written by `--flowjo-export` |
 | `config_derived.yaml` | Derived parameters, written by `--write-config` |
 | `sample_map_template.csv` | Written by `--write-sample-map` |

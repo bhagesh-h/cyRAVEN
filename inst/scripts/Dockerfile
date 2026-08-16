@@ -22,14 +22,14 @@
 #   yaml 2.3.12 . optparse 1.8.2 . hexbin 1.28.5
 #
 # BUILD (from the package root -- the directory holding DESCRIPTION):
-#   docker build -f inst/scripts/Dockerfile -t cyraven:0.1.0 .
+#   docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
 #
 # RUN -- mount the data directory and write results back out. Nothing is baked
 # into the image: no FCS file, no patient table, no cohort name.
 #   docker run --rm \
 #     -v "$PWD:/data:ro" \
 #     -v "$PWD/results:/results" \
-#     cyraven:0.1.0 \
+#     cyraven:1.0.0 \
 #     --dir /data --recursive \
 #     --config /data/config_cohorts.yaml \
 #     --sample-map /data/sample_map.csv \
