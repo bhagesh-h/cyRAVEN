@@ -137,7 +137,8 @@ transplant recipients (Brinkman et al., 2007, *Biol Blood Marrow Transplant*
 Open `results/report.html`. It carries every figure and table the run produced,
 embedded in one self-contained file that references nothing beside it, in the
 order the outputs have to be read. Figures zoom and download at full resolution;
-tables are searchable, sortable, paged and exportable to CSV.
+each table is its own toggle, carrying a line saying what it holds, and is
+searchable, sortable, paged and exportable to CSV.
 
 Inspect `recon_diagnostics.png` and `gating_qc.png` before any quantity derived
 from them: a threshold placed on a distribution shoulder rather than a density
@@ -205,7 +206,7 @@ why, so the same arguments do not get relitigated.
 
 | Page | Content |
 |---|---|
-| [Running cyRAVEN](https://bhagesh-h.github.io/cyRAVEN/articles/usage.html) | Every command in Docker and R, which variation to use in which situation, and the complete reference for all 115 options |
+| [Running cyRAVEN](https://bhagesh-h.github.io/cyRAVEN/articles/usage.html) | Every command in Docker and R, which variation to use in which situation, and the complete reference for all 116 options |
 | [Inputs](https://bhagesh-h.github.io/cyRAVEN/articles/inputs.html) | The sample sheet and the config: every column, the templates, and the errors the format can raise |
 | [Gating specification](https://bhagesh-h.github.io/cyRAVEN/articles/gating.html) | Declaring populations, functional blocks and ratios; per-sample thresholding and the `source` column; arcsinh against logicle |
 | [Claude skill](https://bhagesh-h.github.io/cyRAVEN/articles/claude-skill.html) | Installing and using the bundled Claude Code skill, which executes through Docker by default |
@@ -221,7 +222,7 @@ why, so the same arguments do not get relitigated.
 | [Diagnostics](https://bhagesh-h.github.io/cyRAVEN/articles/diagnostics.html) | The checks in reading order, from validating inputs before the run through gate inspection, staining QC, threshold drift, gate uncertainty, batch structure and conformance |
 | [Explore mode](https://bhagesh-h.github.io/cyRAVEN/articles/explore.html) | Unsupervised discovery over every channel, run beside the declared analysis or standalone; the cluster-level QC gate, and what `--maybe-learn` lets the two sides tell each other |
 | [Output files](https://bhagesh-h.github.io/cyRAVEN/articles/outputs.html) | Every file the pipeline writes, its columns, the flag producing it, and why event counts are not cell counts |
-| [Statistics](https://bhagesh-h.github.io/cyRAVEN/articles/statistics.html) | Sample-level aggregation; rank tests against moderated *t*; the compositional constraint; covariate diagnosis against adjustment; multiplicity; differences expressed in units of uncertainty |
+| [Statistics](https://bhagesh-h.github.io/cyRAVEN/articles/statistics.html) | Sample-level aggregation; rank tests against moderated *t*; the compositional constraint; covariate diagnosis against adjustment; clinical variables as the question rather than a nuisance; multiplicity; differences expressed in units of uncertainty |
 | [Worked example](https://bhagesh-h.github.io/cyRAVEN/articles/figures.html) | All 22 figures from a run on public data, each with what it measures and what that run shows |
 | [Scope](https://bhagesh-h.github.io/cyRAVEN/articles/scope.html) | Nine excluded methods with the reasoning and the condition under which each becomes appropriate |
 
@@ -282,4 +283,6 @@ for the aggregation strategy underlying the differential state tests.
 
 ## Licence
 
-GPL-3. See [LICENSE](LICENSE).
+GPL-3. The full text is in
+[LICENSE](https://github.com/bhagesh-h/cyRAVEN/blob/main/LICENSE), and on the
+documentation site under [License](https://bhagesh-h.github.io/cyRAVEN/LICENSE-text.html).

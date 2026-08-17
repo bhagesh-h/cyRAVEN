@@ -258,6 +258,16 @@ conclude.
    Anything else is a study variable usable as `--group-column` or
    `--batch-column`. Anything prefixed `count.` is an absolute count.
 
+   A column that is a *measurement* rather than a grouping -- a severity score, a
+   laboratory value, an outcome flag -- goes to `--clinical-columns` instead. A
+   study column can only group samples, and a SOFA score cannot group anything;
+   naming it there associates it with every population and every marker, with the
+   test following the column's type (Spearman for numeric, Wilcoxon with Cliff's
+   delta for two levels, Kruskal-Wallis with epsilon-squared for more) and each
+   effect written with a bootstrap interval. Read
+   `clinical_variables_correlation.png` first: p-values are adjusted within each
+   variable on the assumption that the variables are separate questions.
+
    `is_control = TRUE` marks a control tube. Those samples are excluded from
    testing without being recorded as QC failures, and their 99.5th percentile can
    anchor a threshold for a marker with no resolvable density minimum.

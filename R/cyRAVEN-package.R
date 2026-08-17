@@ -85,5 +85,24 @@ utils::globalVariables(c(
   "detection", "n",
   # Acquisition-time QC figure: columns of the per-bin table, plus the midpoint
   # assigned onto it immediately before the plot call.
-  "n_events", "t_mid", "flagged"
+  "n_events", "t_mid", "flagged",
+  # Clinical association figures. All seven are assigned onto the frame in the
+  # lines directly above each plot call: `.key` and `.var` are the two axes of
+  # the heatmap, `.eff` the signed effect it fills by, `.lab` and `.mark` the
+  # tile text and its significance asterisk, and `.x`/`.y` the plotted pair in
+  # the detail figure. `batch` is a column of the frame built in
+  # fig_populations_by_batch().
+  ".key", ".var", ".eff", ".lab", ".mark", ".x", ".y", "batch",
+  # Clinical forest, correlogram, landscape and trajectory, and the between-group
+  # volcano. Same rule as above: every one is a column assigned onto the frame in
+  # the lines immediately above its plot call. `.lo`/`.hi` are the bootstrap
+  # interval, `.sig` the three-state significance label, `.a`/`.b`/`.r`/`.absr`
+  # the correlogram's two axes and its coefficient, `.samp`/`.pop`/`.z`/`.val` the
+  # landscape's columns, rows, z-score and strip value, `.t`/`.pid`/`.out` the
+  # trajectory's timepoint, patient and outcome. `estimate`, `comparison_group`,
+  # `n_reference` and `n_comparison` are columns of the stats tables the figures
+  # are handed.
+  ".a", ".absr", ".b", ".hi", ".lo", ".n", ".out", ".pid", ".pop", ".r",
+  ".fly", ".samp", ".sig", ".t", ".ty", ".val", ".z",
+  "comparison_group", "estimate", "n_comparison", "n_reference"
 ))

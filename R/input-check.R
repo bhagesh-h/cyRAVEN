@@ -74,36 +74,71 @@ report_input_check <- function(fcs, smap, sheet, spec, opt) {
   need_direct <- setdiff(unique(unlist(lapply(spec, direct_of))), scatter)
   need_any    <- setdiff(unique(unlist(lapply(spec, anyof_of))), scatter)
   need   <- unique(c(need_direct, need_any))
-  absent <- setdiff(need_direct, markers)
+
+  # WHAT THE RUN ACTUALLY MATCHES, WHICH IS NOT WHAT THE HEADER SAYS.
+  # read_fcs_resolved() makes each channel name syntactically valid the way R
+  # does, so a name holding a hyphen, a slash or a space is changed: PE-A becomes
+  # PE.A and "Blue B 710/50-A" becomes Blue.B.710.50.A. The scored matrix carries
+  # the changed names, while this check and --list-channels both read the
+  # original.
+  #
+  # Comparing the specification against the ORIGINAL therefore passed a config
+  # the run could not score. Observed on a panel with no $PnS labels, where every
+  # channel is a detector name: --check reported "every named marker is present",
+  # and the run then reported every population UNAVAILABLE, raised no error, and
+  # stopped several stages later for an unrelated-looking reason. A check that
+  # gives a false all-clear is worse than no check, so it compares against both
+  # spellings and distinguishes the two failures.
+  scorable <- make.names(markers)
+  # In the panel but spelled the way the run cannot match: fixable, and the fix
+  # is mechanical.
+  mis_spelled <- need_direct[!need_direct %in% scorable & need_direct %in% markers]
+  # In neither spelling: genuinely not in these files.
+  absent <- setdiff(need_direct, union(markers, scorable))
   # A disjunction is only fatal when EVERY member is gone, so report those
-  # populations rather than the individual names.
+  # populations rather than the individual names. Members are matched against
+  # both spellings for the same reason as above.
   dead_any <- names(spec)[vapply(spec, function(req) {
     m <- anyof_of(req)
-    length(m) > 0L && !length(intersect(m, markers))
+    length(m) > 0L && !length(intersect(m, union(markers, scorable)))
   }, logical(1))]
   log_msg("population specification: ", length(spec), " population(s) needing ",
           length(need), " marker(s)")
+  if (length(mis_spelled))
+    note(length(mis_spelled), " channel name(s) in the specification are in this ",
+         "panel but spelled the way the run CANNOT match: ",
+         paste(mis_spelled, collapse = ", "), ". Write them as ",
+         paste(make.names(mis_spelled), collapse = ", "),
+         ". Channel names are made syntactically valid when the files are read, ",
+         "so a hyphen, a slash or a space becomes a dot; --list-channels prints ",
+         "the original. Left as they are, every population using them is ",
+         "reported UNAVAILABLE and no error is raised.")
   if (length(absent)) {
     note("the specification names ", length(absent),
          " marker(s) no file contains: ", paste(absent, collapse = ", "),
          ". Those populations would be reported UNAVAILABLE. Names must match ",
          "$PnS exactly.")
-  } else {
+  } else if (!length(mis_spelled)) {
     log_msg("  every named marker is present")
   }
   if (length(dead_any))
     note(length(dead_any), " population(s) whose any_of disjunction has no ",
          "member in the panel: ", paste(dead_any, collapse = ", "),
          ". Those would be reported UNAVAILABLE.")
+  # `shared` is the intersection of the RAW header names, so it has to be put on
+  # the same footing as the specification before the two are compared. Comparing
+  # sanitised specification names against raw shared names made every marker in
+  # a correctly written config look present-in-some-files-but-not-all.
+  shared_ok <- unique(c(shared, make.names(shared)))
   # Partial loss inside a disjunction is survivable, so it is a note and not a
   # problem -- the same distinction score_populations() makes when it logs
   # "any_of reduced to ...".
-  thin_any <- setdiff(intersect(need_any, markers), shared)
+  thin_any <- setdiff(intersect(need_any, union(markers, scorable)), shared_ok)
   if (length(thin_any))
     log_msg("  NOTE any_of member(s) present in some files but not all: ",
             paste(sort(thin_any), collapse = ", "),
             " (the disjunction narrows where they are absent)")
-  partial <- setdiff(need_direct, shared)
+  partial <- setdiff(need_direct, shared_ok)
   partial <- setdiff(partial, absent)
   if (length(partial))
     log_msg("  NOTE present in some files but not all: ",
@@ -311,6 +346,22 @@ list_channels <- function(fcs) {
   usable <- sort(ref$symbol[ref$role == "marker"])
   log_msg(length(usable), " marker name(s) to use in a specification:")
   log_msg("  ", paste(usable, collapse = ", "))
+  # THE NAME TO WRITE IS NOT ALWAYS THE NAME ABOVE. Channel names are made
+  # syntactically valid when the files are read, so anything but a letter, a
+  # digit or a dot becomes a dot. A specification written from the line above
+  # then matches nothing, reports every population UNAVAILABLE and raises no
+  # error. Panels labelled CD3, CD4, CD14 are unaffected, which is why this was
+  # not obvious; a panel with no $PnS labels, where every name is a detector, is
+  # affected throughout.
+  .scorable <- make.names(usable)
+  if (any(.scorable != usable)) {
+    .i <- which(.scorable != usable)
+    log_msg("  NOTE ", length(.i), " of those name(s) must be written differently ",
+            "in the config, because a hyphen, slash or space is not valid in a ",
+            "name:")
+    for (k in .i)
+      log_msg("    ", usable[k], "   ->   write it as   ", .scorable[k])
+  }
 
   # ---- does every file carry the same panel ---------------------------------
   if (length(fcs) > 1L) {

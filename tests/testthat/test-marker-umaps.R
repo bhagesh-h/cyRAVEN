@@ -92,3 +92,28 @@ test_that("it returns early rather than writing an empty folder", {
   expect_length(cyRAVEN::fig_marker_umaps_by_group(
     marker_cells()[0, ], "CD3", out, group_col = "timepoint"), 0L)
 })
+
+
+test_that("the split figure is wider than the pooled one, one panel per level", {
+  # NOT a test of the panel border. The border is set inside a local closure that
+  # is not reachable from here, and detecting a drawn rectangle in a PNG is not
+  # worth the machinery; it was checked by eye when it was added. What this pins
+  # is the thing a border change could plausibly break by accident -- that the
+  # split figure still gets a canvas sized to its number of levels, rather than
+  # the pooled figure's width with the panels squeezed into it.
+  out <- withr::local_tempdir()
+  d <- marker_cells()
+  f <- basename(suppressMessages(cyRAVEN::fig_marker_umaps_by_group(
+    d, "CD3", out, group_col = "timepoint")))
+  expect_true("umap_CD3.png" %in% f)
+  expect_true("umap_CD3_by_timepoint.png" %in% f)
+
+  png_width <- function(p) {
+    con <- file(p, "rb"); on.exit(close(con), add = TRUE)
+    readBin(con, "raw", 16L)
+    readBin(con, "integer", 1L, size = 4L, endian = "big")
+  }
+  w_pooled <- png_width(file.path(out, "umap_CD3.png"))
+  w_split  <- png_width(file.path(out, "umap_CD3_by_timepoint.png"))
+  expect_gt(w_split, w_pooled)
+})

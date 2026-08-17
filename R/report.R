@@ -93,6 +93,116 @@ json_table <- function(d) {
          paste0("[", rows, "]", collapse = ","), "]}")
 }
 
+#' One line saying what a table contains
+#'
+#' WHY IT IS A LOOKUP AND NOT DERIVED. A column list is not a description: a
+#' reader who meets `compositional_concordance.csv` needs to be told that it
+#' classifies each result against both parameterisations, and no amount of
+#' inspecting its headers says that. The lines below are the same one-liners the
+#' `outputs` vignette carries, so the report and the documentation cannot drift
+#' into saying different things about the same file.
+#'
+#' A run with several marker panels writes `group_comparison_stats_<panel>.csv`,
+#' so a name that is not found is tried once more with its last underscore segment
+#' removed. An unknown table gets no line rather than a vague one -- a description
+#' that could be about any table is worse than none, and its absence is a visible
+#' prompt to add it here.
+#' @param file table file name, with or without a directory.
+#' @return A single string, or "" when the table is not known.
+#' @keywords internal
+report_table_note <- function(file) {
+  d <- c(
+    # ---- quality control ----
+    "staining_qc.csv" = "Per-sample staining verdict and the reason for any exclusion.",
+    "thresholds_used.csv" = "Every threshold this run derived: value, how it was derived, the cofactor, and whether the sample is an outlier against its peers.",
+    "threshold_scale_qc.csv" = "Per marker, the panel median threshold and each sample's robust z against it.",
+    "acquisition_qc.csv" = "Per sample, whether the instrument behaved consistently through the acquisition, and which intervals were flagged.",
+    "acquisition_qc_bins.csv" = "One row per time interval per sample: event rate and how far each channel departed from the run.",
+    "acquisition_qc_impact.csv" = "How far each population's frequency would move if the flagged acquisition intervals were dropped.",
+    "fmo_agreement.csv" = "Each derived cut against its FMO-anchored equivalent, expressed in units of the cut's own uncertainty.",
+    "spreading_pairs.csv" = "Per channel pair, how much wider the receiving channel's negative population becomes.",
+    "spreading_receivers.csv" = "Per marker, the total spreading it receives and whether that explains a threshold fallback.",
+    "calibration.csv" = "Bead calibration fit per channel, written by --calibration-beads.",
+    "gate_counts.csv" = "Event counts surviving each level of the gate hierarchy, per sample.",
+    "populations_unavailable.csv" = "One row per sample and population the panel cannot score, with the reason it cannot.",
+    # ---- uncertainty ----
+    "threshold_uncertainty.csv" = "Per sample and marker: the sampling and method components of the threshold's uncertainty, their quadrature sum, and how well the valley resolved.",
+    "uncertainty_budget.csv" = "How much each threshold contributes to each population's frequency uncertainty, per sample.",
+    # ---- conformance ----
+    "specification_conformance.csv" = "This run's thresholds against an accepted baseline's, scaled by the baseline's own spread, with a verdict per marker.",
+    "specification_conformance_populations.csv" = "The same baseline comparison for population frequencies rather than thresholds.",
+    "specification_changes.csv" = "Populations added, removed or redefined since the baseline run.",
+    # ---- abundance ----
+    "population_frequencies.csv" = "The run's primary result: one row per sample and population, with the percentage of parent and the event count behind it.",
+    "population_marker_mfi.csv" = "Median transformed intensity and percent positive, per sample, population and marker.",
+    "functional_markers.csv" = "Percent positive for the functional marker blocks declared in the config, per sample and population.",
+    "population_ratios.csv" = "Derived population ratios, where the config declares any.",
+    "absolute_counts.csv" = "Measured cells per microlitre per sample and population, from --absolute-counts.",
+    "absolute_counts_raw.csv" = "The supplied counts workbook flattened exactly as read, before any header or name interpretation. Read this first when a count looks wrong.",
+    "absolute_counts_stats.csv" = "Between-group tests on measured cells per microlitre rather than on percentages.",
+    # ---- inference ----
+    "group_comparison_stats.csv" = "Between-group abundance test per population: medians, Cliff's delta, raw and BH-adjusted p, and the uncertainty the difference is worth in.",
+    "compositional_clr_stats.csv" = "The same abundance tests run on centred log-ratios, because percentages of one parent cannot all move independently.",
+    "compositional_concordance.csv" = "Each population classified by whether the percentage and the log-ratio parameterisations agree about it.",
+    "marker_state_stats.csv" = "Differential marker state per population and marker, on per-sample medians.",
+    "functional_markers_stats.csv" = "Between-group tests on functional marker positivity.",
+    "population_ratios_stats.csv" = "Between-group tests on the declared population ratios.",
+    "paired_comparison_stats.csv" = "Paired test per population for a repeated-measures design, using only the units present in both conditions.",
+    "covariate_adjusted_stats.csv" = "Rank ANCOVA: the group difference after adjusting for the named covariates.",
+    "subcluster_marker_shifts.csv" = "Marker shifts between compartments on pooled events. Descriptive, with effect sizes and no p-values.",
+    "design_feasibility.csv" = "Which group comparisons this design can support and why the rest cannot. Read before any p-value.",
+    "parametric_tests.csv" = "The t-test or ANOVA equivalent of each rank test, with the normality and equal-variance assumptions it needs recorded beside it.",
+    "posthoc_tests.csv" = "Pairwise comparisons by Games-Howell, Tukey HSD and Dunn, for three or more groups.",
+    "normality_tests.csv" = "Shapiro-Wilk per population and group, and Brown-Forsythe across groups: the evidence for using rank tests.",
+    "statistical_methods.csv" = "Every method commonly reported in this literature, whether this run computed it, and why.",
+    # ---- clinical ----
+    "clinical_association.csv" = "One row per population and clinical variable: the test, n, the effect with its bootstrap interval, raw and BH-adjusted p, and an underpowered flag.",
+    "clinical_association_markers.csv" = "The same clinical association against per-sample median marker intensity, collapsed across populations.",
+    # ---- diagnostics ----
+    "threshold_drift_stats.csv" = "Whether the thresholds themselves separate by group, which would make an abundance difference definitional rather than biological.",
+    "confounding_diagnostics.csv" = "Per covariate: whether it differs between groups, whether it associates with the outcome, and the verdict from both.",
+    "batch_mixing_stats.csv" = "iLISI batch mixing in the embedding against a permutation null.",
+    "batch_group_confounding.csv" = "Cramer's V between batch and study group, and whether batch correction was allowed or refused on it.",
+    "marker_batch_drift.csv" = "Earth Mover's distance between batches per marker, in analysis units and scaled by the marker's own MAD.",
+    "threshold_batch_drift.csv" = "The threshold drift test grouped by acquisition batch instead of by study group.",
+    "batch_correction.csv" = "Whether a batch correction ran, which method fitted it, and the reason. Written on a refusal too.",
+    # ---- clustering ----
+    "unsupervised_clusters.csv" = "Cluster assignment per cell, from the unsupervised cross-check on the gate specification.",
+    "cluster_gate_agreement_clusters.csv" = "Per cluster, the declared population that dominates it and how pure that match is.",
+    "cluster_gate_agreement_populations.csv" = "Per declared population, how much of it the unsupervised clustering recovers.",
+    "subcluster_k_selection.csv" = "The silhouette-selected number of subclusters, from --auto-subcluster-k.",
+    "cluster_gate_proposals.csv" = "Learned two-marker gate geometry for clusters no declared population covers, with held-out metrics.",
+    "cluster_gate_polygons.csv" = "Polygon vertices of those proposed gates, in transformed units.",
+    # ---- external labels ----
+    "external_label_gates.csv" = "Per supplied external label, the learned gating strategy and its held-out metrics at each depth.",
+    "external_label_polygons.csv" = "Polygon vertices of the learned strategies, on the analysis scale.",
+    "gate_transferability.csv" = "Precision, recall and F1 on each donor, from a strategy refitted with that donor withheld.",
+    "gate_transferability_summary.csv" = "Minimum, median, maximum and IQR of F1 across donors.",
+    # ---- explore ----
+    "explore_cluster_profile.csv" = "Per cluster: size, phenotype string, fraction positive and median per channel.",
+    "explore_qc_clusters.csv" = "The cluster-level gate: the call for each cluster and the basis for it.",
+    "explore_cluster_abundance.csv" = "Per donor and cluster, with counting uncertainty and the limits of detection and quantification.",
+    "explore_cluster_stats.csv" = "Donor-level group tests on cluster abundance, carrying the batch and group confounding verdict.",
+    "explore_cells.csv" = "One row per cell: sample, event index, cluster and UMAP coordinates.",
+    "explore_vs_populations.csv" = "Cross-tabulation of unsupervised clusters against the declared population labels.",
+    "explore_findings.csv" = "Clusters that no declared population covers -- what the specification is missing.",
+    "explore_population_split.csv" = "Declared labels that span several clusters -- what the specification lumps together.",
+    "explore_provenance.csv" = "Every choice explore mode made, and the basis for each.",
+    "spec_gaps.csv" = "Gaps between the population specification and what the data contains.",
+    # ---- auxiliary ----
+    "patient_metadata_english.csv" = "The patient table after column mapping and value translation, as the pipeline read it.",
+    "population_codes.csv" = "Numeric codes for populations, samples and cohorts, for writing back into FCS keywords.",
+    "sample_map_template.csv" = "A sample map skeleton for this directory, written by --write-sample-map.",
+    "cells_umap.csv" = "One row per cell: embedding coordinates with sample, population and panel.")
+  f <- basename(file)
+  if (f %in% names(d)) return(unname(d[f]))
+  # Panel suffix: group_comparison_stats_panel2.csv -> group_comparison_stats.csv.
+  g <- sub("_[^_]+\\.csv$", ".csv", f)
+  if (g != f && g %in% names(d))
+    return(paste0(unname(d[g]), " This copy covers one marker panel only."))
+  ""
+}
+
 #' Legacy HTML table renderer
 #'
 #' Retained because the interactive tables are rendered from JSON in the
@@ -237,10 +347,25 @@ report_section <- function(outdir, id, title, description, figures = character(0
     if (is.null(d)) next
     bytes <- bytes + file.size(p)
     tid <- paste0("tab-", gsub("[^A-Za-z0-9]+", "-", sub("[.]csv$", "", t)))
+    note <- report_table_note(t)
+    # EACH TABLE IS ITS OWN TOGGLE, CLOSED. A section can carry a dozen tables of
+    # several hundred rows each, and opening the section to look at one figure
+    # used to unroll all of them: the figures ended up separated by yards of
+    # scrollable grid. The name and the row count stay visible when it is closed,
+    # so the section still says what it holds, and the description is inside --
+    # a reader deciding whether to open it needs the name, and a reader who has
+    # opened it needs the sentence.
+    #
+    # It is also why the body renders lazily: cyInit() fills only the tables whose
+    # toggle is open, and the rest are built the first time they are opened. On a
+    # run with forty tables that is most of the report's load time.
     h <- c(h, sprintf(paste0(
       "<div class='tab' id='%s'>",
-      "<div class='tabhead'><h3>%s</h3>",
-      "<span class='dim'>%d rows &times; %d cols</span>",
+      "<details class='tabdet'><summary>",
+      "<span class='chev' aria-hidden='true'></span>",
+      "<h3>%s</h3><span class='dim'>%d rows &times; %d cols</span></summary>",
+      "%s",
+      "<div class='tabhead'>",
       "<input class='search' type='search' placeholder='Search this table' ",
       "oninput='cyFilter(\"%s\")' aria-label='Search %s'/>",
       "<select class='pagesel' onchange='cyFilter(\"%s\")' aria-label='Rows to show'>",
@@ -248,9 +373,10 @@ report_section <- function(outdir, id, title, description, figures = character(0
       "<option value='100'>100 rows</option><option value='0'>All rows</option></select>",
       "<button class='dl' onclick='cyCsv(\"%s\")'>Export CSV</button>",
       "</div><div class='tabwrap'><table></table></div>",
-      "<p class='none shown'></p></div>"),
-      tid, html_escape(basename(t)), nrow(d), ncol(d), tid,
-      html_escape(basename(t)), tid, tid))
+      "<p class='none shown'></p></details></div>"),
+      tid, html_escape(basename(t)), nrow(d), ncol(d),
+      if (nzchar(note)) sprintf("<p class='tabnote'>%s</p>", html_escape(note)) else "",
+      tid, html_escape(basename(t)), tid, tid))
     h <- c(h, sprintf("<script type='application/json' id='%s-data'>%s</script>",
                       tid, json_table(d)))
     nav <- c(nav, sprintf("<a class='nav-tab' href='#%s'>%s</a>", tid,
@@ -367,7 +493,11 @@ report_css <- function() {
   ".chev{width:0;height:0;border-left:6px solid var(--mut);",
   "border-top:4.5px solid transparent;border-bottom:4.5px solid transparent;",
   "transition:transform .15s;flex:0 0 auto}",
-  "details[open] .chev{transform:rotate(90deg)}",
+  # DIRECT CHILD, NOT ANY DESCENDANT. Tables are now toggles of their own, so a
+  # bare `details[open] .chev` rotated every table's chevron as soon as the
+  # SECTION containing them opened -- a dozen closed tables all showing an open
+  # arrow.
+  "details[open] > summary .chev{transform:rotate(90deg)}",
   ".sec-title{font-weight:600;flex:1 1 auto}",
   ".sec-count{color:var(--mut);font-size:.76rem;font-family:var(--mono)}",
   ".sec-body{padding:.4rem 1rem 1.1rem}",
@@ -416,12 +546,27 @@ report_css <- function() {
   "#lbbar button:hover{background:#2a2f38}",
   "#lbname{font-family:var(--mono);flex:1 1 auto;overflow:hidden;",
   "text-overflow:ellipsis;white-space:nowrap}",
-  # Tables.
-  ".tab{margin:1.2rem 0}",
-  ".tabhead{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;",
-  "margin-bottom:.35rem}",
-  ".tabhead h3{margin:0;font-size:.86rem;font-family:var(--mono);font-weight:600;",
+  # Tables. Each is a toggle inside its section, so its summary is styled a step
+  # quieter than a section's: a thinner bar, no background of its own until
+  # hovered, and the file name in the mono face it is referred to by everywhere
+  # else.
+  ".tab{margin:.55rem 0}",
+  ".tabdet{border:1px solid var(--line);border-radius:6px;overflow:hidden}",
+  ".tabdet > summary{padding:.4rem .6rem;background:var(--bg);gap:.5rem}",
+  ".tabdet > summary:hover{background:var(--panel)}",
+  ".tabdet[open] > summary{background:var(--panel);",
+  "border-bottom:1px solid var(--line)}",
+  ".tabdet summary h3{margin:0;font-size:.82rem;font-family:var(--mono);",
+  "font-weight:600;text-transform:none;letter-spacing:0;color:var(--fg);",
   "flex:0 1 auto}",
+  # The one-line description of what the table holds, between its name and the
+  # grid itself.
+  ".tabnote{color:var(--mut);font-size:.79rem;margin:.5rem .6rem .1rem;",
+  "max-width:70ch}",
+  ".tabhead{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;",
+  "margin:.45rem .6rem .35rem}",
+  ".tabdet > .tabwrap,.tabdet > p.shown{margin-left:.6rem;margin-right:.6rem}",
+  ".tabdet > p.shown{margin-bottom:.5rem}",
   ".dim{color:var(--mut);font-size:.74rem;flex:1 1 auto}",
   "input.search,select.pagesel{border:1px solid var(--line);border-radius:5px;",
   "padding:.2rem .45rem;font-size:.78rem;background:#fff}",
@@ -467,8 +612,25 @@ report_js <- function() {
   # so search, paging and export all read the same array.
   "function cyInit(){document.querySelectorAll(\"script[type='application/json']\")",
   ".forEach(function(s){CY[s.id.replace(/-data$/,'')]=JSON.parse(s.textContent);});",
-  "Object.keys(CY).forEach(function(id){CY[id].sort=-1;cyFilter(id);});",
+  # RENDER ONLY WHAT IS OPEN. Every table is a closed toggle, so building all of
+  # their grids at load would spend the time and then hide the result. cyShow()
+  # builds one the first time it is opened and marks it, so reopening is free.
+  "Object.keys(CY).forEach(function(id){CY[id].sort=-1;",
+  "var b=document.getElementById(id);var t=b&&b.querySelector('details');",
+  "if(!t||t.open)cyShow(id);});",
   "cySync();cyCur();}\n",
+  "function cyShow(id){if(!CY[id]||CY[id].drawn)return;CY[id].drawn=1;cyFilter(id);}\n",
+  # A table link in the contents opens the table it points at. Without this the
+  # browser jumps to a collapsed toggle and the reader sees the name they clicked
+  # and no table, which reads as a broken link.
+  "function cyReveal(el){for(var n=el;n;n=n.parentNode){",
+  "if(n.tagName==='DETAILS'&&!n.open)n.open=true;}",
+  "var b=el.closest?el.closest('.tab'):null;if(b)cyShow(b.id);}\n",
+  "document.addEventListener('click',function(e){",
+  "var a=e.target&&e.target.closest?e.target.closest('a.nav-tab,a.nav-fig'):null;",
+  "if(!a)return;var h=a.getAttribute('href')||'';if(h.charAt(0)!=='#')return;",
+  "var el=document.getElementById(h.slice(1));if(!el)return;cyReveal(el);",
+  "setTimeout(function(){el.scrollIntoView({block:'start'});},0);});\n",
   "function cyRows(id){var d=CY[id];var box=document.getElementById(id);",
   "var q=box.querySelector('input.search').value.trim().toLowerCase();",
   "var rows=d.rows;",
@@ -534,8 +696,12 @@ report_js <- function() {
   "if(document.getElementById('lb').classList.contains('on')){",
   "if(e.key==='+'||e.key==='=')cyZset(LBZ*1.25);",
   "if(e.key==='-')cyZset(LBZ/1.25);}});\n",
+  # Expand all reaches the table toggles too -- they are part of the document now,
+  # and a button that left half the content folded would not be expanding all.
   "function cyAll(open){document.querySelectorAll('details').forEach(function(d){",
-  "d.open=open;});cySync();cyCur();}\n",
+  "d.open=open;});",
+  "if(open)Object.keys(CY).forEach(cyShow);",
+  "cySync();cyCur();}\n",
   # THE SIDEBAR MIRRORS THE DOCUMENT. A section's figure and table links are
   # shown exactly when that section is open, so Expand all and Collapse all move
   # both at once and the contents list never claims a state the page is not in.
@@ -581,7 +747,10 @@ report_js <- function() {
   # Opening or closing a section moves every section below it, so the marked
   # entry has to be recomputed then too.
   "document.addEventListener('toggle',function(e){",
-  "if(e.target.tagName==='DETAILS'){cySync();cyCur();}},true);\n",
+  "if(e.target.tagName!=='DETAILS')return;",
+  "if(e.target.open){var b=e.target.parentNode;",
+  "if(b&&b.classList&&b.classList.contains('tab'))cyShow(b.id);}",
+  "cySync();cyCur();},true);\n",
   "document.addEventListener('DOMContentLoaded',cyInit);\n")
 }
 
@@ -754,9 +923,16 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
             "it survives correction across populations. Compositional results",
             "test the same abundances as centred log-ratios, because percentages",
             "of one parent cannot all move independently."),
-      figures = c("group_comparison.png", "marker_state.png",
+      # group_differences.png comes FIRST: it is the whole comparison on one pair
+      # of axes and it is how a reader picks which of the panels below to read
+      # carefully. population_trajectories.png is last because it only exists for
+      # a repeated-measures design and answers a different question -- direction
+      # of travel rather than difference at a timepoint.
+      figures = c("group_differences.png", "group_comparison.png",
+                  "marker_state.png",
                   "functional_markers.png", "population_ratios.png",
-                  "absolute_counts.png", "absolute_counts_qc.png"),
+                  "absolute_counts.png", "absolute_counts_qc.png",
+                  "population_trajectories.png"),
       # design_feasibility comes FIRST because it decides which of the tests
       # below exist at all: a comparison it rules out is absent from the results
       # rather than negative, and a reader who meets that table after the
@@ -771,8 +947,53 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
                  "population_ratios.csv", "population_ratios_stats.csv",
                  "absolute_counts.csv", "absolute_counts_stats.csv",
                  "absolute_counts_raw.csv",
+                 # These two were reaching the catch-all, whose whole purpose is
+                 # to be empty. A paired test and a covariate-adjusted test are
+                 # between-group results and belong beside the others.
+                 "paired_comparison_stats.csv", "covariate_adjusted_stats.csv",
+                 "subcluster_marker_shifts.csv",
                  "normality_tests.csv", "parametric_tests.csv",
                  "posthoc_tests.csv", "statistical_methods.csv")),
+
+    report_section(outdir, "s8b", "Clinical variables",
+      paste("A severity score, a laboratory value or an outcome flag against",
+            "every population and every marker. Numeric variables are tested",
+            "with Spearman's rho, two-level variables with Wilcoxon and Cliff's",
+            "delta, more levels with Kruskal-Wallis, and p-values are adjusted",
+            "within each variable rather than across all of them: each variable",
+            "is its own question asked of every population.",
+            "Read the effect before the asterisk. On a small cohort these tests",
+            "detect only very large effects, so a null result says little and",
+            "the `underpowered` column marks every test run on fewer than ten",
+            "samples. This is association and not survival analysis: a 28-day",
+            "flag is a two-group comparison, which is what it is, and no",
+            "time-to-event model is fitted because the sheet carries no",
+            "follow-up time.",
+            "The figures are in reading order. The correlation between the",
+            "variables comes first, because adjusting within each variable",
+            "assumes they are separate questions and that figure is what shows",
+            "whether they are: two variables strongly correlated with each other",
+            "are one question asked twice. Then the association heatmap across",
+            "every variable, then the cohort landscape, then per variable the",
+            "effect sizes with their bootstrap intervals and the points behind",
+            "them."),
+      # Ordered explicitly rather than left to the glob: the glob would sort
+      # clinical_association.png ahead of the correlogram the section tells the
+      # reader to read first, and the per-variable files after both, which is the
+      # order the description promises. The glob still runs last so a variable
+      # named in the sheet cannot produce a figure no section names.
+      # [A-Za-z0-9_], not [a-z0-9_]. The file name keeps the sheet column's case --
+      # gsub("[^A-Za-z0-9]+", "_", cv) -- so a column written SOFA produces
+      # clinical_SOFA.png, which a lower-case-only pattern missed. The figure then
+      # reached the catch-all section instead of this one, which is the section
+      # that explains how to read it.
+      figures = unique(c("clinical_variables_correlation.png",
+                  "clinical_association.png", "clinical_association_markers.png",
+                  "clinical_landscape.png",
+                  list.files(outdir, "^clinical_effects_[A-Za-z0-9_]+[.]png$"),
+                  list.files(outdir, "^clinical_[A-Za-z0-9_]+[.]png$"))),
+      tables = c("clinical_association.csv",
+                 "clinical_association_markers.csv")),
 
     report_section(outdir, "s9", "Confounding and batch structure",
       paste("A variable confounds only when it both differs between the groups",
@@ -783,7 +1004,11 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
             "Cramer's V between batch and group: correction is refused above the",
             "configured threshold, because at that level of association removing",
             "the batch effect and removing the finding are the same operation."),
-      figures = c("threshold_drift.png", "batch_diagnostic.png"),
+      # populations_by_batch asks a different question from batch_diagnostic:
+      # whether the REPORTED NUMBERS step with batch, rather than whether the
+      # embedding separates by it.
+      figures = c("threshold_drift.png", "batch_diagnostic.png",
+                  "populations_by_batch.png"),
       tables = c("threshold_drift_stats.csv", "confounding_diagnostics.csv",
                  "batch_group_confounding.csv", "batch_mixing_stats.csv",
                  "marker_batch_drift.csv")),

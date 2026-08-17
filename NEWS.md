@@ -10,6 +10,76 @@ deliberate exception in "A sample that fails staining QC is no longer assumed to
 be a control" below. That one changes numbers, because the numbers it changes
 were wrong.
 
+## Clinical variables are analysed instead of only carried
+
+`read_samplesheet()` recognises a fixed list of subject attributes — `patient_id`,
+`sex`, `age_years`, `height_cm`, `weight_kg`, `infection_focus`, `cohort`,
+`wbc_per_ul` — and carried everything else as a "study column", usable only to
+*group* samples. A SOFA score cannot group anything and a 28-day survival flag
+grouped as a cohort loses the fact that it is an outcome, so those columns were
+read, written into the manifest, and never analysed.
+
+* `--clinical-columns` (or `samples: clinical_columns:` in the config) names any
+  sheet column as a clinical variable in its own right. Both metadata tables are
+  searched, because the sheet's own columns end up split between them.
+* The test follows the variable's type: Spearman for numeric, Wilcoxon with
+  Cliff's delta for two levels, Kruskal-Wallis with epsilon-squared for more.
+  Multiplicity is corrected within each variable, not across all of them.
+* Every signed effect carries a 95% percentile bootstrap interval. On ten patients
+  most intervals span zero, and that is the finding rather than a shortcoming of
+  the figure.
+* `stats_clinical_association()`, `fig_clinical_heatmap()`,
+  `fig_clinical_detail()`, `fig_clinical_forest()`,
+  `fig_clinical_correlogram()`, `fig_clinical_landscape()` and
+  `fig_clinical_trajectory()` are exported.
+* `fig_clinical_correlogram()` shows the clinical variables against **each
+  other**. Correcting within each variable assumes they are separate questions;
+  where two of them describe one gradient, a population associated with both is
+  one finding counted twice, and nothing else in a run would show that.
+* This is association and not survival analysis. A 28-day flag is tested as the
+  two-group comparison it is, and no time-to-event model is fitted, because the
+  sheet carries no follow-up time.
+
+## Between-group differences, all populations on one figure
+
+* `group_differences.png` (`fig_group_volcano()`): Cliff's delta against −log10 p,
+  one point per population. `group_comparison.png` is the figure for reading one
+  population carefully; this is the one for deciding which to read.
+* It draws the smallest p-value the design can reach. A rank-sum test has
+  `choose(n1 + n2, n1)` rank arrangements under the null, so nothing below
+  `2 / choose(n1 + n2, n1)` is attainable — 0.016 at 4 against 5. Where that floor
+  sits above 0.05, an empty upper region of the figure is a property of the design
+  and the figure now says so.
+* `population_trajectories.png`: with `--paired-column` and
+  `--condition-column`, one line per patient across the conditions with the median
+  over them, coloured by the first two-level clinical column. A box per timepoint
+  averages away the direction each patient moves, which is usually the signal.
+
+## Report and figure fixes
+
+* Every table in `report.html` is its own toggle, closed, with a one-line
+  description of what it holds. A section with a dozen tables of several hundred
+  rows no longer separates its figures by yards of scrollable grid, and table
+  bodies are built on first open rather than all at load.
+* `populations_by_batch.png` has a key. `facet_wrap` draws x-axis labels on the
+  bottom panel of each column only, so on a three-row grid two thirds of the
+  panels had coloured boxes with nothing naming them.
+* Categorical strata with exactly two levels are drawn blue and amber rather than
+  green and red. Levels arrive alphabetically, so a survival flag came out "no"
+  green and "yes" red — a value judgement the wrong way round, asserted by the
+  palette rather than by anything in the data.
+* The pooled marker UMAP in `marker_umaps_by_group/` gets the same border and grey
+  strip as the split ones, from the same code path.
+* `paired_comparison_stats.csv`, `covariate_adjusted_stats.csv` and
+  `subcluster_marker_shifts.csv` are named by the between-group section instead of
+  reaching the catch-all, whose purpose is to be empty.
+* Captions on figures whose canvas is sized from the data are wrapped to that
+  canvas. A caption is drawn at one size with no wrapping of its own, so a line
+  longer than the canvas was silently clipped.
+* The licence in the documentation sidebar links to the full text. pkgdown prints
+  the `License` field verbatim, and `GPL (>= 3)` is not one of the abbreviations it
+  autolinks, so the site named a licence and gave no way to read it.
+
 ## A sample that fails staining QC is no longer assumed to be a control
 
 * `staining_verdict()` reads an **absent** `is_control` column as "might be a

@@ -74,6 +74,41 @@ failure_catalogue <- function() {
     list(pattern = "--reference-date must be",
          meaning = "The reference date is not in YYYY-MM-DD form.",
          action = "Pass it as e.g. --reference-date 2025-01-01."),
+    # Observed on a liposome-uptake panel whose specification named one channel.
+    # Every table was written and the run then stopped at the embedding with a
+    # stopifnot() from run_umap(), naming a matrix the user never supplied and
+    # giving no hint of the cause.
+    list(pattern = "ncol\\(mat\\) >= 2",
+         meaning = paste("The shared UMAP needs at least two channels and was",
+                         "given one. The transformed matrix holds only the",
+                         "channels the specification names, so a specification",
+                         "naming a single marker leaves the embedding with one",
+                         "feature column. Everything before this point ran: the",
+                         "thresholds, frequencies and uncertainty tables in the",
+                         "results directory are complete and usable."),
+         action = paste("Name more channels in the config. A population does not",
+                        "have to be added: markers listed under",
+                        "functional_blocks: are transformed too, so listing the",
+                        "rest of the panel there is enough, and it also reports",
+                        "each one's intensity inside the populations already",
+                        "declared.")),
+    # Same panel, earlier failure. The specification used the channel name
+    # --list-channels prints, which is not the name the scorer matches when it
+    # holds anything but letters, digits and dots.
+    list(pattern = "marker\\(s\\) not in panel|no any_of marker available",
+         meaning = paste("A population names a channel the scored matrix does not",
+                         "contain. Where a channel name holds a hyphen, a slash or",
+                         "a space, the reader makes it syntactically valid the way",
+                         "R does -- PE-A becomes PE.A, 'Blue B 710/50-A' becomes",
+                         "Blue.B.710.50.A -- while --list-channels prints the",
+                         "original. A config written from what that flag printed",
+                         "matches nothing, and no error is raised: every",
+                         "population is simply reported UNAVAILABLE."),
+         action = paste("Replace every hyphen, slash and space in the channel",
+                        "names in the config with a dot, then re-run --check,",
+                        "which reports the specification's markers as present or",
+                        "absent before any file is analysed. Panels whose markers",
+                        "are named CD3, CD4, CD14 are unaffected.")),
     list(pattern = "cannot open|No such file|does not exist|cannot find",
          meaning = paste("A path the run was given does not exist as seen from",
                          "inside the process. Under Docker this is almost always",

@@ -20,52 +20,16 @@
 # collection, by the theme, or by the device's own background handling -- and an
 # assertion on the object would have missed all of them.
 #
-# Reading the PNG header directly keeps this dependency-free: `png` is not
-# installed in the pinned image and adding it to Suggests to run one test would
-# grow the footprint for no analytical gain.
+# The contract itself -- png_header(), expect_figure_contract() and the bounds
+# they check -- now lives in helper-figure-contract.R, so a second test file
+# writing figures asserts against the same definition instead of a weaker copy of
+# it.
 #
-# COVERAGE. 23 of the 24 exported fig_* functions are rendered here. The
-# exception is fig_gate_strategy(), which needs a fitted convex-gate strategy
-# object; test-convex-gates.R already renders it as part of testing the fit.
-
-# IHDR is the first chunk and has a fixed layout, so the fields below sit at
-# known offsets: 8-byte signature, 4-byte length, 4-byte type, then width,
-# height, bit depth and colour type.
-png_header <- function(path) {
-  con <- file(path, "rb")
-  on.exit(close(con), add = TRUE)
-  sig <- readBin(con, "raw", 8L)
-  if (!identical(sig[1:4], as.raw(c(0x89, 0x50, 0x4E, 0x47))))
-    stop("not a PNG: ", path)
-  readBin(con, "raw", 8L)                       # chunk length + "IHDR"
-  w  <- readBin(con, "integer", 1L, size = 4L, endian = "big")
-  h  <- readBin(con, "integer", 1L, size = 4L, endian = "big")
-  readBin(con, "raw", 1L)                       # bit depth
-  ct <- as.integer(readBin(con, "raw", 1L))
-  list(width = w, height = h, colour_type = ct)
-}
-
-# Colour type 6 is RGBA, which is how a figure acquires a transparent
-# background; 2 is RGB, 3 is a palette, 0 is greyscale, all opaque.
-OPAQUE_TYPES <- c(0L, 2L, 3L)
-# A rendered dimension below this means a row or panel has collapsed rather
-# than merely being small. The overlay bug produced exactly this shape.
-FLOOR_PX <- 150L
-# The ceiling safe_ggsave() enforces; past it the device silently fails.
-CEIL_PX  <- 30000L
-
-expect_figure_contract <- function(path, label) {
-  expect_true(file.exists(path), info = paste(label, "was not written"))
-  hdr <- png_header(path)
-  expect_true(hdr$colour_type %in% OPAQUE_TYPES,
-              info = paste0(label, ": colour type ", hdr$colour_type,
-                            " (6 = RGBA, i.e. a transparent background)"))
-  expect_gte(hdr$width,  FLOOR_PX)
-  expect_gte(hdr$height, FLOOR_PX)
-  expect_lte(hdr$width,  CEIL_PX)
-  expect_lte(hdr$height, CEIL_PX)
-  invisible(hdr)
-}
+# COVERAGE. Of the 29 exported fig_* functions, this file renders 23. The clinical
+# family and the between-group volcano are rendered against the same contract in
+# test-clinical.R, next to the tests for the statistics they draw.
+# fig_gate_strategy() needs a fitted convex-gate strategy object, and
+# test-convex-gates.R renders it as part of testing the fit.
 
 # ---- fixtures ---------------------------------------------------------------
 # Built on helper-synthetic.R wherever possible so this file adds no new data,
@@ -270,6 +234,34 @@ test_that("the UMAP figures render opaque", {
   f6 <- file.path(out, "population_marker_heatmap.png")
   suppressMessages(fig_population_marker_heatmap(synth_mfi(), f6))
   expect_figure_contract(f6, "fig_population_marker_heatmap")
+})
+
+test_that("the sample key is dropped only past the cap, and the panel survives", {
+  # REGRESSION. With one legend entry per sample, a 107-sample cohort spent most
+  # of the canvas on the key and the UMAP panels collapsed to overlapping
+  # slivers. Two things have to hold: the key goes away when there are too many
+  # samples, and nothing changes for the cohort sizes this package is normally
+  # run on.
+  cells <- synth_cells()
+  n_small <- length(unique(cells$sample_id))
+  expect_lte(n_small, 40L)   # the fixture must sit UNDER the cap for this test
+
+  f_small <- file.path(out, "umap_overview_small.png")
+  suppressMessages(fig_umap_overview(cells, f_small))
+  h_small <- expect_figure_contract(f_small, "fig_umap_overview (few samples)")
+
+  # Same cells, relabelled into more samples than the cap. The embedding is
+  # unchanged; only the number of distinct sample_id values grows.
+  many <- cells
+  many$sample_id <- paste0("S", seq_len(nrow(many)) %% 60L)
+  expect_gt(length(unique(many$sample_id)), 40L)
+  f_many <- file.path(out, "umap_overview_many.png")
+  suppressMessages(fig_umap_overview(many, f_many))
+  h_many <- expect_figure_contract(f_many, "fig_umap_overview (many samples)")
+
+  # The canvas is the same size either way -- the fix is the key, not the paper.
+  expect_equal(h_many$width, h_small$width)
+  expect_equal(h_many$height, h_small$height)
 })
 
 test_that("clustering and batch figures render", {

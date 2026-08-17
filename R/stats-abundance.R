@@ -470,6 +470,197 @@ sci_labels <- function(x) {
   parse(text = ifelse(nzchar(txt), txt, "\"\""))
 }
 
+#' Smallest two-sided p a rank-sum test can produce at these group sizes
+#'
+#' WHY THIS MATTERS ON A SMALL COHORT. A Wilcoxon rank-sum test has
+#' `choose(n1 + n2, n1)` equally likely rank arrangements under the null, so the
+#' most extreme possible separation gives a two-sided p of
+#' `2 / choose(n1 + n2, n1)` and nothing smaller is reachable. At 4 against 5 that
+#' floor is 0.016; after correcting across a dozen populations, no population can
+#' reach 0.05 no matter how cleanly the groups separate. A reader looking at a
+#' volcano plot with an empty top has no way to tell "nothing differs" from "this
+#' design cannot produce a significant p", and those are opposite conclusions.
+#' Drawing the floor answers it on the figure.
+#' @param n1,n2 group sizes.
+#' @keywords internal
+rank_sum_p_floor <- function(n1, n2) {
+  if (!is.finite(n1) || !is.finite(n2) || n1 < 1 || n2 < 1) return(NA_real_)
+  min(1, 2 / choose(n1 + n2, n1))
+}
+
+#' Between-group differences for every population in one figure
+#'
+#' WHAT IT IS. One point per population: the effect on the x-axis, the evidence on
+#' the y-axis. `group_comparison.png` gives each population a panel and shows
+#' every sample, which is the right figure for reading one population carefully
+#' and the wrong one for finding which population to read -- a dozen panels have
+#' to be compared by eye, and the effect sizes never appear on it at all. This is
+#' the shortlist: everything far from the centre line moved, everything high up
+#' moved consistently.
+#'
+#' WHY CLIFF'S DELTA AND NOT A FOLD CHANGE by default. A fold change of medians is
+#' unbounded and, at these group sizes, dominated by whichever sample sits at the
+#' median; a population whose reference median is near zero produces a fold change
+#' of 40 that means nothing. Cliff's delta is bounded [-1, 1], is the effect size
+#' the rank test actually corresponds to, and is directly readable: 0.5 means that
+#' in three quarters of the cross-sample pairs the comparison group was higher.
+#' `effect = "log2fc"` gives the conventional axis for anyone who wants it.
+#'
+#' WHAT THE TWO HORIZONTAL LINES MEAN. The upper is p = 0.05. The lower is the
+#' smallest p this design can produce at all (see [rank_sum_p_floor()]); when it
+#' sits BELOW the 0.05 line the design can reach significance, and when it sits
+#' above, no population can, and an empty upper region says nothing about biology.
+#' @param stats output of [stats_group_comparison()].
+#' @param outfile path.
+#' @param effect `"cliff"` (default) or `"log2fc"`.
+#' @param p_source `"raw"` or `"BH"` -- which p-value on the y-axis.
+#' @param label_n how many of the strongest populations to name on the figure.
+#' @param title_noun the subject of the title, e.g. "Population abundance".
+#' @param dpi resolution.
+#' @param colors palette.
+#' @export
+fig_group_volcano <- function(stats, outfile, effect = c("cliff", "log2fc"),
+                              p_source = c("raw", "BH"), label_n = 8L,
+                              title_noun = "Population abundance", dpi = 200,
+                              colors = fcs_colors()) {
+  effect <- match.arg(effect); p_source <- match.arg(p_source)
+  if (is.null(stats) || !nrow(stats)) return(invisible(NULL))
+  d <- stats
+  d$.p <- if (p_source == "BH") d$p_adj_BH else d$p_value
+  d <- d[is.finite(d$.p), , drop = FALSE]
+  if (!nrow(d)) return(invisible(NULL))
+  if (effect == "cliff") {
+    d$.x <- d$cliffs_delta
+    xlab <- "Cliff's delta (positive = higher in the comparison group)"
+    # Romano's rank-effect conventions: 0.147 small, 0.33 medium, 0.474 large.
+    # Drawn as guides, not thresholds -- nothing in this package filters on them.
+    guides_at <- c(-0.474, -0.33, 0.33, 0.474)
+  } else {
+    d$.x <- suppressWarnings(log2(d$fold_change))
+    xlab <- "log2 fold change of medians"
+    guides_at <- c(-1, 1)
+  }
+  d <- d[is.finite(d$.x), , drop = FALSE]
+  if (!nrow(d)) return(invisible(NULL))
+  d$.y <- -log10(pmax(d$.p, .Machine$double.xmin))
+  d$.sig <- ifelse(!is.na(d$significant_BH) & d$significant_BH, "BH p < 0.05",
+                   ifelse(!is.na(d$significant_raw) & d$significant_raw,
+                          "raw p < 0.05", "not significant"))
+  key <- stats::setNames(
+    c(colors$gate_highlight %||% "#D62728", colors$study_palette[3] %||% "#8E44E8",
+      colors$axis_ticks %||% "grey30"),
+    c("BH p < 0.05", "raw p < 0.05", "not significant"))
+  # Only the strongest few are named. Every population labelled turns the figure
+  # into a word cloud, and the table beside it carries all of them anyway.
+  lab <- d[order(d$.p), , drop = FALSE]
+  lab <- utils::head(lab, max(0L, label_n))
+  # PUSH LABELS APART. Two populations with nearly the same effect and the same
+  # p-value put their names on top of each other, and the overlap was unreadable
+  # -- which defeats the one job a label has. ggrepel would do this properly but
+  # is not a dependency, so the labels are separated by hand: within each side of
+  # the plot, walk up the y-axis and lift any label that is closer to the one
+  # below it than a fixed fraction of the axis range.
+  if (nrow(lab) > 1L) {
+    span <- diff(range(d$.y, na.rm = TRUE))
+    gap <- if (is.finite(span) && span > 0) span * 0.055 else 0.04
+    lab$.ty <- lab$.y
+    for (side in c(FALSE, TRUE)) {
+      i <- which((lab$.x >= 0) == side)
+      if (length(i) < 2L) next
+      i <- i[order(lab$.ty[i])]
+      for (k in seq_along(i)[-1]) {
+        prev <- lab$.ty[i[k - 1L]]
+        if (lab$.ty[i[k]] - prev < gap) lab$.ty[i[k]] <- prev + gap
+      }
+    }
+  } else if (nrow(lab)) lab$.ty <- lab$.y
+  # THE FLOOR IS PER COMPARISON, NOT ONE FOR THE FIGURE. Each comparison group has
+  # its own size, so each has its own attainable minimum: comparing 3 against 6
+  # cannot go below 0.024 while 6 against 6 reaches 0.0022. Taking the minimum
+  # across all of them and drawing one line would put the most permissive group's
+  # floor on every panel, telling a reader that a comparison could have reached a
+  # p-value it cannot -- which is the exact misreading this line exists to stop.
+  floor_p <- vapply(seq_len(nrow(d)), function(i)
+    rank_sum_p_floor(d$n_reference[i], d$n_comparison[i]), numeric(1))
+  fl_by <- stats::aggregate(
+    list(.fl = floor_p), by = list(comparison_group = d$comparison_group),
+    FUN = function(v) suppressWarnings(min(v, na.rm = TRUE)))
+  fl_by <- fl_by[is.finite(fl_by$.fl), , drop = FALSE]
+  fl_by$.fly <- -log10(fl_by$.fl)
+  ncomp <- length(unique(d$comparison_group))
+  # One number is quotable in the subtitle only when every comparison shares it.
+  fl <- if (nrow(fl_by) && length(unique(fl_by$.fl)) == 1L) fl_by$.fl[1] else NA_real_
+
+  fig <- ggplot(d, aes(.x, .y)) +
+    geom_vline(xintercept = 0, linewidth = 0.4, colour = colors$axis_ticks) +
+    geom_vline(xintercept = guides_at, linetype = "dotted", linewidth = 0.3,
+               colour = colors$grid_major) +
+    geom_hline(yintercept = -log10(0.05), linetype = "dashed", linewidth = 0.4,
+               colour = colors$threshold_review %||% "firebrick") +
+    geom_point(aes(colour = .sig, size = n_reference + n_comparison), alpha = 0.9) +
+    # A leader line, because the label may have been lifted off its point.
+    geom_segment(data = lab, aes(xend = .x, y = .ty, yend = .y),
+                 linewidth = 0.25, colour = colors$grid_major) +
+    geom_text(data = lab, aes(y = .ty, label = population,
+                              hjust = ifelse(.x >= 0, -0.12, 1.12)),
+              size = 2.4, colour = colors$label_text, show.legend = FALSE) +
+    scale_colour_manual(values = key, name = NULL) +
+    scale_x_continuous(expand = expansion(mult = 0.22)) +
+    labs(title = paste0(title_noun, ": every population, effect against evidence"),
+         x = xlab,
+         y = paste0("-log10(", if (p_source == "BH") "BH-adjusted p" else "p", ")"))
+  # THE SIZE KEY APPEARS ONLY WHEN SIZE MEANS SOMETHING. In the usual design every
+  # population is measured in every sample, so every point is the same size and a
+  # key would label one value. Where a population is missing from some samples the
+  # sizes differ, and then the key is the only thing that says so.
+  fig <- fig + if (length(unique(d$n_reference + d$n_comparison)) > 1L)
+    scale_size_continuous(range = c(1.4, 3.6), name = "samples tested")
+  else scale_size_continuous(range = c(2.2, 2.2), guide = "none")
+  # Drawn from a per-group frame, so facet_wrap places each comparison's own floor
+  # in its own panel.
+  if (nrow(fl_by))
+    fig <- fig +
+      geom_hline(data = fl_by, aes(yintercept = .fly), linetype = "dotdash",
+                 linewidth = 0.4, colour = colors$study_palette[5] %||% "#0072F0",
+                 inherit.aes = FALSE)
+  if (ncomp > 1L) fig <- fig + facet_wrap(~ comparison_group, ncol = 2)
+  fig <- fig +
+    labs(subtitle = paste0("dashed red line p = 0.05",
+           if (is.finite(fl)) sprintf(
+             "; dot-dash blue line p = %.3g, the smallest this design can reach", fl)
+           else if (nrow(fl_by))
+             paste0("; dot-dash blue line is the smallest p each comparison can ",
+                    "reach, which differs with its group sizes")
+           else "", "; dotted verticals are effect-size conventions"),
+         caption = cap_wrap(paste0(
+           "Wilcoxon rank-sum on per-sample values, so the replicates are ",
+           "subjects. The x-axis is the effect and is the part that survives a ",
+           "small cohort; the y-axis is bounded by the group sizes",
+           if (is.finite(fl)) sprintf(
+             " and cannot exceed %.2f here, so the ceiling of this figure is a ",
+             -log10(fl))
+           else if (nrow(fl_by))
+             ", so the ceiling of each panel is a "
+           else " ",
+           if (nrow(fl_by)) "property of the design rather than of the data. " else "",
+           "Every point is in group_comparison_stats.csv with its interval and ",
+           "its uncertainty columns."), if (ncomp > 1L) 10.4 else 7.8)) +
+    theme_cyto(9, colors = colors) +
+    theme(legend.position = "top", legend.justification = "left",
+          legend.direction = "horizontal",
+          panel.border = element_rect(colour = colors$axis_ticks, fill = NA,
+                                      linewidth = 0.4),
+          strip.background = element_rect(fill = colors$grid_major, colour = NA),
+          plot.caption = element_text(size = 7, hjust = 0,
+                                      colour = colors$caption_text))
+  safe_ggsave(outfile, plot = fig,
+              width = if (ncomp > 1L) 10.4 else 7.8,
+              height = if (ncomp > 1L) 4.4 * ceiling(ncomp / 2) + 1.6 else 5.8,
+              dpi = dpi, limitsize = FALSE)
+  log_msg("[fig] wrote ", outfile)
+  invisible(fig)
+}
+
 #' Population frequency figure -- one lettered panel per population
 #'
 #' Delegates to fig_group_comparison() so the frequency overview and the

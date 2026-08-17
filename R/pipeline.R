@@ -185,6 +185,15 @@ run_cyraven_impl <- function(opt) {
         log_msg("  ", sub("_", "-", paste0("--", r)), " ", v, " (from the config)")
       }
     }
+    # clinical_columns is a LIST in the YAML and a comma-separated string on the
+    # command line, so it is collapsed to one form here rather than handled
+    # twice downstream.
+    if (is.null(opt[["clinical_columns", exact = TRUE]]) &&
+        !is.null(cfg$samples[["clinical_columns"]])) {
+      opt$clinical_columns <- paste(unlist(cfg$samples[["clinical_columns"]]),
+                                    collapse = ",")
+      log_msg("  --clinical-columns ", opt$clinical_columns, " (from the config)")
+    }
   }
 
   smap <- if (!is.null(.sheet)) .sheet$smap
@@ -1807,6 +1816,17 @@ run_cyraven_impl <- function(opt) {
           freq_p, file.path(opt$outdir, paste0("group_comparison", sfx, ".png")),
           group_of = group_of, stats = gstats, reference = opt$reference_group,
           p_source = p_src, panel_label = plabel)
+        # The same tests as one figure: effect against evidence, every population
+        # at once. group_comparison.png is for reading one population, this is for
+        # finding which one to read.
+        if (!is.null(gstats))
+          .ext_ok("group volcano", {
+            fig_group_volcano(
+              gstats, file.path(opt$outdir,
+                                paste0("group_differences", sfx, ".png")),
+              title_noun = if (nzchar(plabel))
+                paste0("Population abundance, ", plabel) else "Population abundance")
+          })
       }
       # Always rendered, pooled and in per-cent -- the cohort-composition view.
       fig_population_frequencies(
@@ -2086,6 +2106,116 @@ run_cyraven_impl <- function(opt) {
     })
   }
 
+  # ---- clinical variables against populations and markers -------------------
+  # Read from the SHEET, not from `patients`: the sheet recognises a fixed set of
+  # subject attributes and carries everything else as a study column, which is
+  # exactly where a severity score or an outcome flag ends up. Taking them from
+  # smap is what makes those columns reachable at all.
+  .clin_opt <- opt[["clinical_columns", exact = TRUE]]
+  if (!is.null(.clin_opt) && nzchar(.clin_opt) && !is.null(smap)) {
+    .ext_ok("clinical association", {
+      cl <- trimws(strsplit(.clin_opt, ",")[[1]]); cl <- cl[nzchar(cl)]
+      .sid <- as.character(smap$sample_id %||% smap$file)
+      # A CLINICAL COLUMN CAN LIVE IN EITHER TABLE, so both are searched.
+      # read_samplesheet() moves the columns it recognises as subject attributes
+      # -- age_years, sex, infection_focus, cohort and the rest -- out of the
+      # sample map and into `patients`, keyed by patient_id. Everything it does
+      # not recognise stays in the map. Looking in only one of the two made half
+      # the sheet's own columns invisible: age_years and infection_focus were
+      # reported "not in the sheet" for a sheet that plainly contains them.
+      .clin_lookup <- function(cv) {
+        if (cv %in% names(smap))
+          return(stats::setNames(smap[[cv]], .sid))
+        if (!is.null(patients) && cv %in% names(patients) &&
+            "patient_id" %in% names(smap)) {
+          row <- match(norm_id(smap$patient_id), norm_id(patients$patient_id))
+          return(stats::setNames(patients[[cv]][row], .sid))
+        }
+        NULL
+      }
+      found <- stats::setNames(lapply(cl, .clin_lookup), cl)
+      have <- cl[!vapply(found, is.null, logical(1))]
+      miss <- setdiff(cl, have)
+      if (length(miss))
+        log_msg("  NOTE --clinical-columns in neither the sample map nor the ",
+                "patient attributes, skipped: ", paste(miss, collapse = ", "))
+      if (length(have)) {
+        clin <- found[have]
+        # BEFORE the association, and outside the branch that needs it to have
+        # produced something. This figure is about the sheet's own columns: it
+        # needs no frequency table and no estimable test, and on a cohort too
+        # small for the association it is the one thing still worth drawing --
+        # whether the variables the study collected say the same thing twice.
+        fig_clinical_correlogram(
+          clin, file.path(opt$outdir, "clinical_variables_correlation.png"))
+        ca <- stats_clinical_association(freq, mfi, clin)
+        if (!is.null(ca)) {
+          if (!is.null(ca$populations)) {
+            write.csv(ca$populations,
+                      file.path(opt$outdir, "clinical_association.csv"),
+                      row.names = FALSE)
+            log_msg("wrote clinical_association.csv (", nrow(ca$populations),
+                    " population x variable test(s), ",
+                    sum(ca$populations$significant_BH, na.rm = TRUE),
+                    " significant after BH within variable; ",
+                    sum(ca$populations$underpowered, na.rm = TRUE),
+                    " on fewer than 10 samples)")
+            fig_clinical_heatmap(ca$populations, "population",
+                                 file.path(opt$outdir, "clinical_association.png"),
+                                 title = "Clinical variables against population abundance")
+            for (cv in have) {
+              .cvsafe <- gsub("[^A-Za-z0-9]+", "_", cv)
+              fig_clinical_detail(
+                freq, clin[[cv]], cv,
+                file.path(opt$outdir, paste0("clinical_", .cvsafe, ".png")))
+              # The scatter shows the data, the forest shows how well the effect is
+              # pinned down. Both per variable, because an interval is only
+              # readable against one axis at a time.
+              fig_clinical_forest(
+                ca$populations, "population", cv,
+                file.path(opt$outdir,
+                          paste0("clinical_effects_", .cvsafe, ".png")))
+            }
+            # One picture of the whole cohort: severity, outcome, timepoint and
+            # infection focus as strips over the population matrix.
+            fig_clinical_landscape(
+              freq, clin, file.path(opt$outdir, "clinical_landscape.png"))
+          }
+          if (!is.null(ca$markers)) {
+            write.csv(ca$markers,
+                      file.path(opt$outdir, "clinical_association_markers.csv"),
+                      row.names = FALSE)
+            log_msg("wrote clinical_association_markers.csv (",
+                    nrow(ca$markers), " marker x variable test(s))")
+            fig_clinical_heatmap(ca$markers, "marker",
+                                 file.path(opt$outdir,
+                                           "clinical_association_markers.png"),
+                                 title = "Clinical variables against marker intensity")
+          }
+        } else {
+          log_msg("  NOTE clinical association produced no testable pair; every ",
+                  "variable was constant, all-missing, or below the minimum ",
+                  "sample count")
+        }
+      }
+    })
+  }
+
+  # ---- population abundance per acquisition batch ---------------------------
+  # Separate from the batch diagnostics, which ask whether the EMBEDDING
+  # separates by batch. This asks whether the reported numbers do.
+  # opt$batch_column, not `bcol`: that name is assigned inside an earlier block
+  # and is not in scope here.
+  .bc <- opt[["batch_column", exact = TRUE]]
+  if (!is.null(.bc) && !is.null(smap) && .bc %in% names(smap)) {
+    .ext_ok("populations by batch", {
+      .sidb <- as.character(smap$sample_id %||% smap$file)
+      fig_populations_by_batch(
+        freq, stats::setNames(as.character(smap[[.bc]]), .sidb),
+        file.path(opt$outdir, "populations_by_batch.png"))
+    })
+  }
+
   # ---- paired / repeated-measures design ------------------------------------
   if (!is.null(opt$paired_column) && !is.null(freq) && TRUE) {
     .ext_ok("paired comparison", {
@@ -2121,6 +2251,27 @@ run_cyraven_impl <- function(opt) {
           log_msg("  NOTE paired test produced nothing, check that every pairing ",
                   "unit has at least two conditions and at least 3 complete pairs exist")
         }
+        # ---- trajectories, one line per patient across the conditions --------
+        # Drawn whether or not the test above produced anything: the test needs
+        # complete pairs and refuses without them, and a cohort with incomplete
+        # follow-up is exactly the one where seeing the lines matters most.
+        #
+        # The colour is the first TWO-LEVEL clinical column, which is what an
+        # outcome flag looks like. A numeric score cannot colour a line usefully
+        # (twelve unique values, twelve colours) and a three-level variable makes
+        # three medians out of a dozen patients, so neither is used here.
+        .oc <- NULL; .ocn <- "outcome"
+        .clin_names <- if (!is.null(.clin_opt) && nzchar(.clin_opt))
+          trimws(strsplit(.clin_opt, ",")[[1]]) else character(0)
+        for (cn in .clin_names) {
+          v <- .col_of(cn)
+          if (is.null(v)) next
+          u <- unique(stats::na.omit(trimws(as.character(v))))
+          if (length(u) == 2L) { .oc <- v; .ocn <- cn; break }
+        }
+        fig_clinical_trajectory(
+          freq, cd, pr, file.path(opt$outdir, "population_trajectories.png"),
+          outcome_of = .oc, outcome_name = .ocn)
       }
     })
   }
