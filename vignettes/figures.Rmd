@@ -360,6 +360,11 @@ categories; and single-level columns, since one facet is not a comparison. Past
 four categories the run draws four and names the rest in the log.
 `--no-marker-group-umaps` skips the folder.
 
+Both kinds of file carry the same panel border and grey title bar. The pooled one
+is a single panel faceted by a constant, "All samples", so it comes out of the
+same code path as the split ones: a section where one figure is framed and the
+next is not reads as two kinds of figure rather than one kind drawn two ways.
+
 ## umap_density.png and umap_density_by_group.png
 
 Where cells are concentrated, overall and by group.

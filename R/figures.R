@@ -431,8 +431,35 @@ fig_umap_overview <- function(cells, outfile, panel_label = "",
   # wastes half the figure. Batches with a single stained sample per panel are
   # common, so skip rather than render it.
   if ("sample_id" %in% names(cells) && length(unique(cells$sample_id)) > 1L) {
-    plots[["sample"]] <- umap_discrete(cells, "sample_id", title = "Sample",
-                                       subtitle = "equal cells per sample", colors = colors)
+    nsmp <- length(unique(cells$sample_id))
+    # A COLOUR KEY WITH ONE ENTRY PER SAMPLE STOPS BEING A KEY.
+    #
+    # patchwork gives every panel an equal share of the canvas, and the share is
+    # spent on whatever the panel contains -- including its legend. On a
+    # 107-sample cohort the key listed 107 names in seven columns and took most
+    # of the figure: the UMAP panels collapsed into a few hundred pixels at the
+    # left with their titles, axis labels and points printed on top of each
+    # other, and nothing in the figure was readable.
+    #
+    # Past this many samples the key is dropped and the count is stated in its
+    # place. The panel still answers the question it exists for -- whether
+    # samples mix through the embedding or separate into per-sample islands --
+    # and that is read from the colours, not from matching 107 names to 107
+    # shades. cells_umap.csv carries the exact per-cell mapping for anyone who
+    # needs a specific sample.
+    #
+    # The cap sits above the cohorts this package is routinely run on (24 and 12
+    # samples), so their figures take the same path as before and do not change.
+    .smp_cap <- 40L
+    .p <- umap_discrete(
+      cells, "sample_id", title = "Sample",
+      subtitle = if (nsmp > .smp_cap)
+        paste0(format(nsmp, big.mark = ","), " samples, equal cells each; ",
+               "key omitted at this count, see cells_umap.csv")
+      else "equal cells per sample",
+      colors = colors)
+    if (nsmp > .smp_cap) .p <- .p + theme(legend.position = "none")
+    plots[["sample"]] <- .p
   }
   for (cv in covariates) {
     if (!cv %in% names(cells)) next
@@ -789,23 +816,70 @@ fig_marker_umaps_by_group <- function(cells, markers, outdir, group_col = NULL,
             "move it to the front.")
 
   dir.create(outdir, showWarnings = FALSE, recursive = TRUE)
+  # ONE PANEL LOOK FOR THE WHOLE SECTION. The pooled figure is a single panel and
+  # the split ones are facets, which used to mean the pooled figure had no strip
+  # and no border while its neighbours in the same section had both -- the same
+  # embedding, drawn two different ways, on facing pages. Faceting the pooled
+  # figure by a constant gives it the identical furniture from the identical code
+  # path. Added AFTER `cats` is resolved so it cannot be mistaken for a category;
+  # marker_facet_cols() would reject a single-level column anyway.
+  cells$.pooled <- "All samples"
   ps <- auto_point_aes(nrow(cells))$size * 0.8
   written <- character(0)
   # KEEP SUBTITLES SHORT. The subtitle is drawn at the panel's full width with no
   # wrapping, so a long one is silently clipped at the right edge -- the plot
   # still writes, it just loses the end of the sentence. Measured: 96 characters
   # ran off a 6.2-inch canvas.
+  # THE LAYOUT AND THE CANVAS HAVE TO AGREE, so both are computed here and the
+  # column count is passed to facet_wrap() rather than left to its default.
+  #
+  # They did not agree before. The width was sized as though every level sat in
+  # one row while facet_wrap chose its own grid: on a seven-level split it drew
+  # three columns over three rows inside a canvas 23 inches wide and 4.2 high,
+  # so the panels were squeezed into the left third and the rest of the figure
+  # was blank.
+  #
+  # Up to five levels stay in a single row, which is the layout the comparison
+  # wants -- the same embedding read left to right. Past five, rows are added
+  # instead of making the figure wider than a screen.
+  .grid <- function(nlev) {
+    nc <- if (nlev <= 5L) nlev else ceiling(nlev / 2L)
+    list(ncol = nc, nrow = ceiling(nlev / nc))
+  }
   .draw <- function(m, by) {
     ttl <- paste0(m, if (!is.null(by)) paste0(" by ", by) else "",
                   if (nzchar(panel_label)) paste0(", ", panel_label) else "")
     sub <- if (!is.null(by))
       "one embedding split by group; colour scale shared across panels"
     else
-      "all samples pooled; colour is asinh intensity, 1st-99th percentile"
+      # The strip now says "All samples", so repeating it here would label the
+      # same fact twice; what is left is the part the strip cannot carry.
+      "colour is asinh intensity, clipped to the 1st-99th percentile"
     p <- umap_continuous(cells, m, title = ttl, subtitle = sub,
                          point_size = ps, legend_name = m, colors = colors)
-    if (!is.null(by)) p <- p + facet_wrap(vars(.data[[by]]))
-    p
+    # A RULE BETWEEN THE PANELS, AND A TITLE BAR ON EVERY ONE. Every facet is the
+    # same embedding on the same axes with the same colour scale, so panels side
+    # by side with nothing between them read as one wide scatter: the eye has to
+    # find each boundary from a gap in the point density, and where a category's
+    # cells happen to reach the edge of their panel there is no gap to find. A
+    # thin border and a wider gutter make the division explicit at a glance.
+    #
+    # The pooled figure gets the same border and the same strip through the same
+    # code, faceted by a single constant level. It has nothing to divide, but it
+    # sits in the same report section as the split figures, and a section where
+    # one figure is framed and the next is not reads as two kinds of figure
+    # rather than one kind drawn two ways. The border stays out of theme_cyto():
+    # putting it there would box every panel of every other figure.
+    fby  <- if (is.null(by)) ".pooled" else by
+    nlev <- if (is.null(by)) 1L
+            else length(unique(stats::na.omit(cells[[by]])))
+    p +
+      facet_wrap(vars(.data[[fby]]), ncol = .grid(nlev)$ncol) +
+      theme(panel.border  = element_rect(colour = colors$axis_ticks,
+                                         fill = NA, linewidth = 0.4),
+            panel.spacing = grid::unit(0.7, "lines"),
+            strip.background = element_rect(fill = colors$grid_major,
+                                            colour = NA))
   }
   for (m in markers) {
     msafe <- gsub("[^A-Za-z0-9]+", "_", m)
@@ -822,8 +896,15 @@ fig_marker_umaps_by_group <- function(cells, markers, outdir, group_col = NULL,
       nlev <- length(unique(stats::na.omit(cells[[cv]])))
       f2 <- file.path(outdir, sprintf("umap_%s_by_%s.png", msafe,
                                       gsub("[^A-Za-z0-9]+", "_", cv)))
+      .g <- .grid(nlev)
+      # The single-row height is pinned to the value it has always had, so every
+      # split that fits in one row -- which is every cohort this package has been
+      # run on -- keeps exactly the geometry it had before the grid was made to
+      # agree with the canvas. Only a split that needs a second row gets a taller
+      # figure, and before this change those were the ones being drawn wrong.
       safe_ggsave(f2, plot = .draw(m, cv),
-                  width = max(7.6, 3.1 * nlev + 1.4), height = 4.2,
+                  width  = max(7.6, 3.1 * .g$ncol + 1.4),
+                  height = if (.g$nrow == 1L) 4.2 else 3.4 * .g$nrow + 0.9,
                   dpi = dpi, limitsize = FALSE)
       written <- c(written, f2)
     }

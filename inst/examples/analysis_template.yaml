@@ -63,6 +63,44 @@ samples:
                               # (cells/mL is accepted and divided by 1000)
 
 # -----------------------------------------------------------------------------
+# CLINICAL VARIABLES: a severity score, a laboratory value, an outcome flag.
+# -----------------------------------------------------------------------------
+# These are NOT the study group and NOT confounders. A confounder is screened to
+# decide whether a group difference can be believed; a clinical variable is the
+# question. Name any sheet column here and it is associated with every population
+# and every marker:
+#
+#   numeric    (SOFA, CRP, lactate, BMI)  -> Spearman's rho
+#   two-level  (28-day survival yes/no)   -> Wilcoxon rank-sum + Cliff's delta
+#   3+ levels  (infection focus)          -> Kruskal-Wallis + epsilon-squared
+#
+# Every signed effect is written with a 95 percent percentile bootstrap interval.
+# On ten patients most of those intervals span zero, and that is the result: an
+# effect of 0.6 whose interval runs -0.1 to 0.9 is a lead, not a finding.
+#
+# p-values are adjusted with Benjamini-Hochberg WITHIN each variable, because
+# each variable is its own question asked of every population. That assumes the
+# variables are independent of each other, which they often are not -- where the
+# sickest patients are also the ones who died, two columns describe one gradient.
+# clinical_variables_correlation.png is where that is visible, and it is the first
+# figure to read.
+#
+# WHY THIS EXISTS. The sheet recognises a fixed set of subject attributes and
+# carries everything else as a study column, usable only to GROUP samples. A
+# severity score cannot group anything, so before this it was read from the
+# sheet, written into the manifest, and never analysed.
+#
+# Association, not survival analysis: a 28-day flag is tested as the two-group
+# comparison it is. No time-to-event model is fitted, because the sheet carries
+# no follow-up time.
+#
+# Declared inside samples:, beside the other column roles. The equivalent flag is
+# --clinical-columns, and a flag always wins over the config.
+#
+# samples:
+#   clinical_columns: [sofa, survival_28d, crp, lactate]
+
+# -----------------------------------------------------------------------------
 # functional_blocks: markers read INSIDE a population rather than defining one.
 # -----------------------------------------------------------------------------
 # Scope resolves in this order: an explicit `populations:` list, then `require:`

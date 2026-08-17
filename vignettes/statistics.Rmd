@@ -188,6 +188,94 @@ outcome. `stats_rank_ancova()` fits the adjusted model on request, labels every
 row `EXPLORATORY`, and records `NOT FITTED` with the reason where residual
 degrees of freedom are insufficient.
 
+### 4a. Clinical variables, which are a different question
+
+A confounder is screened to decide whether a group difference can be believed.
+A clinical variable — a severity score, a laboratory value, an outcome flag — is
+the question itself, and `stats_clinical_association()` treats it that way.
+
+The test follows the variable's type rather than being chosen:
+
+| Variable | Test | Effect reported | Signed |
+|---|---|---|---|
+| Numeric (SOFA, CRP, lactate, BMI) | Spearman's rho | rho, with a bootstrap interval | yes |
+| Two levels (28-day survival) | Wilcoxon rank-sum | Cliff's delta, with a bootstrap interval | yes |
+| Three or more levels (infection focus) | Kruskal-Wallis | epsilon-squared | no |
+
+Epsilon-squared is `H / (n − 1)` — the proportion of rank variance the grouping
+accounts for, bounded 0 to 1. It is unsigned, because a variable with three
+unordered levels has a magnitude and no direction, and that is carried explicitly
+in a `signed` column rather than left for the reader to infer from a sign that
+happens to be positive. Before it was added, a multi-level variable produced a
+p-value and nothing else: the figure could say a test had run and not whether it
+had found anything.
+
+Rank methods throughout, for the reason they are used everywhere else in this
+package. Clinical scores are ordinal by construction, so a Pearson correlation
+asserts an interval scale the data does not have. Laboratory values are skewed
+and carry outliers that are real rather than erroneous — a creatinine of 335 is a
+patient, not a typing error — and a product-moment correlation on nine points
+with one such value is a statement about that one patient.
+
+Multiplicity is corrected **within each variable**, across the populations tested
+against it. Each variable is one question asked of every population, and that is
+the family; pooling every variable into one correction would penalise a
+well-powered variable for the company it keeps. The choice is recorded here
+because it is a judgement rather than a default.
+
+It also has a stated assumption, which is that the variables are separate
+questions. They frequently are not: in a cohort where the sickest patients are
+also the ones who died, SOFA and 28-day survival describe one gradient, and a
+population associated with both is one finding counted twice.
+`fig_clinical_correlogram()` exists to make that visible before the heatmap is
+read, because no correction can repair it and nothing else in the run would show
+it. Two-level variables appear there coded 0/1, for which Spearman is the
+rank-biserial correlation; variables with three or more unordered levels are
+excluded rather than coded 1/2/3, which would invent an ordering.
+
+### 4b. Effect intervals on a small cohort
+
+Every signed effect above is written with a 95% percentile bootstrap interval:
+2000 resamples of the patient–value pairs for Spearman, stratified within each arm
+for Cliff's delta, from a fixed seed so a given table always yields the same
+interval and the RNG stream is restored afterwards so nothing downstream is
+perturbed.
+
+The interval is the part of the answer that carries how little a small cohort
+constrains the effect. On ten patients a rho of 0.61 with an interval from −0.1 to
+0.9 and a rho of 0.05 can be the same underlying quantity, and the point estimate
+alone cannot say so; reporting the effect and its interval beside the p-value,
+rather than the p-value alone, is the standard recommendation for exactly this
+situation.
+
+Its own limits are stated on the figure that draws it. A percentile bootstrap at
+this sample size is approximate: below about nine observations the effective
+resample is smaller than the nominal one and coverage falls short of 95%. So a
+wide interval should be read as *this cohort does not constrain the effect* rather
+than as a calibrated range, and no interval is written at all below six samples —
+a number quoted at a width nobody should trust is worse than a blank.
+
+The same reasoning is why `group_differences.png` draws the smallest p-value the
+design can reach. A Wilcoxon rank-sum test has `choose(n1 + n2, n1)` equally
+likely rank arrangements under the null, so the most extreme separation possible
+gives a two-sided p of `2 / choose(n1 + n2, n1)`. At 4 against 5 that is 0.016,
+and after correcting across a dozen populations nothing can reach 0.05 however
+cleanly the groups separate. Where that floor sits above the 0.05 line, an empty
+region of the figure is a fact about the design and not about the biology.
+
+Two boundaries. This is **association, not survival analysis**: a 28-day flag is
+tested as the two-group comparison it is, and no time-to-event model is fitted,
+because the sample sheet carries no follow-up time and a proportional-hazards fit
+on a binary column with no time is a category error rather than an approximation.
+And every test runs on **one value per sample**, so the replicates are subjects;
+correlating a score against pooled events would treat one deeply acquired patient
+as tens of thousands of independent observations, which is the same failure
+`abundance_measure()` exists to prevent.
+
+The `underpowered` column marks every test run on fewer than ten samples. At that
+size a rank test detects only very large effects, so a null result carries almost
+no information and should not be reported as evidence of no association.
+
 ## 5. Batch effects
 
 Correction methods displace cells until batch labels mix. This is valid when
@@ -220,7 +308,9 @@ hypotheses and over-penalise every result.
 ## 7. Effect sizes
 
 Every p-value is reported with an effect size: Cliff's delta across samples, or
-matched-pairs rank-biserial for paired designs.
+matched-pairs rank-biserial for paired designs. Clinical associations add a
+bootstrap interval on the effect as well; see §4b for why, and for why the
+interval is suppressed rather than narrowed below six samples.
 
 Differences rather than ratios are reported for transformed intensities. Arcsinh
 and logicle scales admit negative values, on which a ratio is undefined in

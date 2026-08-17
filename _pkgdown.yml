@@ -4,6 +4,21 @@ template:
   bootstrap: 5
   light-switch: true
 
+# The licence in the sidebar is a LINK, not a string. pkgdown prints the
+# DESCRIPTION License field verbatim, and "GPL (>= 3)" is not one of the
+# abbreviations it knows how to autolink, so the site named a licence and gave the
+# reader no way to read it. pkgdown does render the full text as
+# LICENSE-text.html -- it was already being built and nothing pointed at it. The
+# structure list repeats pkgdown's default so overriding one component cannot drop
+# the others.
+home:
+  sidebar:
+    structure: [links, license, community, citation, authors, dev]
+    components:
+      license:
+        title: License
+        text: "[GPL (>= 3)](LICENSE-text.html) -- full text"
+
 reference:
 - title: Run the pipeline
   desc: >
@@ -157,6 +172,7 @@ reference:
   contents:
   - abundance_measure
   - stats_group_comparison
+  - fig_group_volcano
   - stats_marker_state
   - stats_subcluster_shifts
   - clr_frequencies
@@ -164,6 +180,28 @@ reference:
   - stats_confounding
   - stats_rank_ancova
   - stats_paired_comparison
+
+- title: Clinical variables
+  desc: >
+    A severity score, a laboratory value or an outcome flag is neither the study
+    group nor a confounder: a confounder is screened to decide whether a group
+    difference can be believed, a clinical variable is the question. The test
+    follows the variable's type -- Spearman for numeric, Wilcoxon with Cliff's
+    delta for two levels, Kruskal-Wallis for more -- and multiplicity is
+    corrected within each variable rather than across all of them. Association
+    only: a 28-day flag is a two-group comparison, and no time-to-event model is
+    fitted because the sheet carries no follow-up time.
+    The figures are in reading order: the variables against each other, then the
+    association across all of them, then the cohort as one annotated matrix, then
+    per variable the effects with their bootstrap intervals. Every signed effect
+    carries a percentile bootstrap interval, because on ten patients the interval
+    usually spans zero and that is the finding.
+  contents:
+  - stats_clinical_association
+  - fig_clinical_correlogram
+  - fig_clinical_landscape
+  - fig_clinical_forest
+  - fig_clinical_trajectory
 
 - title: Batch structure
   desc: >

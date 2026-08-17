@@ -318,6 +318,29 @@ permit, labelling every row `EXPLORATORY`. Where they do not, the output records
 `NOT FITTED` with the reason rather than a value that would appear comparable to
 the others in the folder.
 
+## 9a. Clinical variables, which are the opposite question
+
+`--covariates` names variables screened as *nuisances*: the question is whether a
+group difference can be believed in spite of them. `--clinical-columns` names
+variables that *are* the question — a severity score, a laboratory value, an
+outcome flag — and associates each with every population and every marker. The
+same column would be a different analysis under each flag, which is why they are
+two flags.
+
+One diagnostic belongs here rather than with the results.
+`clinical_variables_correlation.png` reports the clinical variables against each
+other, and is read before the association heatmap. p-values there are adjusted
+within each variable on the grounds that each variable is a separate question; in
+a cohort where the sickest patients are also the ones who died, SOFA and 28-day
+survival describe one gradient, and a population associated with both is one
+finding counted twice. No correction repairs that, and nothing else in the run
+would show it.
+
+Read the effect and its bootstrap interval before the asterisk. At the sample
+sizes these designs have, an interval spanning zero is the usual outcome and is
+the informative part; `underpowered` marks every test run on fewer than ten
+samples, where a null result carries almost no information.
+
 ## 10. Batch structure
 
 `--batch-column` names the variable identifying acquisition batch. Absent that,

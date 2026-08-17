@@ -215,6 +215,19 @@ A result surviving all four is one where the groups differ, the difference is
 large relative to donor variation, and it is larger than both the distance the
 gate can move and the noise in the count.
 
+**`group_differences.png`** is the same table as one figure: Cliff's delta against
+-log10 p, one point per population. Use it to decide which panel of
+`group_comparison.png` to read carefully, then read that panel.
+
+It carries one thing the table does not. The dot-dash line is the smallest p-value
+the design can produce at all: a rank-sum test has `choose(n1 + n2, n1)` equally
+likely rank arrangements under the null, so nothing below `2 / choose(n1 + n2, n1)`
+is reachable -- 0.016 at 4 against 5. Where that line sits **above** the p = 0.05
+line, no population can be significant however cleanly the groups separate, and an
+empty upper region says nothing about the biology. Check it before reporting a null
+result: "nothing differed" and "this design cannot detect a difference" are
+opposite conclusions that look identical on every other figure.
+
 ### 5.1a Was there enough to count?
 
 Placement and sufficiency are separate guarantees. A cut through a wide empty gap
@@ -354,6 +367,45 @@ beyond the observed range and reports an interval that does not say so.
 
 `--rank-ancova` fits it anyway where degrees of freedom permit, labels every row
 `EXPLORATORY`, and records `NOT FITTED` with a reason where they do not.
+
+### 6.1a Clinical variables
+
+**`clinical_association.csv`**, written by `--clinical-columns`
+
+The opposite question from a covariate. A covariate is a nuisance screened to
+decide whether a group difference can be believed; a clinical variable -- severity
+score, laboratory value, outcome flag -- is the question itself. The same column
+means a different analysis under each flag.
+
+Reading order, and it matters:
+
+1. **`clinical_variables_correlation.png`** first. p-values are adjusted within
+   each variable, which assumes the variables are separate questions. Where two of
+   them are strongly correlated with each other they are one question asked twice,
+   and a population associated with both is one finding, not two. No correction
+   repairs this.
+2. **`clinical_association.png`** for every variable at once. Read the signed
+   effect on the tile before the asterisk. A grey tile is a Kruskal-Wallis row
+   labelled with epsilon-squared: a magnitude with no direction, because a variable
+   with three unordered levels has none.
+3. **`clinical_effects_<variable>.png`** for how well each effect is pinned down.
+   The bar is a 95% percentile bootstrap interval. On ten patients most intervals
+   span zero, and that is the finding: an effect of 0.6 whose interval runs -0.1 to
+   0.9 is a lead worth powering a follow-up on, not a result. Below six samples no
+   interval is written at all.
+4. **`clinical_<variable>.png`** for the points, because a rank correlation of 0.8
+   on nine points can be one outlier and the scatter is the only place that shows.
+5. **`clinical_landscape.png`** to place one patient in the whole picture: samples
+   as columns ordered by the variable, clinical strips above, populations below as
+   z-scores within each row.
+
+The `underpowered` column marks every test on fewer than ten samples. At that size
+a rank test detects only very large effects, so a null result is not evidence of no
+association and must not be reported as one.
+
+This is association and **not survival analysis**. A 28-day flag is tested as the
+two-group comparison it is; no time-to-event model is fitted, because the sheet
+carries no follow-up time.
 
 ### 6.2 Batch
 

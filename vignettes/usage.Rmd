@@ -421,6 +421,31 @@ Both flags are required together. Pairing is never inferred: a design where each
 donor appears twice is indistinguishable, from the data alone, from one where two
 donors happen to share a label, and guessing wrong changes every p-value.
 
+The same two flags also produce `population_trajectories.png`: one line per
+patient across the conditions, with the cohort median drawn over them. Add
+`--clinical-columns survival_28d` and the lines are coloured by outcome, which is
+the comparison a longitudinal design is usually about -- survivors and
+non-survivors often differ in the direction each patient moves rather than at any
+single timepoint, and a box per timepoint averages exactly that away.
+
+### A cohort with clinical scores and outcomes
+
+```bash
+docker run --rm $D cyraven:1.0.0 \
+  --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
+  --group-column infection_focus --reference-group Pulmonary \
+  --clinical-columns sofa,survival_28d,crp_mg_l,age_years \
+  --outdir /results
+```
+
+Any sheet column can be named. `sofa` and `crp_mg_l` are numeric and get
+Spearman's rho, `survival_28d` has two levels and gets Wilcoxon with Cliff's
+delta, and each effect is written with a percentile bootstrap interval -- which on
+a cohort of ten usually spans zero, and seeing that is the point. Read
+`clinical_variables_correlation.png` first: p-values are adjusted within each
+variable on the assumption that the variables are separate questions, and two
+variables correlated with each other are one question asked twice.
+
 ### One sample's threshold is visibly wrong
 
 Where `gating_qc.png` shows the derived cut sitting in a shoulder for one sample
@@ -755,6 +780,7 @@ the panel split.
 | `--no-parametric` | on | Skip `parametric_tests.csv` and `posthoc_tests.csv` |
 | `--read-threads` | 1 | Read this many FCS files at once. Reading is the slowest stage and each file is independent. Peak memory scales with it, and results do not change |
 | `--covariates` | `age,sex` | Patient-table columns screened as confounders |
+| `--clinical-columns` | none | Sheet columns to test as clinical variables in their own right -- a severity score, a laboratory value, an outcome flag. Different from `--covariates`: a confounder is screened to decide whether a group difference can be believed, a clinical variable *is* the question. Numeric columns get Spearman, two-level columns Wilcoxon with Cliff's delta, three or more Kruskal-Wallis with epsilon-squared, and p-values are adjusted within each variable. Writes `clinical_association*.csv` and the figures below |
 | `--rank-ancova` | off | Additionally fit an exploratory covariate-adjusted rank ANCOVA. At single-digit n per group the adjustment is usually extrapolation; read `confounding_diagnostics.csv` first |
 | `--paired-column` | none | Column identifying the pairing unit, for example donor. Requires `--condition-column`. Pairing cannot be inferred, so nothing paired runs without it |
 | `--condition-column` | none | Column naming the condition within a pair, for example timepoint |

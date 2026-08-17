@@ -365,6 +365,22 @@ build_option_list <- function() list(
               dest = "covariates",
               help = paste("comma-separated patient-table columns to screen as",
                            "confounders [default %default]")),
+  # A CONFOUNDER AND A CLINICAL VARIABLE ARE NOT THE SAME THING, which is why
+  # this is a separate flag rather than a longer --covariates. A confounder is
+  # screened to decide whether a group difference can be believed; a clinical
+  # variable is the question. The sheet recognises a fixed set of subject
+  # attributes and carries everything else as a study column, usable only to
+  # GROUP samples -- so a severity score, which cannot group anything, was read
+  # and then ignored. Naming it here makes it an outcome to associate against.
+  optparse::make_option("--clinical-columns", type = "character", default = NULL,
+              dest = "clinical_columns",
+              help = paste("comma-separated sheet columns to associate with",
+                           "every population and marker: a severity score, a lab",
+                           "value, an outcome flag. Numeric columns get",
+                           "Spearman, two-level columns Wilcoxon with Cliff's",
+                           "delta, more levels Kruskal-Wallis; BH-adjusted",
+                           "within each variable. Writes clinical_association*",
+                           "and its figures")),
   optparse::make_option("--rank-ancova", action = "store_true", default = FALSE,
               dest = "rank_ancova",
               help = paste("additionally fit an EXPLORATORY covariate-adjusted",

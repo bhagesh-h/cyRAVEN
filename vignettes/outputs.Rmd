@@ -151,7 +151,8 @@ produce coordinates that are geometrically valid and biologically meaningless.
 | File | Content |
 |---|---|
 | `group_comparison_stats.csv` | Abundance between groups, per population |
-| `group_comparison.png` | The same as per-sample distributions |
+| `group_differences.png` | Every population on one pair of axes: the effect against the evidence. The shortlist -- read this to decide which panel below to read carefully |
+| `group_comparison.png` | The same as per-sample distributions, one panel per population |
 | `marker_state_stats.csv` | Differential state per population and marker |
 | `marker_state.png` | The same as per-sample distributions |
 | `functional_markers_stats.csv` | Functional blocks between groups |
@@ -168,6 +169,31 @@ produce coordinates that are geometrically valid and biologically meaningless.
 Every file above except the last three uses one value per sample.
 `subcluster_marker_shifts.csv` operates on pooled events, carries effect sizes
 without p-values, and answers a different question from the tests above it.
+
+### `group_differences.png`
+
+One point per population: **Cliff's delta** on the x-axis, −log10 p on the y. A
+fold change of medians is the conventional x-axis and is the wrong one here — it is
+unbounded, and at single-digit group sizes it is decided by whichever sample sits
+at the median, so a population whose reference median is near zero produces a fold
+change of 40 that means nothing. Cliff's delta is bounded [−1, 1], is the effect
+size the rank test corresponds to, and reads directly: 0.5 means the comparison
+group was higher in three quarters of the cross-sample pairs.
+
+Two horizontal lines. The dashed red one is p = 0.05. The dot-dash blue one is the
+**smallest p this design can produce at all**: a Wilcoxon rank-sum test has
+`choose(n1 + n2, n1)` equally likely rank arrangements under the null, so the most
+extreme possible separation gives a two-sided p of `2 / choose(n1 + n2, n1)` and
+nothing below it is reachable. At 4 against 5 that floor is 0.016, and after
+correcting across a dozen populations no population can reach 0.05 however cleanly
+the groups separate. When the blue line sits *above* the red one, an empty upper
+region of the figure says nothing about biology — it is a property of the design,
+and the figure says so rather than leaving the reader to work it out.
+
+The floor is drawn per comparison, not once for the figure: each comparison group
+has its own size and so its own minimum, and 3 against 6 stops at 0.024 where 6
+against 6 reaches 0.0022. With three or more groups the figure facets by comparison
+and each panel carries its own line.
 
 ### `design_feasibility.csv`
 
@@ -212,6 +238,84 @@ Disable with `--no-parametric`.
 | `batch_mixing_stats.csv` | iLISI against a permutation null |
 | `batch_group_confounding.csv` | Cramér's *V* and correction verdict |
 | `batch_diagnostic.png` | Observed against null mixing |
+| `populations_by_batch.png` | Every population's abundance per acquisition batch, one box per batch and a point per sample. `batch_diagnostic.png` asks whether the *embedding* separates by batch; this asks whether the *reported numbers* do, which is the question that decides whether a group difference might be an acquisition difference |
+
+### Clinical variables, written by `--clinical-columns`
+
+A severity score, a laboratory value or an outcome flag is neither the study
+group nor a confounder. A confounder is screened to decide whether a group
+difference can be believed; a clinical variable is the question. Name any sheet
+column with `--clinical-columns` — or `samples: clinical_columns:` in the config
+— and it is associated with every population and every marker.
+
+| File | Content |
+|---|---|
+| `clinical_variables_correlation.png` | The clinical variables against **each other**. Read this first, see below |
+| `clinical_association.csv` | One row per population × variable: test, n, the effect with its bootstrap interval, raw and BH-adjusted p, the levels or range tested, and an `underpowered` flag |
+| `clinical_association.png` | Heatmap of the signed effect, populations against variables, with `*` on the tiles that survive correction |
+| `clinical_landscape.png` | The whole cohort as one picture: one column per sample ordered by the first numeric variable, every clinical variable as a strip above, every population as a z-scored row below |
+| `clinical_effects_<variable>.png` | Every population's effect against that variable, ordered, with a 95% percentile bootstrap interval on each |
+| `clinical_<variable>.png` | The data behind one column of the heatmap: a scatter against a numeric variable, a box plot against a categorical one, one point per sample and one panel per population |
+| `clinical_association_markers.csv`, `clinical_association_markers.png` | The same against per-sample median marker intensity, collapsed across populations |
+| `population_trajectories.png` | Written by `--paired-column` with `--condition-column`, and coloured by the first two-level clinical column when there is one: per-patient lines across the conditions with the median over them |
+
+The test follows the variable's type rather than being chosen: **Spearman's rho**
+for a numeric column, **Wilcoxon rank-sum with Cliff's delta** for a two-level
+column, **Kruskal-Wallis with epsilon-squared** for more levels. Rank methods
+throughout, for the reason they are used everywhere else here — clinical scores
+are ordinal by construction, laboratory values are skewed with outliers that are
+real rather than erroneous, and cohorts are small.
+
+Epsilon-squared is `H / (n − 1)`, the proportion of rank variance the grouping
+accounts for. It is **unsigned**: a variable with three levels has a magnitude but
+no single direction, which is why the `signed` column exists and why those tiles
+stay grey on the heatmap rather than being coloured as though they pointed
+somewhere.
+
+### The effect, its interval, and why they come before the p-value
+
+`ci_low` and `ci_high` are a 95% percentile bootstrap interval on the effect —
+2000 resamples of the patient–value pairs for Spearman, stratified within each arm
+for Cliff's delta, from a fixed seed so the same table always yields the same
+interval. `clinical_effects_<variable>.png` draws them ordered by effect.
+
+On ten patients most intervals span zero, and that is the finding: a rho of 0.61
+whose interval runs −0.1 to 0.9 is a lead worth powering a follow-up on, not a
+result. The interval is itself approximate at this size — below about nine
+observations the bootstrap's effective resample is smaller than the nominal one
+and coverage falls short of 95% — so read a wide interval as *this cohort does not
+constrain the effect* rather than as a precise range. It is suppressed entirely
+below six samples rather than quoted at a width nobody should trust.
+
+### Read the variables against each other first
+
+Benjamini-Hochberg is applied within each variable, which treats the variables as
+separate questions. That holds only when they carry different information. A
+cohort where the sickest patients are also the ones who died has **one** gradient
+and two columns describing it, and an association found against both is one
+finding reported twice. `clinical_variables_correlation.png` is where that is
+visible: circle area is the absolute Spearman coefficient, fill is its sign, and
+the number is printed where the unadjusted p-value is below 0.05. Two-level
+variables are included coded 0/1, for which Spearman is the rank-biserial
+correlation; variables with three or more unordered levels are excluded and named
+in the caption, because there is no ordering to correlate and coding them 1/2/3
+would invent one.
+
+Benjamini-Hochberg is applied **within each variable**, across the populations
+tested against it, because each variable is its own question asked of every
+population. Pooling across variables would penalise a well-powered variable for
+the company it keeps.
+
+Two things this deliberately is not. It is not **survival analysis**: a 28-day
+flag is tested as the two-group comparison it is, and no time-to-event model is
+fitted because the sheet carries no follow-up time. And it is not a **claim about
+cells**: every test runs on one value per sample, so the replicates are subjects.
+Correlating a score against tens of thousands of events would treat one deeply
+acquired patient as tens of thousands of observations.
+
+Read the effect before the asterisk. On a small cohort these tests detect only
+very large effects, so a null result says little, and the `underpowered` column
+marks every test run on fewer than ten samples.
 | `marker_batch_drift.csv` | Earth Mover's distance between batches per marker, in analysis units and scaled by the marker's own MAD |
 | `threshold_batch_drift.csv` | The threshold test above, grouped by batch instead of by study group |
 | `batch_correction.csv` | Whether a correction ran, which method fitted it, the Cramér's *V* it was judged on, and the reason. Written whenever `--correct-batch` is set, including on a refusal |
