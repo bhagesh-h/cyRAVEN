@@ -559,15 +559,21 @@ fig_group_volcano <- function(stats, outfile, effect = c("cliff", "log2fc"),
   # PUSH LABELS APART. Two populations with nearly the same effect and the same
   # p-value put their names on top of each other, and the overlap was unreadable
   # -- which defeats the one job a label has. ggrepel would do this properly but
-  # is not a dependency, so the labels are separated by hand: within each panel
-  # and each side of it, walk up the y-axis and lift any label that is closer to
-  # the one below it than a fixed fraction of the axis range.
+  # is not a dependency, so the labels are separated by hand: within each panel,
+  # walk up the y-axis and lift any label that is closer to the one below it than
+  # a fixed fraction of the axis range.
+  #
+  # ACROSS THE WHOLE PANEL, not per side of the zero line. Separating by side was
+  # right while labels were pushed outward, because each side then had its own
+  # column of text. Labels now point inward, so every one of them lands in the
+  # middle of the panel: two populations either side of zero at the same p-value
+  # printed into each other and rendered as "BVdellsT cells".
   if (nrow(lab) > 1L) {
     span <- diff(range(d$.y, na.rm = TRUE))
     gap <- if (is.finite(span) && span > 0) span * 0.055 else 0.04
     lab$.ty <- lab$.y
-    for (grp in unique(lab$comparison_group)) for (side in c(FALSE, TRUE)) {
-      i <- which(lab$comparison_group == grp & (lab$.x >= 0) == side)
+    for (grp in unique(lab$comparison_group)) {
+      i <- which(lab$comparison_group == grp)
       if (length(i) < 2L) next
       i <- i[order(lab$.ty[i])]
       for (k in seq_along(i)[-1]) {
@@ -575,13 +581,16 @@ fig_group_volcano <- function(stats, outfile, effect = c("cliff", "log2fc"),
         if (lab$.ty[i[k]] - prev < gap) lab$.ty[i[k]] <- prev + gap
       }
     }
-  } else if (nrow(lab)) lab$.ty <- lab$.y
+  } else lab$.ty <- lab$.y
+  # Both columns are assigned even when `lab` has no rows: label_n = 0 leaves the
+  # frame empty, and a layer whose aes names a column the data does not carry
+  # fails at build time even when there is nothing for it to draw.
   # LABELS POINT INWARD, TOWARDS THE CENTRE OF THE PANEL. Placing them outward
   # clipped every name on an extreme point: "HLA-DR low monocytes" at a Cliff's
   # delta of -1 ran off the left edge and rendered as "low monocytes", which is a
   # different population. A point at the edge of the axis has room on one side
   # only, and that side is the middle.
-  if (nrow(lab)) lab$.hj <- ifelse(lab$.x >= 0, 1.12, -0.12)
+  lab$.hj <- ifelse(lab$.x >= 0, 1.12, -0.12)
   # THE FLOOR IS PER COMPARISON, NOT ONE FOR THE FIGURE. Each comparison group has
   # its own size, so each has its own attainable minimum: comparing 3 against 6
   # cannot go below 0.024 while 6 against 6 reaches 0.0022. Taking the minimum
