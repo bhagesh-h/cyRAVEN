@@ -935,6 +935,15 @@ fig_clinical_trajectory <- function(freq, time_of, patient_of, outfile,
     d$.out[is.na(d$.out)] <- "unknown"
     d$.out <- factor(d$.out, levels = sort(unique(d$.out)))
   } else d$.out <- factor("all samples")
+  # THE KEY CARRIES THE PATIENT COUNT. The thick line is a median, and a median
+  # over one patient is that patient drawn heavier than their own thin line --
+  # which asserts a cohort summary that does not exist. Putting n in the key is
+  # what stops "Yes" reading as a group when it is one person. Patients, not
+  # samples: the same patient contributes a point at every timepoint.
+  .npat <- vapply(levels(d$.out), function(lv)
+    length(unique(d$.pid[d$.out == lv])), integer(1))
+  .out_lab <- sprintf("%s (%d patient%s)", levels(d$.out), .npat,
+                      ifelse(.npat == 1L, "", "s"))
   npop <- length(unique(d$population))
   wd <- max(7, 2.4 * min(ncol, npop) + 1.2)
 
@@ -951,6 +960,7 @@ fig_clinical_trajectory <- function(freq, time_of, patient_of, outfile,
     geom_point(aes(colour = .out), size = 1.1, alpha = 0.8) +
     geom_line(data = mn, aes(group = .out, colour = .out), linewidth = 1.15) +
     scale_colour_manual(values = clin_cat_palette(levels(d$.out), colors = colors),
+                        labels = .out_lab,
                         name = if (has_out) outcome_name else NULL) +
     facet_wrap(~ population, scales = "free_y", ncol = ncol) +
     labs(title = "Population abundance across timepoints, one line per patient",
