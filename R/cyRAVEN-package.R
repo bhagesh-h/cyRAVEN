@@ -103,6 +103,6 @@ utils::globalVariables(c(
   # `n_reference` and `n_comparison` are columns of the stats tables the figures
   # are handed.
   ".a", ".absr", ".b", ".hi", ".lo", ".n", ".out", ".pid", ".pop", ".r",
-  ".fly", ".samp", ".sig", ".t", ".ty", ".val", ".z",
+  ".fly", ".hj", ".samp", ".sig", ".t", ".ty", ".val", ".z",
   "comparison_group", "estimate", "n_comparison", "n_reference"
 ))

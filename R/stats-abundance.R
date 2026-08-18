@@ -550,22 +550,24 @@ fig_group_volcano <- function(stats, outfile, effect = c("cliff", "log2fc"),
     c(colors$gate_highlight %||% "#D62728", colors$study_palette[3] %||% "#8E44E8",
       colors$axis_ticks %||% "grey30"),
     c("BH p < 0.05", "raw p < 0.05", "not significant"))
-  # Only the strongest few are named. Every population labelled turns the figure
-  # into a word cloud, and the table beside it carries all of them anyway.
-  lab <- d[order(d$.p), , drop = FALSE]
-  lab <- utils::head(lab, max(0L, label_n))
+  # Only the strongest few are named, AND per comparison rather than across the
+  # figure. Ranking the whole table put seven of eight labels in one facet and
+  # left the other panel unnamed, which reads as "nothing here" rather than "the
+  # other panel had smaller p-values".
+  .top <- function(g) utils::head(g[order(g$.p), , drop = FALSE], max(0L, label_n))
+  lab <- do.call(rbind, lapply(split(d, d$comparison_group), .top))
   # PUSH LABELS APART. Two populations with nearly the same effect and the same
   # p-value put their names on top of each other, and the overlap was unreadable
   # -- which defeats the one job a label has. ggrepel would do this properly but
-  # is not a dependency, so the labels are separated by hand: within each side of
-  # the plot, walk up the y-axis and lift any label that is closer to the one
-  # below it than a fixed fraction of the axis range.
+  # is not a dependency, so the labels are separated by hand: within each panel
+  # and each side of it, walk up the y-axis and lift any label that is closer to
+  # the one below it than a fixed fraction of the axis range.
   if (nrow(lab) > 1L) {
     span <- diff(range(d$.y, na.rm = TRUE))
     gap <- if (is.finite(span) && span > 0) span * 0.055 else 0.04
     lab$.ty <- lab$.y
-    for (side in c(FALSE, TRUE)) {
-      i <- which((lab$.x >= 0) == side)
+    for (grp in unique(lab$comparison_group)) for (side in c(FALSE, TRUE)) {
+      i <- which(lab$comparison_group == grp & (lab$.x >= 0) == side)
       if (length(i) < 2L) next
       i <- i[order(lab$.ty[i])]
       for (k in seq_along(i)[-1]) {
@@ -574,6 +576,12 @@ fig_group_volcano <- function(stats, outfile, effect = c("cliff", "log2fc"),
       }
     }
   } else if (nrow(lab)) lab$.ty <- lab$.y
+  # LABELS POINT INWARD, TOWARDS THE CENTRE OF THE PANEL. Placing them outward
+  # clipped every name on an extreme point: "HLA-DR low monocytes" at a Cliff's
+  # delta of -1 ran off the left edge and rendered as "low monocytes", which is a
+  # different population. A point at the edge of the axis has room on one side
+  # only, and that side is the middle.
+  if (nrow(lab)) lab$.hj <- ifelse(lab$.x >= 0, 1.12, -0.12)
   # THE FLOOR IS PER COMPARISON, NOT ONE FOR THE FIGURE. Each comparison group has
   # its own size, so each has its own attainable minimum: comparing 3 against 6
   # cannot go below 0.024 while 6 against 6 reaches 0.0022. Taking the minimum
@@ -601,8 +609,7 @@ fig_group_volcano <- function(stats, outfile, effect = c("cliff", "log2fc"),
     # A leader line, because the label may have been lifted off its point.
     geom_segment(data = lab, aes(xend = .x, y = .ty, yend = .y),
                  linewidth = 0.25, colour = colors$grid_major) +
-    geom_text(data = lab, aes(y = .ty, label = population,
-                              hjust = ifelse(.x >= 0, -0.12, 1.12)),
+    geom_text(data = lab, aes(y = .ty, label = population, hjust = .hj),
               size = 2.4, colour = colors$label_text, show.legend = FALSE) +
     scale_colour_manual(values = key, name = NULL) +
     scale_x_continuous(expand = expansion(mult = 0.22)) +
