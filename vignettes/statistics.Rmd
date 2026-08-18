@@ -8,7 +8,11 @@ vignette: >
 ---
 
 ```{r, include = FALSE}
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+# collapse = FALSE, so the printed result appears in its OWN block below the code
+# rather than merged into it. Merged, a reader cannot tell at a glance which
+# lines they would type and which the session printed back, and copying the
+# block copies the output with it.
+knitr::opts_chunk$set(collapse = FALSE, comment = "#>")
 set.seed(1)
 ```
 

@@ -102,38 +102,60 @@ result folder records what produced it whichever route you took.
 
 ## 1.3 A first run on a new cohort
 
-Each step is cheap and catches what the next would otherwise waste time on.
+Each step is cheap and catches what the next would otherwise waste time on. Every
+block below is one command, meant to be copied on its own and run before the next
+is copied. Steps 2 and 4 are edits you make in a text editor, not commands, which
+is the other reason these are not one block: copying a numbered list of commands
+and comments into a terminal in one go runs them all before you have looked at
+anything.
+
+**1. Make the folders and put the FCS files in `data/fcs/`.**
 
 ```bash
 mkdir -p data results
-# put the FCS files in data/fcs/
+```
 
-# 1. a sheet with a row for every file
+**2. Write a sheet with a row for every file.**
+
+```bash
 docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
   --dir /data/fcs --recursive --write-samples /data/samples.csv
+```
 
-# 2. edit data/samples.csv: patient_id, cohort, and any study variable
+**3. Edit `data/samples.csv`** and fill in `patient_id`, `cohort` and any study
+variable. No command; open it in a spreadsheet or a text editor.
 
-# 3. start the config from the shipped template
+**4. Start the config from the shipped template.**
+
+```bash
 docker run --rm --entrypoint sh cyraven:1.0.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml' \
   > data/analysis.yaml
+```
 
-# 4. edit populations: to match the panel, then validate in seconds
+**5. Edit `populations:` in `data/analysis.yaml`** to match your panel. Again an
+edit, not a command.
+
+**6. Validate, in seconds, analysing nothing.**
+
+```bash
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
   cyraven:1.0.0 --dir /data/fcs --recursive \
   --samples /data/samples.csv --config /data/analysis.yaml \
   --outdir /results --check
+```
 
-# 5. repeat 4 until it reports no problems, then run
+**7. Repeat steps 5 and 6** until `--check` reports no problems. Then run it.
+
+```bash
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
   cyraven:1.0.0 --dir /data/fcs --recursive \
   --samples /data/samples.csv --config /data/analysis.yaml \
   --group-column cohort --reference-group "Healthy controls" \
   --outdir /results
-
-# 6. open results/report.html
 ```
+
+**8. Open `results/report.html`.**
 
 The two input files are described in the [Inputs article](inputs.html).
 
