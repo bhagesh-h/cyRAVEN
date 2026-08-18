@@ -122,6 +122,58 @@ clin_boot_ci <- function(stat, n, B = 2000L, min_n = 6L, seed = 42L) {
   unname(stats::quantile(v, c(0.025, 0.975), na.rm = TRUE))
 }
 
+#' Is this clinical variable a property of the patient or of the sample?
+#'
+#' WHY THE DISTINCTION DECIDES THE UNIT OF ANALYSIS, AND SO THE RESULT.
+#'
+#' A cohort sampled at several timepoints carries two kinds of clinical column,
+#' and they are different questions that happen to look identical in the sheet:
+#'
+#'   CONSTANT WITHIN A PATIENT -- 28-day survival, BMI, age, sex. This is a
+#'     BETWEEN-SUBJECT question: do patients who died differ from patients who
+#'     lived? Three samples from one patient are three measurements of one person.
+#'     Testing them as three observations is pseudoreplication: it inflates the
+#'     apparent sample size, narrows the interval and makes significance more
+#'     likely, with no additional patient recruited. On a cohort of six patients
+#'     sampled at three timepoints it turns n = 6 into n = 18. The standard remedy
+#'     for a between-subject question is to collapse to one value per subject
+#'     before testing, which is what this function's verdict triggers.
+#'
+#'   VARYING WITHIN A PATIENT -- a severity score recorded at each draw. This is a
+#'     WITHIN-SUBJECT question: as this patient's score moved, did the population
+#'     move with it? Collapsing to a patient median would delete exactly the
+#'     variation being asked about. The per-sample test is kept, and `n_patients`
+#'     and `repeated_measures` are reported beside it so a reader can see that the
+#'     observations are not independent. The correct dedicated method is a
+#'     repeated-measures correlation (Bland & Altman 1995; Bakdash & Marusich
+#'     2017, `rmcorr`), which is named in the statistics vignette rather than
+#'     implemented here, for the same reason the mixed models there are not.
+#'
+#' With no patient mapping every sample is treated as its own subject, which is
+#' correct for a cross-sectional cohort and is the only thing that can be assumed
+#' when the sheet does not say otherwise.
+#' @param v named vector sample_id -> value for one clinical variable.
+#' @param patient_of named vector sample_id -> patient, or NULL.
+#' @return `"patient"` or `"sample"`.
+#' @keywords internal
+clin_variable_unit <- function(v, patient_of = NULL) {
+  if (is.null(patient_of) || !length(patient_of)) return("sample")
+  ids <- intersect(names(v), names(patient_of))
+  if (!length(ids)) return("sample")
+  pat <- unname(patient_of[ids])
+  val <- v[ids]
+  keep <- !is.na(pat) & !is.na(val)
+  pat <- pat[keep]; val <- val[keep]
+  # A patient sampled once tells us nothing either way, so the verdict rests on
+  # the patients that were sampled more than once. With none of those, the design
+  # is cross-sectional and the sample IS the subject.
+  rep_pat <- names(which(table(pat) > 1L))
+  if (!length(rep_pat)) return("sample")
+  varies <- vapply(rep_pat, function(p)
+    length(unique(as.character(val[pat == p]))) > 1L, logical(1))
+  if (any(varies)) "sample" else "patient"
+}
+
 #' Wrap a caption to the canvas it will be drawn on
 #'
 #' WHY IT TAKES THE WIDTH. A caption is drawn at one text size with no wrapping of
@@ -173,10 +225,14 @@ clin_cat_palette <- function(levels, colors = fcs_colors()) {
 #' @param key_col column naming the thing measured: "population" or "marker".
 #' @param value_col the per-sample quantity.
 #' @param clin named list: variable -> named vector of sample_id -> value.
-#' @param min_n fewest samples for a test to run at all.
+#' @param patient_of named vector sample_id -> patient. When given, a variable
+#'   that is CONSTANT within a patient is tested on one value per patient rather
+#'   than one per sample. See [clin_variable_unit()].
+#' @param min_n fewest observations for a test to run at all.
 #' @return data frame, one row per key x variable, BH-adjusted within variable.
 #' @keywords internal
-clin_associate <- function(d, key_col, value_col, clin, min_n = 4L) {
+clin_associate <- function(d, key_col, value_col, clin, patient_of = NULL,
+                           min_n = 4L) {
   if (is.null(d) || !nrow(d) || !length(clin)) return(NULL)
   if (!all(c("sample_id", key_col, value_col) %in% names(d))) return(NULL)
   d <- d[is.finite(d[[value_col]]), , drop = FALSE]
@@ -186,11 +242,34 @@ clin_associate <- function(d, key_col, value_col, clin, min_n = 4L) {
   for (cv in names(clin)) {
     v_all <- clin[[cv]]
     numeric_cv <- clin_is_numeric(v_all)
+    unit <- clin_variable_unit(v_all, patient_of)
     for (k in sort(unique(d[[key_col]]))) {
       dk <- d[d[[key_col]] == k, , drop = FALSE]
       dk <- dk[!duplicated(dk$sample_id), , drop = FALSE]
       dk$cv <- v_all[dk$sample_id]
       dk <- dk[!is.na(dk$cv), , drop = FALSE]
+      dk$.pat <- if (!is.null(patient_of))
+        unname(patient_of[dk$sample_id]) else dk$sample_id
+      n_pat <- length(unique(stats::na.omit(dk$.pat)))
+      # ONE VALUE PER PATIENT WHEN THE VARIABLE IS A PATIENT'S. Three samples from
+      # one patient are three measurements of one person, and testing them as
+      # three observations is pseudoreplication: it inflates n, narrows the
+      # interval and makes significance more likely, without one extra patient
+      # having been recruited. Collapsing to the patient median is the standard
+      # remedy for a between-subject question.
+      if (identical(unit, "patient")) {
+        dk <- dk[!is.na(dk$.pat), , drop = FALSE]
+        if (!nrow(dk)) next
+        agg <- stats::aggregate(list(v = dk[[value_col]]),
+                                by = list(.pat = dk$.pat), FUN = stats::median,
+                                na.rm = TRUE)
+        first <- dk[!duplicated(dk$.pat), , drop = FALSE]
+        dk <- data.frame(sample_id = first$.pat[match(agg$.pat, first$.pat)],
+                         .pat = agg$.pat,
+                         cv = first$cv[match(agg$.pat, first$.pat)],
+                         stringsAsFactors = FALSE)
+        dk[[value_col]] <- agg$v
+      }
       if (nrow(dk) < min_n) next
       y <- dk[[value_col]]
 
@@ -209,7 +288,9 @@ clin_associate <- function(d, key_col, value_col, clin, min_n = 4L) {
                 stats::cor(xo[i], yo[i], method = "spearman")), length(xo))
         rows[[length(rows) + 1L]] <- data.frame(
           variable = cv, key = k, kind = "numeric", test = "Spearman",
-          n = sum(ok), estimate = unname(round(ct$estimate, 4)),
+          n = sum(ok), unit = unit,
+          n_patients = n_pat, repeated_measures = !identical(unit, "patient") &&
+            n_pat < sum(ok), estimate = unname(round(ct$estimate, 4)),
           effect = "rho", signed = TRUE,
           ci_low = round(ci[1], 4), ci_high = round(ci[2], 4),
           p_value = ct$p.value,
@@ -231,7 +312,9 @@ clin_associate <- function(d, key_col, value_col, clin, min_n = 4L) {
           }, length(y))
           rows[[length(rows) + 1L]] <- data.frame(
             variable = cv, key = k, kind = "two-level",
-            test = "Wilcoxon rank-sum", n = length(y),
+            test = "Wilcoxon rank-sum", n = length(y), unit = unit,
+            n_patients = n_pat,
+            repeated_measures = !identical(unit, "patient") && n_pat < length(y),
             estimate = round(clin_cliff(a, b), 4), effect = "Cliff's delta",
             signed = TRUE,
             ci_low = round(ci[1], 4), ci_high = round(ci[2], 4),
@@ -247,7 +330,9 @@ clin_associate <- function(d, key_col, value_col, clin, min_n = 4L) {
           # FALSE: three levels have a magnitude but no direction.
           rows[[length(rows) + 1L]] <- data.frame(
             variable = cv, key = k, kind = "multi-level",
-            test = "Kruskal-Wallis", n = length(y),
+            test = "Kruskal-Wallis", n = length(y), unit = unit,
+            n_patients = n_pat,
+            repeated_measures = !identical(unit, "patient") && n_pat < length(y),
             estimate = round(clin_epsilon2(unname(kw$statistic), length(y)), 4),
             effect = "epsilon squared", signed = FALSE,
             ci_low = NA_real_, ci_high = NA_real_, p_value = kw$p.value,
@@ -283,14 +368,15 @@ clin_associate <- function(d, key_col, value_col, clin, min_n = 4L) {
 #' @return list(populations, markers)
 #' @export
 stats_clinical_association <- function(freq, mfi = NULL, clin = list(),
-                                       value_col = NULL, min_n = 4L) {
+                                       patient_of = NULL, value_col = NULL,
+                                       min_n = 4L) {
   if (!length(clin)) return(NULL)
   pop <- NULL
   if (!is.null(freq) && nrow(freq)) {
     if (is.null(value_col)) value_col <- abundance_measure(freq)$col
     if (value_col %in% names(freq))
       pop <- clin_associate(qc_pass_rows(freq), "population", value_col,
-                            clin, min_n = min_n)
+                            clin, patient_of = patient_of, min_n = min_n)
   }
   mk <- NULL
   if (!is.null(mfi) && nrow(mfi) && "median_asinh" %in% names(mfi)) {
@@ -302,7 +388,8 @@ stats_clinical_association <- function(freq, mfi = NULL, clin = list(),
       agg <- stats::aggregate(list(median_asinh = d$median_asinh),
                               by = list(sample_id = d$sample_id, marker = d$marker),
                               FUN = stats::median, na.rm = TRUE)
-      mk <- clin_associate(agg, "marker", "median_asinh", clin, min_n = min_n)
+      mk <- clin_associate(agg, "marker", "median_asinh", clin,
+                           patient_of = patient_of, min_n = min_n)
     }
   }
   if (is.null(pop) && is.null(mk)) return(NULL)
@@ -549,12 +636,15 @@ fig_clinical_forest <- function(assoc, key_col, var_name, outfile, dpi = 200,
       # in 3.5.0; the caps it would add carry no information here anyway.
       geom_linerange(aes(xmin = .lo, xmax = .hi), linewidth = 0.55,
                      na.rm = TRUE)
+  unit_lab <- if ("unit" %in% names(d) && identical(unique(d$unit)[1], "patient"))
+    "patient" else "sample"
   fig <- fig +
     geom_point(size = 2.1) +
     # The sample count sits INSIDE the panel on the right. At Inf with the default
     # expansion it landed in the plot margin, outside the panel border, which reads
     # as a stray annotation rather than as a column of the figure.
-    geom_text(aes(label = paste0("n=", n)), x = Inf, hjust = 1.15, size = 2.3,
+    geom_text(aes(label = paste0("n=", n, " ", unit_lab, ifelse(n == 1, "", "s"))),
+              x = Inf, hjust = 1.15, size = 2.3,
               colour = colors$label_text, show.legend = FALSE) +
     scale_x_continuous(expand = expansion(mult = c(0.06, 0.16))) +
     scale_colour_manual(values = key_cols, name = NULL, drop = TRUE) +
