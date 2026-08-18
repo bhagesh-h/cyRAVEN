@@ -285,6 +285,20 @@ Cite FlowSOM (Van Gassen et al., 2015, *Cytometry A* 87:636) when using the
 unsupervised clustering, and diffcyt (Weber et al., 2019, *Commun Biol* 2:183)
 for the aggregation strategy underlying the differential state tests.
 
+## A note on how parts of this were written
+
+Commit messages and parts of the documentation — this README, the vignettes and
+the roxygen comments — were drafted with Anthropic's Claude, mostly Claude Opus 5
+through [Claude Code](https://claude.com/claude-code), with earlier sections
+written using Opus 4.1 and Sonnet 4.5.
+
+The analysis code and its results are the author's, and every number quoted in
+the documentation comes from a run rather than from a draft. Prose written this
+way can still describe the code incorrectly. If something here does not match
+what the package does, please
+[open an issue](https://github.com/bhagesh-h/cyRAVEN/issues) — a documentation
+error is a bug and is worth reporting as one.
+
 ## Licence
 
 GPL-3. The full text is in
