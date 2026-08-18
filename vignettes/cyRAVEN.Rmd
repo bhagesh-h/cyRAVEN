@@ -111,29 +111,40 @@ Local installation, for development or where Docker is unavailable, is in the
 No data of your own required, and nothing downloaded: the demonstration cohort
 ships inside a package cyRAVEN already depends on.
 
+Four commands, one block each. Copy and run them one at a time.
+
+**1. Make the folders.**
+
 ```bash
 mkdir -p demo results
+```
 
-# 1. write the cohort, its sample sheet and its config
+**2. Write the cohort, its sample sheet and its config.**
+
+```bash
 docker run --rm -v "$PWD/demo:/demo" \
   --entrypoint Rscript cyraven:1.0.0 \
   /opt/cyraven/src/inst/scripts/demo_data.R /demo
+```
 
-# 2. validate the inputs, in seconds, without analysing anything
+**3. Validate the inputs, in seconds, without analysing anything.**
+
+```bash
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
   cyraven:1.0.0 --dir /data/fcs \
   --samples /data/samples.csv --config /data/panel.yaml \
   --group-column cohort --reference-group "GvHD grade 1" \
   --batch-column visit --outdir /results --check
+```
 
-# 3. run
+**4. Run it, then open `results/report.html`.**
+
+```bash
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
   cyraven:1.0.0 --dir /data/fcs \
   --samples /data/samples.csv --config /data/panel.yaml \
   --group-column cohort --reference-group "GvHD grade 1" \
   --batch-column visit --cluster --outdir /results
-
-# 4. open results/report.html
 ```
 
 On Windows PowerShell substitute `${PWD}` for `$PWD`; on Git Bash prefix with
@@ -148,12 +159,16 @@ self-contained file, in the order they have to be read.
 Two files besides the FCS directory: one CSV with a row per file, and one YAML
 declaring what to score.
 
+A sheet with a row for every file, which you then fill in:
+
 ```bash
-# a sheet with a row for every file, which you then fill in
 docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
   --dir /data/fcs --recursive --write-samples /data/samples.csv
+```
 
-# the config template
+The config template:
+
+```bash
 docker run --rm --entrypoint sh cyraven:1.0.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml' \
   > data/analysis.yaml
@@ -161,7 +176,7 @@ docker run --rm --entrypoint sh cyraven:1.0.0 -c \
 
 Then `--check` until it reports no problems, then run. The full sequence, and
 every option with the situation it is for, is in
-[Running cyRAVEN](usage.html).
+[Commands and every option](usage.html).
 
 # Where to go next
 

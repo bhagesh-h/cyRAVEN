@@ -6,7 +6,11 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 <!-- badges: end -->
 
+<div class="readme-only">
+
 **Documentation: <https://bhagesh-h.github.io/cyRAVEN/>**
+
+</div>
 
 An R package for immunophenotyping of multi-sample flow cytometry data, with
 per-sample gate derivation and donor-level differential abundance and

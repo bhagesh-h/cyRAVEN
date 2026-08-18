@@ -4,20 +4,21 @@ template:
   bootstrap: 5
   light-switch: true
 
-# The licence in the sidebar is a LINK, not a string. pkgdown prints the
-# DESCRIPTION License field verbatim, and "GPL (>= 3)" is not one of the
-# abbreviations it knows how to autolink, so the site named a licence and gave the
-# reader no way to read it. pkgdown does render the full text as
-# LICENSE-text.html -- it was already being built and nothing pointed at it. The
-# structure list repeats pkgdown's default so overriding one component cannot drop
-# the others.
+# The licence in the sidebar is the GPLv3 BADGE, not a string and not a text
+# link. pkgdown prints the DESCRIPTION License field verbatim, and "GPL (>= 3)"
+# is not one of the abbreviations it knows how to autolink, so the site named a
+# licence and gave the reader no way to read it. The badge is the same one the
+# README carries, so the licence looks identical wherever it appears, and it
+# links to the canonical GNU text rather than to a page of this site. The
+# structure list repeats pkgdown's default so overriding one component cannot
+# drop the others.
 home:
   sidebar:
     structure: [links, license, community, citation, authors, dev]
     components:
       license:
         title: License
-        text: "[GPL (>= 3)](LICENSE-text.html) -- full text"
+        text: "[![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)"
 
 reference:
 - title: Run the pipeline
@@ -274,11 +275,9 @@ articles:
 - title: Start here
   navbar: ~
   desc: >
-    What the pipeline is for, a complete run on the demonstration cohort, and the
-    cytometry background the rest of the site assumes.
+    What the pipeline is for and a complete run on the demonstration cohort.
   contents:
   - cyRAVEN
-  - flow-cytometry-for-dummies
 
 - title: Code and setup
   navbar: ~
@@ -299,6 +298,7 @@ articles:
     checks that can invalidate a result, every output file, the statistics, and
     a worked example.
   contents:
+  - flow-cytometry-for-dummies
   - pipeline
   - diagnostics
   - explore
@@ -309,18 +309,23 @@ articles:
   - known-limitations
   - scope
 
+# "Flow cytometry for dummies" moved out of the top level and into Science and
+# output. It is background reading rather than a section of its own, and a
+# top-level entry gave it the same weight as the whole function reference.
+#
+# "Running cyRAVEN" was renamed. It sat beside "Get started" and the two names
+# described the same thing, so a reader had no way to tell which page to open.
+# They are not the same page: intro is the tour and this is the reference for
+# every command and all 116 options, which is what the label now says.
 navbar:
   structure:
-    left:  [intro, basics, code, science, news]
+    left:  [intro, code, science, news]
     right: [search, github, lightswitch]
   components:
-    basics:
-      text: Flow cytometry for dummies
-      href: articles/flow-cytometry-for-dummies.html
     code:
       text: Code and setup
       menu:
-      - text: Running cyRAVEN
+      - text: Commands and every option
         href: articles/usage.html
       - text: Inputs, the sample sheet and config
         href: articles/inputs.html
@@ -337,6 +342,9 @@ navbar:
     science:
       text: Science and output
       menu:
+      - text: Flow cytometry for dummies
+        href: articles/flow-cytometry-for-dummies.html
+      - text: ---------
       - text: How it works, the ten stages
         href: articles/pipeline.html
       - text: Diagnostics, in reading order
