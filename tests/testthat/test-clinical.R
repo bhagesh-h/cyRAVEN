@@ -211,3 +211,73 @@ test_that("a single timepoint is not drawn as a trajectory", {
   # A figure of unconnected points called a trajectory would be worse than none.
   expect_false(file.exists(f))
 })
+
+# ---- the unit of analysis ---------------------------------------------------
+# The defect these cover: a cohort of 6 patients sampled at 3 timepoints was
+# tested as 18 independent observations for variables that are properties of the
+# patient. That inflates n, narrows the bootstrap interval and makes significance
+# more likely without one extra patient having been recruited.
+
+pat_fixture <- function() {
+  ids <- names(synth_groups())
+  # 16 samples over 8 patients, two samples each.
+  stats::setNames(rep(sprintf("P%02d", 1:8), each = 2), ids)
+}
+
+test_that("a patient-constant variable is tested per patient, not per sample", {
+  ids <- names(synth_groups())
+  pat <- pat_fixture()
+  # Constant within a patient, which is what an outcome flag looks like.
+  outcome <- stats::setNames(rep(c("died", "lived"), each = 2, length.out = 16), ids)
+  expect_identical(clin_variable_unit(outcome, pat), "patient")
+
+  a <- clin_associate(planted_freq(), "population", "pct_of_cd45_pos",
+                      list(outcome = outcome), patient_of = pat)
+  expect_identical(unique(a$unit), "patient")
+  # 8 patients, not 16 samples. Getting this wrong is the whole point of the test.
+  expect_true(all(a$n == 8L))
+  expect_true(all(a$n_patients == 8L))
+  expect_false(any(a$repeated_measures))
+})
+
+test_that("a variable that moves within a patient stays per sample, and says so", {
+  ids <- names(synth_groups())
+  pat <- pat_fixture()
+  # Differs between the two samples of every patient: a score taken at each draw.
+  score <- stats::setNames(seq_along(ids), ids)
+  expect_identical(clin_variable_unit(score, pat), "sample")
+
+  a <- clin_associate(planted_freq(), "population", "pct_of_cd45_pos",
+                      list(score = score), patient_of = pat)
+  expect_identical(unique(a$unit), "sample")
+  expect_true(all(a$n == 16L))
+  # Collapsing here would delete the variation being asked about, so the flag is
+  # what warns the reader instead.
+  expect_true(all(a$n_patients == 8L))
+  expect_true(all(a$repeated_measures))
+})
+
+test_that("with no patient map every sample is its own subject", {
+  ids <- names(synth_groups())
+  v <- stats::setNames(rep(c("a", "b"), 8), ids)
+  expect_identical(clin_variable_unit(v, NULL), "sample")
+  # A cross-sectional cohort: one sample per patient, so there is nothing to
+  # collapse and the verdict must not claim otherwise.
+  one_each <- stats::setNames(sprintf("P%02d", seq_along(ids)), ids)
+  expect_identical(clin_variable_unit(v, one_each), "sample")
+})
+
+test_that("collapsing to the patient narrows nothing that was not already narrow", {
+  ids <- names(synth_groups())
+  pat <- pat_fixture()
+  outcome <- stats::setNames(rep(c("died", "lived"), each = 2, length.out = 16), ids)
+  per_pat <- clin_associate(planted_freq(), "population", "pct_of_cd45_pos",
+                            list(outcome = outcome), patient_of = pat)
+  per_smp <- clin_associate(planted_freq(), "population", "pct_of_cd45_pos",
+                            list(outcome = outcome), patient_of = NULL)
+  # Same populations, both directions of the effect preserved; the per-sample run
+  # simply claims twice the evidence for it.
+  expect_identical(sort(per_pat$population), sort(per_smp$population))
+  expect_true(all(per_smp$n == 16L))
+  expect_true(all(per_pat$n == 8L))
+})

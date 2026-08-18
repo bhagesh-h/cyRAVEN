@@ -396,6 +396,52 @@ dataset, which is what makes it the correct follow-up to Kruskal-Wallis. A set o
 pairwise Wilcoxon tests re-ranks within each pair and answers a different
 question.
 
+**Clinical associations: the unit of analysis.** A cohort sampled at several
+timepoints carries two kinds of clinical column. One is constant within a patient
+— 28-day survival, BMI, age — and asks a *between-subject* question; the other
+varies within a patient — a severity score at each draw — and asks a
+*within-subject* one. Treating repeated samples from one patient as independent
+observations is pseudoreplication: it inflates the apparent sample size, narrows
+the interval and makes significance more likely without a single extra patient
+having been recruited, and it is common enough in the life sciences to be one of
+the standard threats to reproducibility
+([*The problem of pseudoreplication in neuroscientific studies*, BMC Neuroscience](https://bmcneurosci.biomedcentral.com/articles/10.1186/1471-2202-11-5);
+[*Statistics Done Wrong*, on pseudoreplication](https://www.statisticsdonewrong.com/pseudoreplication.html)).
+Collapsing to one value per subject is the first remedy named in that literature
+and is what `clin_variable_unit()` triggers for a patient-constant column.
+
+For a column that varies within a patient, collapsing would delete the variation
+being asked about, so the per-sample test is kept and `n_patients` and
+`repeated_measures` are reported beside it. The dedicated method there is a
+repeated-measures correlation, which estimates the common within-individual slope
+without averaging
+([Bland & Altman 1995; Bakdash & Marusich, *Frontiers in Psychology* 2017](https://www.frontiersin.org/journals/psychology/articles/10.3389/fpsyg.2017.00456/full),
+implemented in [`rmcorr`](https://cran.r-project.org/package=rmcorr)). It is
+named rather than implemented, for the same reason as the mixed models below.
+
+**Effect sizes with intervals, not p-values alone.** Reporting the estimated
+effect with a confidence interval, rather than a p-value on its own, is what the
+reporting guidelines for prognostic marker studies ask for — and the surveys
+behind those guidelines found 96% of papers reporting p-values against 42%
+reporting an interval
+([REMARK explanation and elaboration, *BMC Medicine* 2012](https://bmcmedicine.biomedcentral.com/articles/10.1186/1741-7015-10-51)).
+`clinical_association.csv` carries `ci_low` and `ci_high` on every signed effect
+for that reason, and `fig_clinical_forest()` draws them.
+
+**Rank effect sizes.** Cliff's delta is the non-parametric two-group effect size
+for ordinal or non-normal data, and percentile bootstrap intervals are the
+standard way to bound it
+([*Cliff's Delta Calculator*, Universitas Psychologica](http://www.scielo.org.co/scielo.php?script=sci_arttext&pid=S1657-92672011000200018)).
+Epsilon-squared, `H / (n - 1)`, is the corresponding effect size for
+Kruskal-Wallis, following Tomczak & Tomczak's recommendation as implemented in
+[`rstatix::kruskal_effsize()`](https://rpkgs.datanovia.com/rstatix/reference/kruskal_effsize.html);
+it is unsigned because a variable with three unordered levels has no direction.
+The bootstrap's own limit at these sample sizes — an effective resample smaller
+than the nominal one, and coverage falling short of 95% below about nine
+observations — is documented rather than ignored
+([*Statistical uncertainty analysis for small-sample, high log-variance data*](https://pmc.ncbi.nlm.nih.gov/articles/PMC6754704/)),
+which is why no interval is written below six.
+
 **What is deliberately not implemented.** Generalised linear mixed models are the
 right tool when donors contribute several samples, and CytoGLMM implements them
 for cytometry specifically

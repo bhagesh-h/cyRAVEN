@@ -2148,7 +2148,13 @@ run_cyraven_impl <- function(opt) {
         # whether the variables the study collected say the same thing twice.
         fig_clinical_correlogram(
           clin, file.path(opt$outdir, "clinical_variables_correlation.png"))
-        ca <- stats_clinical_association(freq, mfi, clin)
+        # THE PATIENT MAP MATTERS TO THE RESULT, not just to the labels. A column
+        # that is constant within a patient is tested on one value per patient;
+        # without this the survivor arm of a cohort sampled three times over is
+        # one patient counted three times. See clin_variable_unit().
+        .pat_of <- if ("patient_id" %in% names(smap))
+          stats::setNames(as.character(smap$patient_id), .sid) else NULL
+        ca <- stats_clinical_association(freq, mfi, clin, patient_of = .pat_of)
         if (!is.null(ca)) {
           if (!is.null(ca$populations)) {
             write.csv(ca$populations,
