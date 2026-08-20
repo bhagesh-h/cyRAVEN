@@ -117,3 +117,51 @@ The cell-level view is available descriptively in
 cyRAVEN applies the spillover matrix stored in the FCS keyword block and reports
 its absence. It does not compute one from single-stain controls, which belongs in
 acquisition software where the controls can be inspected.
+
+## 10. The 2025-2026 methods survey
+
+A survey of cytometry method releases and papers to August 2026, recorded here so
+the same candidates are not re-evaluated from scratch. Adopting nothing is a
+decision too, and this is where it is written down.
+
+**Worth adopting, ranked.**
+
+| Method | What it adds that cyRAVEN lacks | Licence |
+|---|---|---|
+| [staRgate](https://bioconductor.org/packages/release/bioc/html/staRgate.html) | Gates a marker against a *unimodal background* population rather than a density minimum. That is exactly the case cyRAVEN currently sends to `quantile_fallback`, and on a 29-marker panel across 266 subpopulations it matched manual gating at 0.97 concordance | MIT |
+| [CompensAID](https://www.bioconductor.org/packages/release/bioc/html/CompensAID.html) | Flags a bad single-stain control by segmenting the positive population and testing the Secondary Stain Index per segment. cyRAVEN reports how far spillover spreads and never asks whether the reference was wrong | GPL-3 |
+| [CytoScan](https://www.biorxiv.org/content/10.1101/2025.09.24.678276v1) | Between-file anomaly detection, including novelty against a locked reference set. cyRAVEN's acquisition QC is within-file, so a whole tube that is unlike its cohort passes | preprint |
+| [CytoMDS](https://onlinelibrary.wiley.com/doi/10.1002/cyto.a.24921) | Attributes a batch separation back to the channels that caused it. cyRAVEN's EMD says a batch differs; this says which markers made it differ | GPL-3 |
+| [Rajwa & Roederer 2025](https://onlinelibrary.wiley.com/doi/10.1002/cyto.a.24972) | Effective rank, information efficiency and the Cramer-Rao lower bound matrix, all computable from the spillover matrix already parsed. Not software -- three formulas and a vocabulary that makes the existing QC legible to a reviewer | paper |
+
+**Considered and declined, with the reason.**
+
+`sccomp` tests differential *variability* and can transfer priors from an earlier
+cohort, neither of which the CLR re-test does, but it pulls Stan into the image
+for a question users have not asked. `propeller` borrows variance across
+populations, which is the right instinct at n = 5-10, and is worth offering
+beside the rank tests rather than instead of them -- it assumes a variance
+structure the rank tests deliberately do not.
+[CytoBatchFlagR](https://onlinelibrary.wiley.com/doi/10.1002/cyto.a.70024) is
+CC BY-NC-ND, which forbids redistribution in a packaged pipeline, and its
+MSI/frequency/EMD triad largely duplicates what is here.
+[flowMagic](https://github.com/semontante/flowMagic) reaches 65% accuracy on rare
+populations, which is where automated gating has to earn its keep, and a trained
+model is not auditable the way a declared threshold is. GPCT is a Python
+transformer answering a different question, sample-level outcome prediction
+rather than population quantification.
+
+**What did not change, which is why nothing here chases it.** MIFlowCyt has had
+no revision. Gating-ML is still 2.0 and FCS still 3.2, so the export target is
+stable. The Cossarizza EJI guidelines are still the third edition. EuroFlow's
+2025 updates are wet-lab only. `SOULCAP` intends to standardise population naming
+against Cell Ontology identifiers but has shipped no ontology, so the whole of
+the forward-compatible work is an optional `cl_id:` field per population.
+
+**And on small cohorts specifically: there is no consensus to follow.** No ISAC
+position paper, no journal guidance, no methods paper aimed at the n < 20
+immunophenotyping case. The field is quietly importing `propeller` and `sccomp`
+from single-cell RNA sequencing. The approach here -- rank tests, Cliff's delta,
+Benjamini-Hochberg within a family, bootstrap intervals, and the attainable-p
+floor drawn on the figure -- is behind no published standard, because there is
+not one.
