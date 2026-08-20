@@ -1,0 +1,60 @@
+% LaTeX preamble for the assembled manual. Loaded by build-manual.R.
+
+% pdflscape rotates BOTH the page content and the page in the PDF viewer, so a
+% landscape table is read by turning the screen rather than the head. lscape
+% alone rotates only the content. This is what landscape-tables.lua wraps its
+% tables in.
+\usepackage{pdflscape}
+
+% Tables that run past one page continue with their header repeated rather than
+% being silently truncated, which is what happens to a plain tabular.
+\usepackage{longtable}
+\usepackage{booktabs}
+
+% Wrapping inside a cell. Without it a long cell sets on one line and pushes the
+% table past the page edge, which is the overlap the landscape filter exists to
+% prevent -- rotation buys width, this buys the ability to use it.
+\usepackage{array}
+\usepackage{ragged2e}
+
+% The hex sticker's fill, for links and chapter rules. Sampled from
+% man/figures/logo.png rather than guessed.
+\usepackage{xcolor}
+\definecolor{RavenOrange}{HTML}{EC7414}
+
+% Code blocks wrap instead of running off the page. The docker commands in the
+% usage article are long, and a reader cannot copy what was never printed.
+\usepackage{fvextra}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{
+  breaklines, breakanywhere, commandchars=\\\{\}, fontsize=\small}
+
+% Chapter openings carry the brand rule rather than the default plain heading.
+\usepackage{titlesec}
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries}
+  {\color{RavenOrange}\chaptertitlename\ \thechapter}
+  {12pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{0pt}{20pt}
+
+% Running header naming the chapter, so a printed copy says which article a page
+% came from.
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\footnotesize\nouppercase{\leftmark}}
+\fancyhead[R]{\footnotesize cyRAVEN}
+\fancyfoot[C]{\footnotesize\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% A landscape page keeps the same footer, otherwise the page number rotates off
+% the visible area.
+\fancypagestyle{lscape}{\fancyhf{}\fancyfoot[C]{\footnotesize\thepage}}
+
+% Images wider than the text block are scaled down rather than overrunning it.
+% The figures in the worked example are full-width panel grids.
+\usepackage{graphicx}
+\setkeys{Gin}{width=\linewidth, keepaspectratio}
+
+% URLs break at any character. Several in the documentation are long enough that
+% \sloppy alone leaves them protruding into the margin.
+\usepackage{xurl}

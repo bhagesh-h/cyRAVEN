@@ -320,8 +320,16 @@ articles:
 navbar:
   structure:
     left:  [intro, code, science, news]
-    right: [search, github, lightswitch]
+    right: [manual, search, github, lightswitch]
   components:
+    # The entire site as one PDF, one chapter per page, built by
+    # pkgdown/manual/build-manual.R in the same workflow that publishes the
+    # site. An icon rather than a word because the right-hand side of the navbar
+    # is icons and a text label there reads as a section.
+    manual:
+      icon: fa-file-pdf
+      href: cyRAVEN-manual.pdf
+      aria-label: Download the documentation as a PDF
     code:
       text: Code and setup
       menu:

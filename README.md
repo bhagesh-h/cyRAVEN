@@ -192,6 +192,13 @@ for, is in
 
 ## Documentation
 
+Every page below is also available as a single PDF, one chapter per page, with a
+table of contents and continuous page numbering:
+**[cyRAVEN-manual.pdf](https://bhagesh-h.github.io/cyRAVEN/cyRAVEN-manual.pdf)**.
+It is rebuilt with the site, so it never lags behind these pages, and the wide
+reference tables are set landscape there rather than being squeezed until the
+columns touch.
+
 New to flow cytometry?
 [Flow cytometry for dummies](https://bhagesh-h.github.io/cyRAVEN/articles/flow-cytometry-for-dummies.html)
 explains what an event is, what a cut is, why `SSC-A` sits in a population

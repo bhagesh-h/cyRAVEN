@@ -54,6 +54,29 @@ jobs:
       - name: Build site
         run: pkgdown::build_site_github_pages(new_process = FALSE, install = FALSE)
         shell: Rscript {0}
+
+      # THE WHOLE SITE AS ONE PDF, built after the site so it can be dropped into
+      # docs/ and deployed with it. TinyTeX rather than a full TeX Live: the
+      # manual needs about a dozen packages and a full distribution is a
+      # multi-gigabyte download on every build.
+      #
+      # continue-on-error, deliberately. A LaTeX failure must not stop the site
+      # from deploying -- the HTML is the primary artefact and the PDF is a
+      # convenience. When this step fails the site publishes without the download
+      # link resolving, which is visible and fixable; blocking the deployment
+      # would take the documentation offline over a missing .sty file.
+      - name: Install TinyTeX
+        continue-on-error: true
+        uses: r-lib/actions/setup-tinytex@v2
+
+      - name: Build the PDF manual
+        continue-on-error: true
+        run: |
+          tinytex::tlmgr_install(c("pdflscape", "titlesec", "fancyhdr", "fvextra",
+                                   "xurl", "ragged2e", "booktabs", "framed",
+                                   "environ", "trimspaces", "koma-script"))
+          source("pkgdown/manual/build-manual.R")
+        shell: Rscript {0}
       # v4.8.0 is the first release on the Node 24 runtime; 4.5.0 ran on Node 20,
       # which the runners now force onto 24 and warn about.
       #
