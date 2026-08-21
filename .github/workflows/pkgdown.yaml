@@ -84,11 +84,27 @@ jobs:
       - name: Build the PDF manual
         continue-on-error: true
         run: |
-          if (!requireNamespace("tinytex", quietly = TRUE))
-            install.packages("tinytex")
+          # THE ACTUAL CAUSE OF THREE EMPTY BUILDS, found by running the install
+          # in a container rather than reading step durations.
+          #
+          # install_tinytex() fetches https://yihui.org/tinytex/TinyTeX-1.tar.gz,
+          # which redirects to the tinytex-releases "daily" tag. That asset was
+          # renamed upstream to TinyTeX-1-tar.gz, a hyphen where the package
+          # expects a dot, so the download 404s and the install aborts in seconds.
+          # r-lib/actions/setup-tinytex fetches the same URL, which is why it also
+          # finished in five seconds.
+          #
+          # Two changes fix it. CRAN rather than the pinned snapshot, because the
+          # snapshot carries tinytex 0.56 and the naming was fixed after it; and a
+          # pinned TinyTeX release rather than "daily", so a future rename upstream
+          # cannot break this again without someone choosing to move the pin.
+          # Verified in a container: the asset downloads, extracts, and
+          # is_tinytex() returns TRUE.
+          install.packages("tinytex", repos = "https://cloud.r-project.org")
           cat("tinytex package:", as.character(packageVersion("tinytex")), "\n")
           cat("distribution present:", tinytex::is_tinytex(), "\n")
-          if (!tinytex::is_tinytex()) tinytex::install_tinytex()
+          if (!tinytex::is_tinytex()) tinytex::install_tinytex(version = "2026.08")
+          cat("is_tinytex now:", tinytex::is_tinytex(), "\n")
           cat("tlmgr resolves to:", Sys.which("tlmgr"), "\n")
           # latexmk auto-installs a missing style file, so this list is a
           # pre-fetch rather than a requirement. One unresolvable name must not
