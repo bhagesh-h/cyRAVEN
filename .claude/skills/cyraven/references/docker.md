@@ -36,6 +36,9 @@ about 650 MB compressed.
 
 ```bash
 docker pull bhagesh/cyraven:1.0.0
+```
+
+```bash
 docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
 ```
 
@@ -169,6 +172,9 @@ The image has an `ENTRYPOINT`, so `docker run cyraven:1.0.0 Rscript foo.R` passe
 
 ```bash
 docker run --rm --entrypoint Rscript cyraven:1.0.0 -e 'sessionInfo()'
+```
+
+```bash
 docker run --rm -it --entrypoint bash cyraven:1.0.0
 ```
 
@@ -181,6 +187,9 @@ a `docker run` does not stop the container:
 
 ```bash
 docker ps
+```
+
+```bash
 docker kill <container-id>
 ```
 
@@ -198,7 +207,17 @@ directory, or `chown` it afterwards.
 ```bash
 docker run --rm --entrypoint Rscript cyraven:1.0.0 \
   -e 'cat(as.character(packageVersion("cyRAVEN")), "\n")'
+```
 
+Prints:
+
+```
+1.0.0
+```
+
+Then the full option reference, which also confirms the entrypoint works:
+
+```bash
 docker run --rm cyraven:1.0.0 --help
 ```
 

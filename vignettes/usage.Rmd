@@ -60,6 +60,9 @@ Two routes to the same image. Which one you want depends on a single question:
 
 ```bash
 docker pull bhagesh/cyraven:1.0.0
+```
+
+```bash
 docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
 ```
 
@@ -78,7 +81,13 @@ repository root, the directory holding `DESCRIPTION`.
 
 ```bash
 git clone https://github.com/bhagesh-h/cyRAVEN.git
+```
+
+```bash
 cd cyRAVEN
+```
+
+```bash
 docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
 ```
 
@@ -93,8 +102,24 @@ and a built image are numerically interchangeable. Confirm which you have:
 
 ```bash
 docker images | grep cyraven
+```
+
+Prints one line per image already present, or nothing at all:
+
+```
+bhagesh/cyraven   1.0.0   8261eb7fc1e0   2.59GB
+cyraven           1.0.0   8261eb7fc1e0   2.59GB
+```
+
+```bash
 docker run --rm --entrypoint Rscript cyraven:1.0.0 \
   -e 'cat(as.character(packageVersion("cyRAVEN")), R.version.string)'
+```
+
+Prints:
+
+```
+1.0.0 R version 4.4.3 (2025-02-28)
 ```
 
 Every run also writes the image's package versions into `run_manifest.txt`, so a
@@ -214,14 +239,18 @@ parent-gate count each frequency is a fraction of.
 
 ## 1.6 Comparing runs over time
 
+**Once, on the run being adopted as the reference.**
+
 ```bash
-# once, on the run being adopted as the reference
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
   cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
   --config /data/analysis.yaml --outdir /results \
   --write-baseline /results/baseline.rds
+```
 
-# on every later run
+**On every later run.**
+
+```bash
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results2:/results" \
   -v "$PWD/results/baseline.rds:/baseline.rds:ro" \
   cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
@@ -238,10 +267,15 @@ No data of your own required, and nothing downloaded.
 
 ```bash
 mkdir -p demo results
+```
+
+```bash
 docker run --rm -v "$PWD/demo:/demo" \
   --entrypoint Rscript cyraven:1.0.0 \
   /opt/cyraven/src/inst/scripts/demo_data.R /demo
+```
 
+```bash
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
   cyraven:1.0.0 --dir /data/fcs \
   --samples /data/samples.csv --config /data/panel.yaml \
@@ -553,13 +587,17 @@ not. See [Interoperability](with-cycondor.html).
 
 In this order, because the first costs nothing analytically:
 
+**Skip the session file: often most of the wall-clock, none of the results.**
+
 ```bash
-# 1. skip the session file: often most of the wall-clock, none of the results
 docker run --rm $D cyraven:1.0.0 \
   --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
   --no-session --outdir /results
+```
 
-# 2. bound the events read per file, then the cells embedded
+**Bound the events read per file, then the cells embedded.**
+
+```bash
 docker run --rm $D cyraven:1.0.0 \
   --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
   --no-session --max-events-per-file 300000 \
@@ -577,18 +615,18 @@ The declared path scores what you declared. It cannot find a population nobody
 wrote down, and it cannot see outside the parent gate. Explore mode is the
 complement: every event, every eligible channel, no specification.
 
+**Alongside the declared analysis. Writes to results/explore/ and changes NOTHING in the existing output.**
+
 ```bash
-# alongside the declared analysis. Writes to results/explore/ and changes
-# NOTHING in the existing output.
 docker run --rm $D cyraven:1.0.0 \
   --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
   --group-column cohort --reference-group "Healthy controls" \
   --cluster --explore --outdir /results
+```
 
-# ...and let the two sides inform each other. The declared run lends explore its
-# per-sample thresholds, so clusters are NAMED rather than guessed at; explore
-# lends the declared run spec_gaps.csv, naming populations that span several
-# clusters and clusters nothing covers.
+**...and let the two sides inform each other. The declared run lends explore its per-sample thresholds, so clusters are NAMED rather than guessed at; explore lends the declared run spec_gaps.csv, naming populations that span several clusters and clusters nothing covers.**
+
+```bash
 docker run --rm $D cyraven:1.0.0 \
   --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
   --group-column cohort --reference-group "Healthy controls" \
