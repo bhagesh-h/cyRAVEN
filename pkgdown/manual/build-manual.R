@@ -146,9 +146,12 @@ for (nm in names(CHAPTERS)) {
   message("  chapter: ", CHAPTERS[[nm]], " (", length(txt), " lines)")
 }
 
-# Figures produced by the evaluated chunks, plus the static ones the articles
-# include, both resolved relative to the assembled document.
-for (d in c("figure", "figures")) {
+# Figures produced by the evaluated chunks, the worked example's rendered PNGs,
+# and the concept illustrations, all resolved relative to the assembled document.
+# `images` is the one the vignettes reference by a relative path in
+# include_graphics, so leaving it out silently drops every explanatory diagram
+# from the manual while the surrounding text still describes them.
+for (d in c("figure", "figures", "images")) {
   src <- file.path(vig_dir, d)
   if (dir.exists(src)) file.copy(src, work, recursive = TRUE)
 }

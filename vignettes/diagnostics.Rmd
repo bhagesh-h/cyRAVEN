@@ -131,6 +131,10 @@ marker differ systematically between study groups, the populations defined by
 that marker are not identically specified across the comparison, and any
 abundance difference is partly definitional.
 
+```{r threshold-drift, eval = TRUE, echo = FALSE, fig.alt = "Cuts that differ systematically between study groups, making part of any difference definitional"}
+if (file.exists("images/threshold-drift.png")) knitr::include_graphics("images/threshold-drift.png")
+```
+
 `threshold_drift_stats.csv` tests each marker's per-sample thresholds against
 group membership and flags those that separate. A flagged marker invalidates
 naive interpretation of every population depending on it.
@@ -142,6 +146,10 @@ definition capable of drifting.
 
 Threshold drift asks whether a cut sits in a different place for one group than
 another. This asks a prior question: how well is it determined at all.
+
+```{r gate-uncertainty, eval = TRUE, echo = FALSE, fig.alt = "Resampling the cells and re-deriving the cut many times shows how far it can move"}
+if (file.exists("images/gate-uncertainty-resample.png")) knitr::include_graphics("images/gate-uncertainty-resample.png")
+```
 
 Each cut is re-derived from resamples of the events it was computed on, and again
 across the settings that placed it, and the two spreads combine in quadrature
@@ -173,6 +181,10 @@ The preceding section asks how well the cut is determined. This asks whether
 enough cells were counted for the answer to mean anything, which is a separate
 question with a separate failure mode: a cut through a wide empty gap is well
 determined however few events lie beyond it.
+
+```{r lod-loq, eval = TRUE, echo = FALSE, fig.alt = "Three zones of a frequency axis: below detection, detected but not quantifiable, and quantified"}
+if (file.exists("images/lod-loq.png")) knitr::include_graphics("images/lod-loq.png")
+```
 
 `u_counting_pct_points` in `population_frequencies.csv` is the uncertainty the
 frequency carries from its own event count, and `u_total_pct_points` combines it
@@ -208,6 +220,10 @@ on disk.
 `--cluster` computes a self-organising map clustering of the same cells without
 reference to the specification, then cross-tabulates. Four configurations are
 diagnostic.
+
+```{r cluster-agreement, eval = TRUE, echo = FALSE, fig.alt = "Declared gates against found clusters: agreement, splitting, merging, and a cluster nothing declared covers"}
+if (file.exists("images/cluster-gate-agreement.png")) knitr::include_graphics("images/cluster-gate-agreement.png")
+```
 
 This check clusters WITHIN the parent gate, on the cells the specification
 already selected. `--explore` is the wider version: it clusters every event in
@@ -245,6 +261,10 @@ population in the next one. `--external-labels` takes a cell labelling produced
 elsewhere, a cyCONDOR clustering for instance, learns a strategy for it, and then
 withholds one donor at a time: the whole strategy is refitted on the remaining
 donors and scored on the donor that was held back.
+
+```{r gate-transferability, eval = TRUE, echo = FALSE, fig.alt = "Held-out cells score higher than a held-out donor, which is the honest number"}
+if (file.exists("images/gate-transferability.png")) knitr::include_graphics("images/gate-transferability.png")
+```
 
 This is a different measurement from the held-out metric in section 8. Cells
 reserved from a fit come from the same donors, acquired in the same tubes on the
@@ -345,6 +365,10 @@ samples, where a null result carries almost no information.
 
 `--batch-column` names the variable identifying acquisition batch. Absent that,
 the `$DATE` keyword is used where it varies.
+
+```{r batch-confounding, eval = TRUE, echo = FALSE, fig.alt = "A separable design has every group in every batch; a confounded one does not, and correction is refused"}
+if (file.exists("images/batch-vs-group-confounding.png")) knitr::include_graphics("images/batch-vs-group-confounding.png")
+```
 
 Two quantities are reported and both are required.
 

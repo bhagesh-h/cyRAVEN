@@ -35,6 +35,10 @@ An unsupervised tool hands you cluster 17 and a heatmap, and you decide what it
 is by eye. That inference is done on pooled data, on a colour scale whose limits
 you chose, with no per-sample calibration behind it.
 
+```{r explore-vs-declared, eval = TRUE, echo = FALSE, fig.alt = "The declared analysis names a few regions and leaves most cells unnamed; explore mode partitions everything"}
+if (file.exists("images/explore-vs-declared.png")) knitr::include_graphics("images/explore-vs-declared.png")
+```
+
 With `--maybe-learn`, this module has things a standalone clusterer does not:
 
 | From the declared run | What explore does with it |

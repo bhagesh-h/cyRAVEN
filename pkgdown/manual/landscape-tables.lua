@@ -32,8 +32,12 @@ local MIN_COLS = 5
 -- regardless of how many columns it has.
 local MIN_CELL_CHARS = 120
 
+-- A Cell is a wrapper, not a list of blocks: stringify takes its .contents.
+-- Passing the Cell itself raises "table expected, got pandoc Cell", which aborts
+-- pandoc entirely -- and with continue-on-error on the build step, that failure
+-- reported as success and the only symptom was a 404 on the download link.
 local function cell_text(cell)
-  return pandoc.utils.stringify(cell)
+  return pandoc.utils.stringify(cell.contents or cell)
 end
 
 local function widest_cell(tbl)
