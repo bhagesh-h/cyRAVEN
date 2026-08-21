@@ -180,6 +180,10 @@ change of 40 that means nothing. Cliff's delta is bounded [−1, 1], is the effe
 size the rank test corresponds to, and reads directly: 0.5 means the comparison
 group was higher in three quarters of the cross-sample pairs.
 
+```{r p-floor, eval = TRUE, echo = FALSE, fig.alt = "A volcano plot whose attainable p floor sits above the 0.05 line, so no population can reach significance"}
+if (file.exists("images/attainable-p-floor.png")) knitr::include_graphics("images/attainable-p-floor.png")
+```
+
 Two horizontal lines. The dashed red one is p = 0.05. The dot-dash blue one is the
 **smallest p this design can produce at all**: a Wilcoxon rank-sum test has
 `choose(n1 + n2, n1)` equally likely rank arrangements under the null, so the most

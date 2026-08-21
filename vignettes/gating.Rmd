@@ -21,6 +21,10 @@ thresholds. This article documents each stage and the parameters governing it.
 Four sequential gates precede any marker evaluation. Each is derived from the
 data rather than transferred between samples.
 
+```{r hierarchy-inheritance, eval = TRUE, echo = FALSE, fig.alt = "A gate tree in which one wrong cut fades every population beneath it"}
+if (file.exists("images/gate-hierarchy-inheritance.png")) knitr::include_graphics("images/gate-hierarchy-inheritance.png")
+```
+
 **1.1 Scatter.** The lower forward-scatter bound is placed at the deepest minimum
 of the log<sub>10</sub> FSC-A density. Sub-cellular debris forms a distinct
 low-scatter mode separated from intact cells; the minimum between them is the
@@ -331,6 +335,10 @@ manual decision, and the following run reads an edited specification.
 
 ### 4.1 Scale
 
+```{r transform-compare, eval = TRUE, echo = FALSE, fig.alt = "Arcsinh and logicle transforms compared, both keeping the negative values a plain log cannot"}
+if (file.exists("images/transform-arcsinh-vs-logicle.png")) knitr::include_graphics("images/transform-arcsinh-vs-logicle.png")
+```
+
 Fluorescence intensities span four to five decades. Untransformed, the negative
 population compresses against the axis and mode separation is not resolvable.
 Every threshold in section 2 is therefore placed on a transformed scale, and the
@@ -378,6 +386,10 @@ frequency.
 Fluorochrome emission spectra overlap, so signal from one dye is registered in
 detectors assigned to others. Uncorrected, this produces apparent positivity in
 channels the cell does not express.
+
+```{r spillover-spreading, eval = TRUE, echo = FALSE, fig.alt = "Compensation restores the centre of a distribution but cannot restore its width"}
+if (file.exists("images/spillover-spreading.png")) knitr::include_graphics("images/spillover-spreading.png")
+```
 
 The spillover matrix is determined at acquisition from single-stain controls and
 stored in the FCS keyword block. cyRAVEN applies it where present and reports its

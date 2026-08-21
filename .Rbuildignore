@@ -51,3 +51,15 @@
 # R CMD build reads the working directory rather than git, and any unrecognised
 # top-level file is reported by R CMD check as non-standard.
 ^ToDo\.md$
+# The image prompt sheet is a working file for generating the documentation
+# figures, not documentation itself. The images beside it are a separate
+# question: they ship only if the vignettes that reference them ship, and that
+# decision waits until they exist and their size is known.
+^vignettes/images/prompts\.md$
+# The concept illustrations. They are referenced by the vignettes and so are
+# built into the site and the PDF manual, both of which are produced from this
+# repository rather than from the tarball. Shipping them took the package from
+# under a megabyte to 25 MB, five times CRAN's limit, for figures nobody reads
+# from an R session. Every chunk that draws one is guarded with file.exists(), so
+# a vignette built from the tarball renders without them rather than failing.
+^vignettes/images$

@@ -41,6 +41,10 @@ and `system.file("examples", "analysis_template.yaml", package = "cyRAVEN")`.
 Do not write it from scratch. Generate one covering every file in the input
 directory, then fill in the columns only you know:
 
+```{r two-input-files, eval = TRUE, echo = FALSE, fig.alt = "The sample sheet holds what varies per sample; the config holds one decision for the whole study"}
+if (file.exists("images/two-input-files.png")) knitr::include_graphics("images/two-input-files.png")
+```
+
 ```bash
 docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
   --dir /data/fcs --write-samples /data/samples.csv

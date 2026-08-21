@@ -64,6 +64,10 @@ they contributed.
 Event-level quantities remain available through `stats_subcluster_shifts()`,
 which reports effect sizes without p-values. They are hypothesis-generating.
 
+```{r donors-not-cells, eval = TRUE, echo = FALSE, fig.alt = "Counting cells sets n from how long the machine ran; counting donors sets it from the number of people"}
+if (file.exists("images/donors-not-cells.png")) knitr::include_graphics("images/donors-not-cells.png")
+```
+
 ## 2. Test selection
 
 Group comparisons use Wilcoxon rank-sum and Kruskal-Wallis, which assume
@@ -138,6 +142,10 @@ vary independently. A genuine granulocyte expansion mechanically depresses every
 lymphocyte percentage. Those depressions test significant while absolute
 lymphocyte counts per microlitre remain unchanged.
 
+```{r compositional-constraint, eval = TRUE, echo = FALSE, fig.alt = "Two stacked bars of equal length: only granulocytes changed, yet every other segment shrank because the bar is a fixed length"}
+if (file.exists("images/compositional-constraint.png")) knitr::include_graphics("images/compositional-constraint.png")
+```
+
 ### 3.2 Log-ratio
 
 `clr_frequencies()` applies the centred log-ratio, expressing each population
@@ -198,6 +206,10 @@ A confounder is screened to decide whether a group difference can be believed.
 A clinical variable — a severity score, a laboratory value, an outcome flag — is
 the question itself, and `stats_clinical_association()` treats it that way.
 
+```{r unit-of-analysis, eval = TRUE, echo = FALSE, fig.alt = "A score measured at each draw is per sample; a property of the person is per patient"}
+if (file.exists("images/per-sample-vs-per-patient.png")) knitr::include_graphics("images/per-sample-vs-per-patient.png")
+```
+
 The test follows the variable's type rather than being chosen:
 
 | Variable | Test | Effect reported | Signed |
@@ -244,6 +256,10 @@ Every signed effect above is written with a 95% percentile bootstrap interval:
 for Cliff's delta, from a fixed seed so a given table always yields the same
 interval and the RNG stream is restored afterwards so nothing downstream is
 perturbed.
+
+```{r interval-not-point, eval = TRUE, echo = FALSE, fig.alt = "The same effect estimate with a wide interval at n = 9 and a narrow one at n = 40"}
+if (file.exists("images/interval-not-point.png")) knitr::include_graphics("images/interval-not-point.png")
+```
 
 The interval is the part of the answer that carries how little a small cohort
 constrains the effect. On ten patients a rho of 0.61 with an interval from −0.1 to

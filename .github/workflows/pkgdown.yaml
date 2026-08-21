@@ -77,6 +77,22 @@ jobs:
                                    "environ", "trimspaces", "koma-script"))
           source("pkgdown/manual/build-manual.R")
         shell: Rscript {0}
+
+      # THE FAILURE HAS TO BE VISIBLE. continue-on-error above keeps a LaTeX
+      # problem from taking the documentation offline, but it also makes the step
+      # report SUCCESS in the run list and the API. The first version of this
+      # shipped with a crashing Lua filter and the only symptom anywhere was a 404
+      # on the download link -- the workflow said it had passed. This step cannot
+      # fail the job either, so the site still deploys, but it writes an
+      # annotation that shows on the run summary.
+      - name: Check the PDF manual was written
+        if: always()
+        run: |
+          if [ -f docs/cyRAVEN-manual.pdf ]; then
+            ls -lh docs/cyRAVEN-manual.pdf
+          else
+            echo "::warning title=PDF manual missing::The site deployed without cyRAVEN-manual.pdf. The download link will 404. See the Build the PDF manual step for the error."
+          fi
       # v4.8.0 is the first release on the Node 24 runtime; 4.5.0 ran on Node 20,
       # which the runners now force onto 24 and warn about.
       #

@@ -31,6 +31,10 @@ one deeply acquired donor to determine a group result. Every test aggregates to
 one value per sample before estimation. Quantities that cannot be aggregated are
 reported with effect sizes and no p-value.
 
+```{r ten-stages, eval = TRUE, echo = FALSE, fig.alt = "The ten pipeline stages in order, with explore mode attached as an optional branch"}
+if (file.exists("images/pipeline-ten-stages.png")) knitr::include_graphics("images/pipeline-ten-stages.png")
+```
+
 
 
 ## 1 Read

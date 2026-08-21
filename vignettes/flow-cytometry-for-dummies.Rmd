@@ -24,6 +24,10 @@ A cytometer does not look at your sample as a whole. It squeezes it into a strea
 so narrow the cells have to queue up single file, then fires a laser at the
 stream. Each cell crosses the beam alone, one at a time, thousands per second.
 
+```{r fluidics, eval = TRUE, echo = FALSE, fig.alt = "Cells queueing single file through a stream, one crossing the laser at a time, each crossing producing one row of numbers"}
+if (file.exists("images/fluidics-single-file.png")) knitr::include_graphics("images/fluidics-single-file.png")
+```
+
 Every crossing is recorded as one row of numbers. That row is one cell. A typical
 file holds a few hundred thousand rows, and the whole analysis is sorting those
 rows into groups.
@@ -32,6 +36,10 @@ In cytometry the row is called an **event** rather than a cell, and the word is
 chosen carefully. An event is "something crossed the beam". Usually that is one
 cell. It can also be two cells stuck together, or a fragment of a dead one. Part
 of the pipeline exists to throw those out, which is section 7.
+
+```{r event-vs-cell, eval = TRUE, echo = FALSE, fig.alt = "A single cell, a doublet and a fragment of debris all cross the beam and all produce one identical-looking row"}
+if (file.exists("images/event-vs-cell.png")) knitr::include_graphics("images/event-vs-cell.png")
+```
 
 ## 2. Why cells glow
 
@@ -54,16 +62,8 @@ each of these proteins are you carrying".
 For each marker you get one number per cell: how brightly that cell glowed. Count
 how many cells sit at each brightness and you usually get two humps.
 
-```
- cells
-   |        ###                    ##
-   |      #######                #####
-   |     #########      dip     #######
-   |    ###########      |     #########
-   +---------------------v----------------- brightness
-        negative cells       positive cells
-                          ^
-                      the cut
+```{r two-humps, eval = TRUE, echo = FALSE, fig.alt = "A bimodal brightness distribution with the cut placed in the dip between the negative and positive humps"}
+if (file.exists("images/two-humps-and-the-cut.png")) knitr::include_graphics("images/two-humps-and-the-cut.png")
 ```
 
 The left hump is cells without the marker, glowing faintly from background. The
@@ -84,15 +84,8 @@ Stain two tubes on different days and both humps shift, because staining strengt
 varies with the reagent lot, the incubation, the instrument settings and the
 sample itself. The dip shifts with them.
 
-```
-  sample A        |                sample B     |
-      ###   ##    |                  ###   ##   |
-    #####  ####   |                #####  ####  |
-   ------------------ brightness  ------------------ brightness
-            ^                            ^
-        A's dip                      B's dip
-                  ^
-        A's cut, copied onto B, lands mid-hump
+```{r valley-vs-fixed, eval = TRUE, echo = FALSE, fig.alt = "One fixed cut applied to two samples lands inside a population in the second; a per-sample cut sits in each sample's own dip"}
+if (file.exists("images/valley-vs-fixed-cut.png")) knitr::include_graphics("images/valley-vs-fixed-cut.png")
 ```
 
 A cut copied from the first tube lands inside a hump in the second and slices a
@@ -154,14 +147,8 @@ deflect a lot. Read it as **internal graininess**.
 
 Together they separate the main blood cell types before any antibody is involved:
 
-```
-  SSC (grainy)
-    ^
-    |            granulocytes   <- grainiest, packed with granules
-    |         monocytes
-    |    lymphocytes            <- small and smooth
-    | debris
-    +-------------------------> FSC (size)
+```{r fsc-ssc, eval = TRUE, echo = FALSE, fig.alt = "Scatter of FSC against SSC with debris, lymphocytes, monocytes and granulocytes occupying separate regions"}
+if (file.exists("images/fsc-ssc-populations.png")) knitr::include_graphics("images/fsc-ssc-populations.png")
 ```
 
 That is why `SSC-A: above` sits in the granulocyte definition next to two real
@@ -174,15 +161,8 @@ the definition rather than a technicality.
 As a cell crosses the beam the signal climbs, peaks and falls. That trace is a
 **pulse**, and the instrument records three numbers from it.
 
-```
-      one cell              two stuck together
-
-        _/\_                  _/\__/\_
-       /    \                /        \
-
-   H = peak height        similar H
-   A = area under it      roughly doubled A
-   W = how long it took   wider W
+```{r pulse-ahw, eval = TRUE, echo = FALSE, fig.alt = "One pulse annotated with its area, its height and its width"}
+if (file.exists("images/pulse-a-h-w.png")) knitr::include_graphics("images/pulse-a-h-w.png")
 ```
 
 **Height** is the peak, **area** is the total underneath, **width** is the
@@ -192,6 +172,10 @@ duration. The suffix on a channel name says which one you are looking at, so
 For a single cell, area and height rise and fall together. For two cells stuck in
 a clump the pulse lasts twice as long, so the area roughly doubles while the
 height barely changes. That mismatch is the only reliable way to spot a clump.
+
+```{r doublet, eval = TRUE, echo = FALSE, fig.alt = "One cell gives a narrow pulse; two cells stuck together give a wider one, which is how a doublet is caught"}
+if (file.exists("images/doublet-vs-singlet.png")) knitr::include_graphics("images/doublet-vs-singlet.png")
+```
 
 It matters more than it sounds. A clump of a T cell and a B cell stuck together
 is recorded as one event positive for both CD3 and CD19, which reads as a cell
@@ -225,6 +209,10 @@ Declare `T cells` as `CD3: above`, then subsets like `CD4 T cells` as
 cut is misplaced it is not one wrong number. It is wrong in the parent and in
 every subset beneath it, all shifted the same way, and all still looking
 perfectly reasonable in the output table.
+
+```{r gating-hierarchy, eval = TRUE, echo = FALSE, fig.alt = "A funnel narrowing from all events through single cells and live cells to CD45 positive and then to individual lineages"}
+if (file.exists("images/gating-hierarchy.png")) knitr::include_graphics("images/gating-hierarchy.png")
+```
 
 So score the broad lineage populations first and check they are plausible:
 granulocytes at roughly half of blood leukocytes rather than 4% or 95%. Once the
