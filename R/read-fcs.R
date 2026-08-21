@@ -215,7 +215,7 @@ fingerprint_panels <- function(reads, labels = NULL) {
 
 #' The marker name cyRAVEN resolves from an FCS description
 #'
-#' Spectral instruments write `$PnS` as `"CD45 : SparkUV-387 - Area"` — the
+#' Spectral instruments write `$PnS` as `"CD45 : SparkUV-387 - Area"`, the
 #' antibody, the detector, and the pulse statistic in one string. The name a
 #' population specification has to use is the antibody alone, so everything from
 #' `" : "` onward is stripped. Where `$PnS` is empty the channel name `$PnN`

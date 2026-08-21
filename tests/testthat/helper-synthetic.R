@@ -41,7 +41,7 @@ synth_mfi <- function(seed = 7, n_cells = 500L) {
 #' Population frequencies that genuinely sum to 100 per sample.
 #'
 #' PLANTED: CD4 T cells are truly depressed in both patient cohorts. Because the
-#' parts are closed, the OTHER populations will appear to rise — which is exactly
+#' parts are closed, the OTHER populations will appear to rise, which is exactly
 #' the compositional artefact the CLR test exists to separate out.
 synth_freq <- function(seed = 11) {
   withr::local_seed(seed)
@@ -98,7 +98,7 @@ synth_patients <- function(seed = 19) {
   withr::local_seed(seed)
   ids <- names(synth_groups())
   # PLANTED: age is strongly unbalanced across cohorts (adult controls, paediatric
-  # patients) — the classic confounding this design cannot escape.
+  # patients), the classic confounding this design cannot escape.
   data.frame(patient_id = ids,
              age = c(stats::rnorm(6, 40, 5), stats::rnorm(10, 12, 3)),
              sex = sample(c("male", "female"), length(ids), TRUE),

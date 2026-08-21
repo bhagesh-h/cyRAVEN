@@ -251,7 +251,7 @@ single-file derivation.
 ### logicle
 
 `--transform logicle`. The automatic logicle rule with linearisation width
-*w* = (*m* − log₁₀(*t*/|*r*|))/2, where *r* is the fifth percentile of the
+*w* = (*m* - log₁₀(*t*/|*r*|))/2, where *r* is the fifth percentile of the
 negative population. `--logicle-m` sets the decades, default 4.5.
 
 The quasi-linear region near zero accommodates compensated negative values, which

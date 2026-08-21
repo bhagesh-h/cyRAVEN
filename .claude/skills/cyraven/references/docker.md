@@ -43,7 +43,7 @@ docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
 that will be published; `latest` moving under a study is the reproducibility
 failure the pinned image exists to prevent.
 
-Prefer this over building unless the source has been modified — a pulled image
+Prefer this over building unless the source has been modified, a pulled image
 cannot contain local changes to `R/`, the Dockerfile or the config templates.
 
 ## Build

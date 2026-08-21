@@ -203,7 +203,7 @@ degrees of freedom are insufficient.
 ### 4a. Clinical variables, which are a different question
 
 A confounder is screened to decide whether a group difference can be believed.
-A clinical variable — a severity score, a laboratory value, an outcome flag — is
+A clinical variable, a severity score, a laboratory value, an outcome flag, is
 the question itself, and `stats_clinical_association()` treats it that way.
 
 ```{r unit-of-analysis, eval = TRUE, echo = FALSE, fig.alt = "A score measured at each draw is per sample; a property of the person is per patient"}
@@ -218,7 +218,7 @@ The test follows the variable's type rather than being chosen:
 | Two levels (28-day survival) | Wilcoxon rank-sum | Cliff's delta, with a bootstrap interval | yes |
 | Three or more levels (infection focus) | Kruskal-Wallis | epsilon-squared | no |
 
-Epsilon-squared is `H / (n − 1)` — the proportion of rank variance the grouping
+Epsilon-squared is `H / (n - 1)`, the proportion of rank variance the grouping
 accounts for, bounded 0 to 1. It is unsigned, because a variable with three
 unordered levels has a magnitude and no direction, and that is carried explicitly
 in a `signed` column rather than left for the reader to infer from a sign that
@@ -229,8 +229,8 @@ had found anything.
 Rank methods throughout, for the reason they are used everywhere else in this
 package. Clinical scores are ordinal by construction, so a Pearson correlation
 asserts an interval scale the data does not have. Laboratory values are skewed
-and carry outliers that are real rather than erroneous — a creatinine of 335 is a
-patient, not a typing error — and a product-moment correlation on nine points
+and carry outliers that are real rather than erroneous, a creatinine of 335 is a
+patient, not a typing error, and a product-moment correlation on nine points
 with one such value is a statement about that one patient.
 
 Multiplicity is corrected **within each variable**, across the populations tested
@@ -252,7 +252,7 @@ excluded rather than coded 1/2/3, which would invent an ordering.
 ### 4b. Effect intervals on a small cohort
 
 Every signed effect above is written with a 95% percentile bootstrap interval:
-2000 resamples of the patient–value pairs for Spearman, stratified within each arm
+2000 resamples of the patient-value pairs for Spearman, stratified within each arm
 for Cliff's delta, from a fixed seed so a given table always yields the same
 interval and the RNG stream is restored afterwards so nothing downstream is
 perturbed.
@@ -262,7 +262,7 @@ if (file.exists("images/interval-not-point.png")) knitr::include_graphics("image
 ```
 
 The interval is the part of the answer that carries how little a small cohort
-constrains the effect. On ten patients a rho of 0.61 with an interval from −0.1 to
+constrains the effect. On ten patients a rho of 0.61 with an interval from -0.1 to
 0.9 and a rho of 0.05 can be the same underlying quantity, and the point estimate
 alone cannot say so; reporting the effect and its interval beside the p-value,
 rather than the p-value alone, is the standard recommendation for exactly this
@@ -272,7 +272,7 @@ Its own limits are stated on the figure that draws it. A percentile bootstrap at
 this sample size is approximate: below about nine observations the effective
 resample is smaller than the nominal one and coverage falls short of 95%. So a
 wide interval should be read as *this cohort does not constrain the effect* rather
-than as a calibrated range, and no interval is written at all below six samples —
+than as a calibrated range, and no interval is written at all below six samples,
 a number quoted at a width nobody should trust is worse than a blank.
 
 The same reasoning is why `group_differences.png` draws the smallest p-value the
@@ -418,8 +418,8 @@ question.
 
 **Clinical associations: the unit of analysis.** A cohort sampled at several
 timepoints carries two kinds of clinical column. One is constant within a patient
-— 28-day survival, BMI, age — and asks a *between-subject* question; the other
-varies within a patient — a severity score at each draw — and asks a
+, 28-day survival, BMI, age, and asks a *between-subject* question; the other
+varies within a patient, a severity score at each draw, and asks a
 *within-subject* one. Treating repeated samples from one patient as independent
 observations is pseudoreplication: it inflates the apparent sample size, narrows
 the interval and makes significance more likely without a single extra patient
@@ -441,7 +441,7 @@ named rather than implemented, for the same reason as the mixed models below.
 
 **Effect sizes with intervals, not p-values alone.** Reporting the estimated
 effect with a confidence interval, rather than a p-value on its own, is what the
-reporting guidelines for prognostic marker studies ask for — and the surveys
+reporting guidelines for prognostic marker studies ask for, and the surveys
 behind those guidelines found 96% of papers reporting p-values against 42%
 reporting an interval
 ([REMARK explanation and elaboration, *BMC Medicine* 2012](https://bmcmedicine.biomedcentral.com/articles/10.1186/1741-7015-10-51)).
@@ -456,9 +456,9 @@ Epsilon-squared, `H / (n - 1)`, is the corresponding effect size for
 Kruskal-Wallis, following Tomczak & Tomczak's recommendation as implemented in
 [`rstatix::kruskal_effsize()`](https://rpkgs.datanovia.com/rstatix/reference/kruskal_effsize.html);
 it is unsigned because a variable with three unordered levels has no direction.
-The bootstrap's own limit at these sample sizes — an effective resample smaller
+The bootstrap's own limit at these sample sizes, an effective resample smaller
 than the nominal one, and coverage falling short of 95% below about nine
-observations — is documented rather than ignored
+observations, is documented rather than ignored
 ([*Statistical uncertainty analysis for small-sample, high log-variance data*](https://pmc.ncbi.nlm.nih.gov/articles/PMC6754704/)),
 which is why no interval is written below six.
 

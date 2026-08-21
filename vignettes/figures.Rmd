@@ -593,14 +593,14 @@ from a measured one. The input format is documented in the
 
 # Where the clinical figure designs come from
 
-The clinical family — `clinical_variables_correlation.png`,
+The clinical family, `clinical_variables_correlation.png`,
 `clinical_association.png`, `clinical_effects_<variable>.png`,
-`clinical_landscape.png` and `population_trajectories.png` — is not drawn from
+`clinical_landscape.png` and `population_trajectories.png`, is not drawn from
 this cohort, which carries no severity score. What each one is modelled on:
 
 | Figure | Convention it follows |
 |---|---|
-| `group_differences.png` | The volcano plot as used in cytometry: effect on x, −log10 p on y, so the largest shifts and the strongest evidence are read in one glance ([Teiko, *identifying immune differences with volcano plots*](https://teiko-labs.com/how-tos/how-to-identify-significant-immune-differences-with-volcano-plots)). The x-axis is Cliff's delta rather than a fold change, because a fold change of medians is unbounded and at single-digit group sizes is decided by whichever sample sits at the median |
+| `group_differences.png` | The volcano plot as used in cytometry: effect on x, -log10 p on y, so the largest shifts and the strongest evidence are read in one glance ([Teiko, *identifying immune differences with volcano plots*](https://teiko-labs.com/how-tos/how-to-identify-significant-immune-differences-with-volcano-plots)). The x-axis is Cliff's delta rather than a fold change, because a fold change of medians is unbounded and at single-digit group sizes is decided by whichever sample sits at the median |
 | `clinical_effects_<variable>.png` | Effect with its interval rather than a p-value alone, the central recommendation of the prognostic-marker reporting guidelines ([REMARK explanation and elaboration](https://bmcmedicine.biomedcentral.com/articles/10.1186/1741-7015-10-51)), with percentile bootstrap intervals as used for Cliff's delta ([*Cliff's Delta Calculator*](http://www.scielo.org.co/scielo.php?script=sci_arttext&pid=S1657-92672011000200018)) |
 | `clinical_variables_correlation.png` | The correlogram convention: circle area for the absolute coefficient, fill for its sign, the number printed only where it reaches significance ([*Correlation-based network generation, visualization and analysis*, BioMed Research International](https://www.hindawi.com/journals/bmri/2016/8313272/)) |
 | `clinical_landscape.png` | The annotated-matrix layout of immunoprofiling papers: a z-scored molecular matrix with clinical annotation bars above it, columns ordered by severity ([*An immune dysfunction score for stratification of patients with acute infection*](https://pmc.ncbi.nlm.nih.gov/articles/PMC7613832/); [*Multi-omics resolves a sharp disease-state shift between mild and moderate COVID-19*, Cell](https://www.cell.com/cell/fulltext/S0092-8674(20)31444-6)) |

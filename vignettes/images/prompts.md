@@ -1,7 +1,7 @@
 # Image prompts for the documentation
 
 Generate each image, save it in this folder under the **File name** given, and say
-when they are in. Nothing references them yet — the vignettes still carry the
+when they are in. Nothing references them yet, the vignettes still carry the
 ASCII diagrams, and each one is swapped for its image only once the file exists.
 
 ## House style, applies to every prompt below
@@ -13,7 +13,7 @@ Every prompt already carries this, but if you regenerate one, keep it:
 - **Palette:** background transparent or white. Primary accent `#EC7414`
   (the logo's orange). Secondary `#0072F0` blue, `#00A651` green, `#8E44E8`
   purple. Greys `#333333` for text and axes, `#CCCCCC` for gridlines. **Never
-  red-and-green as the only distinction between two things** — around 8% of male
+  red-and-green as the only distinction between two things**, around 8% of male
   readers cannot separate them.
 - **Type:** clean sans-serif, large enough to read at 700 px. Label directly on
   the drawing rather than in a legend wherever possible.
@@ -23,7 +23,7 @@ Every prompt already carries this, but if you regenerate one, keep it:
   a figure a reader will quote.
 
 A note on what these are for: they replace ASCII diagrams that already work. The
-image has to be *clearer* than the ASCII, not merely prettier — if a generated
+image has to be *clearer* than the ASCII, not merely prettier, if a generated
 one is ambiguous where the ASCII was not, the ASCII stays.
 
 ---
@@ -54,15 +54,15 @@ diagram at all.
 > dip between them. The area under the left hump filled pale grey `#CCCCCC`, under
 > the right hump filled orange `#EC7414` at about 40% opacity. A vertical dashed
 > dark grey line dropped exactly at the lowest point of the dip between the humps,
-> labelled "the cut". The left hump labelled "negative — no marker", the right
-> hump labelled "positive — marker present". X axis labelled "brightness", Y axis
+> labelled "the cut". The left hump labelled "negative, no marker", the right
+> hump labelled "positive, marker present". X axis labelled "brightness", Y axis
 > labelled "number of cells". No numbers on either axis. Clean sans-serif.
 
 ---
 
 ## 3. `valley-vs-fixed-cut.png`
 
-**Replaces:** nothing yet. New, for §3 — this is the idea the whole package rests
+**Replaces:** nothing yet. New, for §3, this is the idea the whole package rests
 on and no diagram states it.
 
 > Flat vector diagram, 16:9, white background, two panels side by side separated
@@ -82,14 +82,14 @@ on and no diagram states it.
 
 **Replaces:** the ASCII scatter in §6, "FSC and SSC".
 
-> Flat vector scatter plot, 16:9, white background. X axis labelled "FSC — size",
-> Y axis labelled "SSC — internal graininess", both with an arrow head and no
+> Flat vector scatter plot, 16:9, white background. X axis labelled "FSC, size",
+> Y axis labelled "SSC, internal graininess", both with an arrow head and no
 > numbers. Four labelled clusters of small dots: "debris" bottom-left, small and
 > scattered, in light grey; "lymphocytes" low and left, tight cluster, blue
 > `#0072F0`; "monocytes" middle, medium cluster, purple `#8E44E8`; "granulocytes"
 > upper right, large cluster, orange `#EC7414`. Each cluster labelled directly
 > beside it, not in a legend. A short annotation with a leader line pointing at the
-> granulocyte cluster reading "grainiest — which is where the name comes from".
+> granulocyte cluster reading "grainiest, which is where the name comes from".
 > Clean sans-serif.
 
 ---
@@ -111,7 +111,7 @@ on and no diagram states it.
 
 ## 6. `doublet-vs-singlet.png`
 
-**Replaces:** nothing yet. New, for §7 — the reason `-W` exists is easier to see
+**Replaces:** nothing yet. New, for §7, the reason `-W` exists is easier to see
 than to read.
 
 > Flat vector diagram, 16:9, white background, two panels side by side. Left panel
@@ -120,7 +120,7 @@ than to read.
 > double-headed arrow labelled "narrow". Right panel labelled "two cells stuck
 > together": two round cells touching, crossing the same beam, and beneath them a
 > wider pulse with a slight double peak, its width marked by a longer green arrow
-> labelled "wide — this is how a doublet is caught". Same axis treatment in both
+> labelled "wide, this is how a doublet is caught". Same axis treatment in both
 > panels. Clean sans-serif, no numbers.
 
 ---
@@ -133,7 +133,7 @@ than to read.
 > narrowing downward, each a horizontal bar narrower than the one above it, in a
 > single orange `#EC7414` at decreasing opacity from dark at the top to pale at the
 > bottom. Top to bottom the bars are labelled "all events", "single cells",
-> "live cells", "CD45 positive — white blood cells", and beneath the last a
+> "live cells", "CD45 positive, white blood cells", and beneath the last a
 > branching row of three small boxes labelled "T cells", "B cells", "monocytes".
 > To the right of the funnel, a vertical annotation with a downward arrow reading
 > "an error at any level is inherited by everything below it". Clean sans-serif.
@@ -167,7 +167,7 @@ no picture.
 > Flat vector diagram, 16:9, white background, two panels side by side. Left panel
 > titled "counting cells": six person icons in dark grey, each with a large stack
 > of many small dots beneath them, and a total beneath reading "n = 1,600,000",
-> with a red-free warning marker — use a purple `#8E44E8` cross rather than red —
+> with a red-free warning marker, use a purple `#8E44E8` cross rather than red,
 > and the label "wrong: n is set by how long the machine ran". Right panel titled
 > "counting donors": the same six person icons, each with a single orange
 > `#EC7414` dot beneath, total reading "n = 6", with a green `#00A651` tick and the
@@ -273,8 +273,8 @@ a picture makes it obvious.
 > Flat vector diagram, 16:9, white background. A horizontal axis labelled
 > "population frequency", increasing to the right, no numbers. Three zones divided
 > by two vertical dashed lines. Leftmost zone shaded dark grey, labelled "below LOD
-> — cannot be told apart from nothing". Middle zone shaded pale orange, labelled
-> "detected but not quantifiable — present, but the number is not reliable". Right
+>, cannot be told apart from nothing". Middle zone shaded pale orange, labelled
+> "detected but not quantifiable, present, but the number is not reliable". Right
 > zone white, labelled "quantified". The two dividing lines labelled "LOD" and
 > "LOQ". Beneath, an annotation reading "a rare population reported as 0.02 percent
 > may be any of these three". Clean sans-serif.
@@ -290,9 +290,9 @@ refuse to run, and the reason is geometric.
 > is a 2 by 2 grid of cells, rows labelled "batch 1" and "batch 2", columns
 > labelled "healthy" and "patient". Left panel titled "separable": all four cells
 > contain three small sample icons, evenly filled, annotated beneath "correction is
-> possible — each group appears in each batch". Right panel titled "confounded":
+> possible, each group appears in each batch". Right panel titled "confounded":
 > only the top-left and bottom-right cells contain icons, the other two empty,
-> annotated beneath "correction is refused — removing the batch and removing the
+> annotated beneath "correction is refused, removing the batch and removing the
 > finding are the same operation". Orange EC7414 icons for healthy, blue 0072F0 for
 > patient. Clean sans-serif.
 
@@ -304,11 +304,11 @@ refuse to run, and the reason is geometric.
 
 > Flat vector diagram, 16:9, white background. A scatter of cells arranged as four
 > rounded blobs, with an overlay of dashed outlines representing declared gates.
-> Blob 1 fully enclosed by one dashed outline, labelled "declared and found —
+> Blob 1 fully enclosed by one dashed outline, labelled "declared and found,
 > agree". Blob 2 split across two dashed outlines, labelled "one declared label
 > spanning two clusters". Blob 3 containing two separate dashed outlines, labelled
 > "two labels inside one cluster". Blob 4 with no dashed outline at all, filled
-> orange EC7414, labelled "found, never declared — what explore mode is for".
+> orange EC7414, labelled "found, never declared, what explore mode is for".
 > Clean sans-serif, no axis numbers.
 
 ---
@@ -320,9 +320,9 @@ refuse to run, and the reason is geometric.
 > Flat vector diagram, 16:9, white background, two panels. Left panel titled
 > "held-out cells": six donor icons all orange EC7414 inside a dashed box labelled
 > "fitted here", with an arrow to a score reading "F1 0.94" and the annotation "the
-> same donors — flattering". Right panel titled "held-out donor": five orange donor
+> same donors, flattering". Right panel titled "held-out donor": five orange donor
 > icons inside the dashed "fitted here" box and one blue 0072F0 donor icon outside
-> it, arrow to a score reading "F1 0.71", annotation "a donor the gate never saw —
+> it, arrow to a score reading "F1 0.71", annotation "a donor the gate never saw,
 > the honest number". Clean sans-serif.
 
 ---
@@ -337,7 +337,7 @@ refuse to run, and the reason is geometric.
 > 3 Gate, 4 Score, 5 Uncertainty, 6 Embed, 7 Test, 8 Diagnose, 9 Explain,
 > 10 Report. Boxes 1 to 5 orange EC7414, box 6 purple 8E44E8, box 7 blue 0072F0,
 > boxes 8 to 10 green 00A651. A detached box below, connected by a dashed line,
-> labelled "10a Explore — optional, changes nothing above it". A small annotation
+> labelled "10a Explore, optional, changes nothing above it". A small annotation
 > under stage 3 reading "per sample, from its own density". Clean sans-serif.
 
 ---
@@ -350,7 +350,7 @@ what new users get wrong.
 > Flat vector diagram, 16:9, white background. Two document icons side by side.
 > Left document titled "samples.csv" with an orange EC7414 header, showing a small
 > table with the column headers "file", "sample_id", "patient_id", "cohort",
-> "batch" and three rows beneath. Caption under it: "one row per FCS file —
+> "batch" and three rows beneath. Caption under it: "one row per FCS file,
 > anything that VARIES per sample". Right document titled "analysis.yaml" with a
 > blue 0072F0 header, showing indented key-value lines suggesting "populations:",
 > "gating:", "ratios:". Caption under it: "one decision for the whole study". A
@@ -385,7 +385,7 @@ statement in the documentation, and it needs a picture.
 > identical background scatter of cells. Left panel titled "declared": four regions
 > outlined and filled orange EC7414 at low opacity, each labelled with a population
 > name, and a large remaining region left plain grey labelled "82 percent of cells
-> — no name". Right panel titled "explore": the same scatter divided instead into
+>, no name". Right panel titled "explore": the same scatter divided instead into
 > about twelve irregular coloured cluster regions covering everything including the
 > previously grey area, three of them ringed in purple 8E44E8 and labelled "no
 > declared population covers these". An arrow between the panels labelled "ignores
@@ -401,13 +401,13 @@ diagram.
 
 > Flat vector diagram, 16:9, white background, two panels. Both show the same three
 > person icons, each with three test-tube icons beneath it, nine tubes in total.
-> Left panel titled "SOFA — measured at each draw": each of the nine tubes carries
+> Left panel titled "SOFA, measured at each draw": each of the nine tubes carries
 > a different small number badge in orange EC7414, annotated "the value moves
-> within a patient, so the sample is the unit — n = 9". Right panel titled
-> "survival — a property of the person": the three tubes under each person all
+> within a patient, so the sample is the unit, n = 9". Right panel titled
+> "survival, a property of the person": the three tubes under each person all
 > carry the SAME badge as each other in blue 0072F0, the three people differing
 > from one another, annotated "counting nine would be counting three people three
-> times each — n = 3". Clean sans-serif.
+> times each, n = 3". Clean sans-serif.
 
 ---
 
@@ -420,7 +420,7 @@ diagram.
 > negative for marker A": a single narrow bell curve centred near zero, its width
 > marked by a short double-headed arrow labelled "narrow", drawn in grey. Bottom
 > panel titled "cells bright for marker A": a bell curve at the same centre
-> position but visibly wider, width marked by a longer arrow labelled "wider — this
+> position but visibly wider, width marked by a longer arrow labelled "wider, this
 > is spreading", drawn in orange EC7414. An annotation to the right reading
 > "compensation puts the centre back. It cannot put the width back." Clean
 > sans-serif, no numbers.
@@ -433,9 +433,9 @@ diagram.
 
 > Flat vector diagram, 16:9, white background. Three panels in a row, each showing
 > one thing crossing a laser beam and each producing one row in a small table to
-> the right. Panel 1: a single clean round cell, labelled "one cell — what you
-> want". Panel 2: two cells stuck together, labelled "a doublet — counted as one
+> the right. Panel 1: a single clean round cell, labelled "one cell, what you
+> want". Panel 2: two cells stuck together, labelled "a doublet, counted as one
 > event". Panel 3: an irregular fragment, labelled "debris from a dead cell". All
 > three rows in the table are drawn identically and marked with a single brace
-> labelled "the file cannot tell them apart — the gates have to". Cells in orange
+> labelled "the file cannot tell them apart, the gates have to". Cells in orange
 > EC7414, debris in grey. Clean sans-serif.

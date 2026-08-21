@@ -342,8 +342,8 @@ the others in the folder.
 
 `--covariates` names variables screened as *nuisances*: the question is whether a
 group difference can be believed in spite of them. `--clinical-columns` names
-variables that *are* the question — a severity score, a laboratory value, an
-outcome flag — and associates each with every population and every marker. The
+variables that *are* the question: a severity score, a laboratory value, an
+outcome flag. Each is associated with every population and every marker. The
 same column would be a different analysis under each flag, which is why they are
 two flags.
 

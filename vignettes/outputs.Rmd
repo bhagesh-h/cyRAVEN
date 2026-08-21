@@ -172,11 +172,11 @@ without p-values, and answers a different question from the tests above it.
 
 ### `group_differences.png`
 
-One point per population: **Cliff's delta** on the x-axis, −log10 p on the y. A
-fold change of medians is the conventional x-axis and is the wrong one here — it is
+One point per population: **Cliff's delta** on the x-axis, -log10 p on the y. A
+fold change of medians is the conventional x-axis and is the wrong one here, it is
 unbounded, and at single-digit group sizes it is decided by whichever sample sits
 at the median, so a population whose reference median is near zero produces a fold
-change of 40 that means nothing. Cliff's delta is bounded [−1, 1], is the effect
+change of 40 that means nothing. Cliff's delta is bounded [-1, 1], is the effect
 size the rank test corresponds to, and reads directly: 0.5 means the comparison
 group was higher in three quarters of the cross-sample pairs.
 
@@ -191,7 +191,7 @@ extreme possible separation gives a two-sided p of `2 / choose(n1 + n2, n1)` and
 nothing below it is reachable. At 4 against 5 that floor is 0.016, and after
 correcting across a dozen populations no population can reach 0.05 however cleanly
 the groups separate. When the blue line sits *above* the red one, an empty upper
-region of the figure says nothing about biology — it is a property of the design,
+region of the figure says nothing about biology, it is a property of the design,
 and the figure says so rather than leaving the reader to work it out.
 
 The floor is drawn per comparison, not once for the figure: each comparison group
@@ -249,8 +249,8 @@ Disable with `--no-parametric`.
 A severity score, a laboratory value or an outcome flag is neither the study
 group nor a confounder. A confounder is screened to decide whether a group
 difference can be believed; a clinical variable is the question. Name any sheet
-column with `--clinical-columns` — or `samples: clinical_columns:` in the config
-— and it is associated with every population and every marker.
+column with `--clinical-columns`, or `samples: clinical_columns:` in the config
+, and it is associated with every population and every marker.
 
 | File | Content |
 |---|---|
@@ -266,11 +266,11 @@ column with `--clinical-columns` — or `samples: clinical_columns:` in the conf
 The test follows the variable's type rather than being chosen: **Spearman's rho**
 for a numeric column, **Wilcoxon rank-sum with Cliff's delta** for a two-level
 column, **Kruskal-Wallis with epsilon-squared** for more levels. Rank methods
-throughout, for the reason they are used everywhere else here — clinical scores
+throughout, for the reason they are used everywhere else here, clinical scores
 are ordinal by construction, laboratory values are skewed with outliers that are
 real rather than erroneous, and cohorts are small.
 
-Epsilon-squared is `H / (n − 1)`, the proportion of rank variance the grouping
+Epsilon-squared is `H / (n - 1)`, the proportion of rank variance the grouping
 accounts for. It is **unsigned**: a variable with three levels has a magnitude but
 no single direction, which is why the `signed` column exists and why those tiles
 stay grey on the heatmap rather than being coloured as though they pointed
@@ -278,16 +278,16 @@ somewhere.
 
 ### The effect, its interval, and why they come before the p-value
 
-`ci_low` and `ci_high` are a 95% percentile bootstrap interval on the effect —
-2000 resamples of the patient–value pairs for Spearman, stratified within each arm
+`ci_low` and `ci_high` are a 95% percentile bootstrap interval on the effect,
+2000 resamples of the patient-value pairs for Spearman, stratified within each arm
 for Cliff's delta, from a fixed seed so the same table always yields the same
 interval. `clinical_effects_<variable>.png` draws them ordered by effect.
 
 On ten patients most intervals span zero, and that is the finding: a rho of 0.61
-whose interval runs −0.1 to 0.9 is a lead worth powering a follow-up on, not a
-result. The interval is itself approximate at this size — below about nine
+whose interval runs -0.1 to 0.9 is a lead worth powering a follow-up on, not a
+result. The interval is itself approximate at this size, below about nine
 observations the bootstrap's effective resample is smaller than the nominal one
-and coverage falls short of 95% — so read a wide interval as *this cohort does not
+and coverage falls short of 95%, so read a wide interval as *this cohort does not
 constrain the effect* rather than as a precise range. It is suppressed entirely
 below six samples rather than quoted at a width nobody should trust.
 
