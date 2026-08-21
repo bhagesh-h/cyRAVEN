@@ -12,9 +12,9 @@ were wrong.
 
 ## Clinical variables are analysed instead of only carried
 
-`read_samplesheet()` recognises a fixed list of subject attributes — `patient_id`,
+`read_samplesheet()` recognises a fixed list of subject attributes, `patient_id`,
 `sex`, `age_years`, `height_cm`, `weight_kg`, `infection_focus`, `cohort`,
-`wbc_per_ul` — and carried everything else as a "study column", usable only to
+`wbc_per_ul`, and carried everything else as a "study column", usable only to
 *group* samples. A SOFA score cannot group anything and a 28-day survival flag
 grouped as a cohort loses the fact that it is an outcome, so those columns were
 read, written into the manifest, and never analysed.
@@ -42,12 +42,12 @@ read, written into the manifest, and never analysed.
 
 ## Between-group differences, all populations on one figure
 
-* `group_differences.png` (`fig_group_volcano()`): Cliff's delta against −log10 p,
+* `group_differences.png` (`fig_group_volcano()`): Cliff's delta against -log10 p,
   one point per population. `group_comparison.png` is the figure for reading one
   population carefully; this is the one for deciding which to read.
 * It draws the smallest p-value the design can reach. A rank-sum test has
   `choose(n1 + n2, n1)` rank arrangements under the null, so nothing below
-  `2 / choose(n1 + n2, n1)` is attainable — 0.016 at 4 against 5. Where that floor
+  `2 / choose(n1 + n2, n1)` is attainable, 0.016 at 4 against 5. Where that floor
   sits above 0.05, an empty upper region of the figure is a property of the design
   and the figure now says so.
 * `population_trajectories.png`: with `--paired-column` and
@@ -66,7 +66,7 @@ read, written into the manifest, and never analysed.
   panels had coloured boxes with nothing naming them.
 * Categorical strata with exactly two levels are drawn blue and amber rather than
   green and red. Levels arrive alphabetically, so a survival flag came out "no"
-  green and "yes" red — a value judgement the wrong way round, asserted by the
+  green and "yes" red, a value judgement the wrong way round, asserted by the
   palette rather than by anything in the data.
 * The pooled marker UMAP in `marker_umaps_by_group/` gets the same border and grey
   strip as the split ones, from the same code path.

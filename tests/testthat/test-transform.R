@@ -8,7 +8,7 @@
 # once, then interpolates them per iteration. These tests exist to hold that
 # identity in place, because the optimisation is invisible at the call site and a
 # well-meaning future edit could replace it with the "obvious" version and never
-# notice the run got 100x slower — or, worse, replace it with an approximation
+# notice the run got 100x slower, or, worse, replace it with an approximation
 # and change every threshold in every result set.
 
 test_that("the order-statistic identity is exact, not approximate", {
@@ -73,7 +73,7 @@ test_that("derive_cofactor_pooled resists one aberrant sample", {
     marker_cols = mk)
 
   # One badly-scaled file, three normal ones. The median must ignore the outlier;
-  # deriving from the FIRST file alone — the behaviour this replaced — would take
+  # deriving from the FIRST file alone, the behaviour this replaced, would take
   # the outlier as the truth for the whole panel.
   reads <- list(bad = mkfake(0.02), a = mkfake(1), b = mkfake(1), c = mkfake(1))
   from_first <- as.numeric(derive_cofactor(reads$bad$exprs, mk))

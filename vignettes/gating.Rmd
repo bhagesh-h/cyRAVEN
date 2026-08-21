@@ -357,7 +357,7 @@ stained file does not set the scale for the batch.
 ### 4.3 Logicle
 
 `--transform logicle` implements the automatic logicle rule with linearisation
-width *w* = (*m* − log<sub>10</sub>(*t*/|*r*|))/2, where *r* is the fifth
+width *w* = (*m* - log<sub>10</sub>(*t*/|*r*|))/2, where *r* is the fifth
 percentile of the negative population. The quasi-linear region near zero
 accommodates compensated negative values, which arcsinh cannot represent.
 

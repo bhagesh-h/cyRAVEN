@@ -99,7 +99,7 @@ docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
 
 That writes 22 figures and 36 tables at the top level, full-size UMAPs per marker
 in `marker_umaps_by_group/` (each marker pooled, and split by every category the
-sample sheet carries), and a self-contained `results/report.html` —
+sample sheet carries), and a self-contained `results/report.html`,
 one file carrying every figure and table, linking to nothing and loading nothing
 from a network. Nothing is downloaded: the demonstration cohort ships inside a
 package cyRAVEN already depends on.
@@ -129,7 +129,7 @@ spectral panel that differs from what the file stores: `$PnS` reads
 produces a table of zeros.
 
 It reads every file rather than the first, so it also catches a cohort splitting
-into separate panels — which happens silently, because every file still loads and
+into separate panels, which happens silently, because every file still loads and
 every table is still written. Where the files disagree it names the fix rather
 than the symptom, separating autofluorescence and unmixing artefacts from a real
 marker stained in only some files, and printing the exact `--ignore-channels`
@@ -154,7 +154,7 @@ This image pins **R 4.4.3**, a dated CRAN snapshot and **Bioconductor 3.20**.
 Every run writes a manifest recording package versions, the git commit, the full
 invocation and every input file with its size and modification time.
 
-cyRAVEN also installs as a plain R package, and that is documented — but
+cyRAVEN also installs as a plain R package, and that is documented, but
 reproducibility of numerical output is only guaranteed inside this image.
 
 ## Building it yourself

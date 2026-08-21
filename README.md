@@ -242,13 +242,13 @@ fifteen vignettes, but they are not built into the installed copy, so
 `browseVignettes("cyRAVEN")` returns nothing inside the image and on a plain
 install. Building them would add several megabytes of rendered HTML and figures
 to a package whose footprint is already deliberate, and the site is always
-current with `main`. Function help is installed and complete — `?run_cyraven`
+current with `main`. Function help is installed and complete, `?run_cyraven`
 and 192 other topics work offline. For the prose, use the links above or build
 the vignettes yourself from a source checkout with
 `devtools::build_vignettes()`.
 
 One consequence worth knowing if you check the package yourself: because
-`inst/doc` is absent, `R CMD check` reports two warnings —
+`inst/doc` is absent, `R CMD check` reports two warnings,
 `Files in the 'vignettes' directory but no files in 'inst/doc'` and
 `Directory 'inst/doc' does not exist`. Both are consequences of not building
 vignettes rather than defects, and every other check, including all 248 tests,
@@ -294,8 +294,8 @@ for the aggregation strategy underlying the differential state tests.
 
 ## A note on how parts of this were written
 
-Commit messages and parts of the documentation — this README, the vignettes and
-the roxygen comments — were drafted with Anthropic's Claude, mostly Claude Opus 5
+Commit messages and parts of the documentation, this README, the vignettes and
+the roxygen comments, were drafted with Anthropic's Claude, mostly Claude Opus 5
 through [Claude Code](https://claude.com/claude-code), with earlier sections
 written using Opus 4.1 and Sonnet 4.5.
 
@@ -303,7 +303,7 @@ The analysis code and its results are the author's, and every number quoted in
 the documentation comes from a run rather than from a draft. Prose written this
 way can still describe the code incorrectly. If something here does not match
 what the package does, please
-[open an issue](https://github.com/bhagesh-h/cyRAVEN/issues) — a documentation
+[open an issue](https://github.com/bhagesh-h/cyRAVEN/issues), a documentation
 error is a bug and is worth reporting as one.
 
 ## Licence

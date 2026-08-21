@@ -9,7 +9,7 @@
 # this in unedited changes nothing.
 #
 # Values are either a hex colour ("#RRGGBB"), an R colour name ("white",
-# "grey20", "firebrick", ...), or — for population_palette — a list of them.
+# "grey20", "firebrick", ...), or, for population_palette, a list of them.
 # viridis option keys (density_viridis, intensity_viridis, count_viridis)
 # take one of viridisLite's option letters/names: "A"/"magma", "B"/"inferno",
 # "C"/"plasma", "D"/"viridis", "E"/"cividis", "F"/"rocket", "G"/"mako",
@@ -17,7 +17,7 @@
 
 colors:
   # Discrete: populations, samples, groups. Extra colours beyond this list's
-  # length are filled in from hcl.colors() automatically — you don't need to
+  # length are filled in from hcl.colors() automatically, you don't need to
   # extend this list just because a panel has more populations than colours
   # here.
   population_palette:
@@ -31,7 +31,7 @@ colors:
     - "#FF3D9E"
     - "#00E0A0"
 
-  # "Other CD45+" catch-all — kept out of population_palette on purpose (see
+  # "Other CD45+" catch-all, kept out of population_palette on purpose (see
   # population_colours() in the script) so a real population can never be
   # issued it.
   # Study/cohort curves and bars: --reference-group is ALWAYS the first entry

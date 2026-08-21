@@ -12,7 +12,7 @@ test_that("differential state finds the planted marker shift", {
              m$comparison_group == "S1", ]
   expect_identical(nrow(hit), 1L)
 
-  # The planted shift is +1.5, and delta_median is a DIFFERENCE, not a ratio —
+  # The planted shift is +1.5, and delta_median is a DIFFERENCE, not a ratio,
   # median_asinh runs negative, where a ratio is uninterpretable.
   expect_gt(hit$delta_median, 1.0)
   expect_lt(hit$delta_median, 2.0)
@@ -22,7 +22,7 @@ test_that("differential state finds the planted marker shift", {
   # NOT which.min(p_value): a rank test returns the SAME minimum p for any
   # perfectly separated pair, whatever the effect size, so at n = 6 vs 5 the
   # smallest p is a large tie and picking one member of it is arbitrary. The
-  # planted effect must be IN that tie, and must be the largest by effect size —
+  # planted effect must be IN that tie, and must be the largest by effect size,
   # which is the quantity that actually distinguishes it.
   expect_equal(hit$p_value, min(m$p_value), tolerance = 1e-12)
   expect_identical(which.max(abs(m$delta_median)),
@@ -104,7 +104,7 @@ test_that("concordance separates real effects from composition artefacts", {
   # The closure's fingerprint, asserted on the ESTIMATES rather than on whether
   # they cross an alpha. Only CD4 was changed; every other population was held
   # fixed and merely reapportioned, so on raw percentages they must all appear to
-  # move in the OPPOSITE direction to CD4 — that is the artefact — while their
+  # move in the OPPOSITE direction to CD4, that is the artefact, while their
   # CLR effect sizes stay far smaller. Asserting "at least one raw_only verdict"
   # instead would be a coin flip at n = 6 vs 5, where significance is decided by
   # a handful of ranks.

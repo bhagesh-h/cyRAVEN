@@ -69,30 +69,22 @@ jobs:
         continue-on-error: true
         uses: r-lib/actions/setup-tinytex@v2
 
+      # setup-tinytex installs the LaTeX DISTRIBUTION and puts it on PATH. It does
+      # not install the tinytex R PACKAGE, and tlmgr_install below is a function of
+      # that package. cyRAVEN does not depend on it and setup-r-dependencies was
+      # not asked for it, so the step failed on its first line with "there is no
+      # package called tinytex", produced no PDF, and reported success because of
+      # continue-on-error. That was the whole of the second 404.
       - name: Build the PDF manual
         continue-on-error: true
         run: |
+          if (!requireNamespace("tinytex", quietly = TRUE))
+            install.packages("tinytex")
           tinytex::tlmgr_install(c("pdflscape", "titlesec", "fancyhdr", "fvextra",
                                    "xurl", "ragged2e", "booktabs", "framed",
                                    "environ", "trimspaces", "koma-script"))
           source("pkgdown/manual/build-manual.R")
         shell: Rscript {0}
-
-      # THE FAILURE HAS TO BE VISIBLE. continue-on-error above keeps a LaTeX
-      # problem from taking the documentation offline, but it also makes the step
-      # report SUCCESS in the run list and the API. The first version of this
-      # shipped with a crashing Lua filter and the only symptom anywhere was a 404
-      # on the download link -- the workflow said it had passed. This step cannot
-      # fail the job either, so the site still deploys, but it writes an
-      # annotation that shows on the run summary.
-      - name: Check the PDF manual was written
-        if: always()
-        run: |
-          if [ -f docs/cyRAVEN-manual.pdf ]; then
-            ls -lh docs/cyRAVEN-manual.pdf
-          else
-            echo "::warning title=PDF manual missing::The site deployed without cyRAVEN-manual.pdf. The download link will 404. See the Build the PDF manual step for the error."
-          fi
       # v4.8.0 is the first release on the Node 24 runtime; 4.5.0 ran on Node 20,
       # which the runners now force onto 24 and warn about.
       #
@@ -112,3 +104,21 @@ jobs:
           branch: gh-pages
           folder: docs
           single-commit: true
+
+      # AFTER the deploy, and it FAILS the job. Ordering is the whole point. A
+      # check before the deploy that fails would stop the site publishing over a
+      # missing PDF, so the earlier version only warned, and a warning shows as
+      # success in the run list and the API. Two silent 404s reached the site that
+      # way. Placed here the site is already published when this runs, so failing
+      # costs nothing and the run goes red, which is the only signal nobody
+      # scrolls past.
+      - name: Check the PDF manual was written
+        if: always()
+        run: |
+          if [ -f docs/cyRAVEN-manual.pdf ]; then
+            ls -lh docs/cyRAVEN-manual.pdf
+            echo "PDF manual published" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error title=PDF manual missing::The site deployed without cyRAVEN-manual.pdf, so the download link 404s. See the Build the PDF manual step for the cause."
+            exit 1
+          fi

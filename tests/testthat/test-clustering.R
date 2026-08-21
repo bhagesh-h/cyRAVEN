@@ -24,7 +24,7 @@ test_that("unsupervised clustering is deterministic and size-ordered", {
 test_that("the SOM's rowsum node update matches an explicit per-node loop", {
   # This is the optimisation guard. The node update was a loop of
   # colSums(X[mapping == j, ]); it is now one rowsum() pass. Empty nodes must
-  # stay zero rows — rowsum() only returns groups that occur, and shifting rows
+  # stay zero rows, rowsum() only returns groups that occur, and shifting rows
   # up would silently corrupt the codebook.
   withr::local_seed(5)
   X <- matrix(stats::rnorm(600 * 4), ncol = 4)

@@ -76,11 +76,11 @@ docker images | grep cyraven
 
 A run takes the FCS directory, **one CSV** and **one YAML**.
 
-- `--samples samples.csv` — one row per FCS file: what it is (`file`,
+- `--samples samples.csv`, one row per FCS file: what it is (`file`,
   `sample_id`, `is_control`, `panel`, `fmo_for`), whose it is (`patient_id`,
   `cohort`, `sex`, `age_years`, …), any study variable under its own name, and
   externally measured counts in `count.<Population>` columns.
-- `--config analysis.yaml` — the analysis: `populations:`,
+- `--config analysis.yaml`, the analysis: `populations:`,
   `functional_blocks:`, `ratios:`, `sample_overrides:`, `colors:`, `metadata:`,
   and a `samples:` section naming which column is the group and which the batch.
 
@@ -248,7 +248,7 @@ conclude.
    file,sample_id,patient_id,is_control,cohort,sex,age_years,batch,count.Granulocytes
    donor01.fcs,D01,P01,FALSE,Patients,male,41,2025-03-11,5120
    donor01_v2.fcs,D01v2,P01,FALSE,Patients,male,41,2025-06-02,4380
-   unstained.fcs,UNS,,TRUE,,,,2025-03-11,
+   unstained.fcs,UNS,TRUE,,2025-03-11,
    ```
 
    Reserved acquisition columns: `file`, `sample_id`, `well`, `patient_id`,
@@ -381,16 +381,16 @@ of FCS files and no idea what is in them".
 Two tables are now in every run, and they answer the question a reader arriving
 from an immunophenotyping paper asks first: *where is my t-test?*
 
-- `statistical_methods.csv` names every commonly reported method — Student's and
+- `statistical_methods.csv` names every commonly reported method, Student's and
   Welch's *t*, one-way and two-way ANOVA with Tukey, Mann-Whitney,
-  Kruskal-Wallis with Dunn, chi-squared, Bonferroni, diffcyt's edgeR/voom/GLMM —
+  Kruskal-Wallis with Dunn, chi-squared, Bonferroni, diffcyt's edgeR/voom/GLMM,
   and says whether this run computed it and why.
 - `normality_tests.csv` is the evidence: Shapiro-Wilk per population per group,
   Brown-Forsythe across groups.
 
 When quoting it, read the `interpretation` column, not `shapiro_p` alone.
 Shapiro-Wilk on 4 to 10 donors has almost no power, so a non-significant result
-is **not** evidence of normality — which is itself the argument for the rank
+is **not** evidence of normality, which is itself the argument for the rank
 tests. Never present the catalogue as a menu to pick a test from.
 
 ## The report
@@ -414,7 +414,7 @@ per-cell exports.
 **A failed run writes it too**, with the diagnosis first: the error, the stage
 reached, the log leading up to it, what the message means for the data rather
 than for R, and the next action. Everything produced before the failure is
-embedded below. When a user reports a failed run, ask for `report.html` — it
+embedded below. When a user reports a failed run, ask for `report.html`, it
 carries the log, so they do not need to have kept the terminal output.
 
 ## Analytical constraints
