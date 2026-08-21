@@ -36,7 +36,6 @@ if (file.exists("images/pipeline-ten-stages.png")) knitr::include_graphics("imag
 ```
 
 
-
 ## 1 Read
 
 `read_fcs_resolved()` resolves channels to marker symbols from `$PnS` with
@@ -204,7 +203,6 @@ versions, git commit and working-tree state, the full invocation, and every inpu
 file with size and modification time. The manifest is written before the
 expensive stages and rewritten at completion, so an interrupted run records
 `status: failed`.
-
 
 ## 10a Explore
 

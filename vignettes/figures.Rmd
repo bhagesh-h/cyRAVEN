@@ -47,34 +47,51 @@ them.
 
 ## 0.2 The exact sequence
 
-Four commands. This is the whole of it, and it reproduces every figure on this
-page.
+Five commands, one block each. Copy and run them one at a time; together they
+reproduce every figure on this page.
+
+**1. Get the image.** This is the image these figures were produced with, so
+pulling is the shorter path to the same numbers.
 
 ```bash
-# 1. the image, once. Pull it -- this is the image these figures were
-#    produced with, so it is the shorter path to the same numbers.
 docker pull bhagesh/cyraven:1.0.0
+```
+
+```bash
 docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
+```
 
-#    Or build it from source instead; the build context is the repository root.
-#    git clone https://github.com/bhagesh-h/cyRAVEN.git
-#    cd cyRAVEN && docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
+To build it from source instead, see
+[Commands and every option](usage.html); the build context is the repository
+root.
 
+**2. Make the folders.**
+
+```bash
 mkdir -p demo results
+```
 
-# 2. write the cohort, its sample sheet and its config
+**3. Write the cohort, its sample sheet and its config.**
+
+```bash
 docker run --rm -v "$PWD/demo:/demo" \
   --entrypoint Rscript cyraven:1.0.0 \
   /opt/cyraven/src/inst/scripts/demo_data.R /demo
+```
 
-# 3. validate the inputs, in seconds, analysing nothing
+**4. Validate the inputs, in seconds, analysing nothing.**
+
+```bash
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
   cyraven:1.0.0 --dir /data/fcs \
   --samples /data/samples.csv --config /data/panel.yaml \
   --group-column cohort --reference-group "GvHD grade 1" \
   --batch-column visit --outdir /results --check
+```
 
-# 4. run
+**5. Run it.**
+
+```bash
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
   cyraven:1.0.0 --dir /data/fcs \
   --samples /data/samples.csv --config /data/panel.yaml \
@@ -86,9 +103,9 @@ On Windows PowerShell substitute `${PWD}` for `$PWD`; on Git Bash prefix the
 `docker run` lines with `MSYS_NO_PATHCONV=1`, or the shell rewrites `/data` into
 a Windows path.
 
-Step 3 should report 35 files, four resolved markers, that every marker the
+Step 4 should report 35 files, four resolved markers, that every marker the
 specification names is present, that the sheet covers every file, and the group
-sizes. Step 4 writes 22 figures and 36 tables into `results/`, plus
+sizes. Step 5 writes 22 figures and 36 tables into `results/`, plus
 `report.html`, which carries all of them embedded in one file.
 
 ## 0.3 What each flag is doing

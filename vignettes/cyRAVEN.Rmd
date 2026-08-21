@@ -74,6 +74,9 @@ every published run here was produced with.
 
 ```bash
 docker pull bhagesh/cyraven:1.0.0
+```
+
+```bash
 docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
 ```
 
@@ -86,7 +89,13 @@ not run a third-party image.
 
 ```bash
 git clone https://github.com/bhagesh-h/cyRAVEN.git
+```
+
+```bash
 cd cyRAVEN
+```
+
+```bash
 docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
 ```
 
@@ -101,6 +110,12 @@ numerically interchangeable. Check what you have with:
 ```bash
 docker run --rm --entrypoint Rscript cyraven:1.0.0 \
   -e 'cat(as.character(packageVersion("cyRAVEN")), R.version.string)'
+```
+
+Prints:
+
+```
+1.0.0 R version 4.4.3 (2025-02-28)
 ```
 
 Local installation, for development or where Docker is unavailable, is in the

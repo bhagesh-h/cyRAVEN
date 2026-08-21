@@ -314,6 +314,9 @@ shell that started `docker run` does not stop the container.
 
 ```bash
 docker ps
+```
+
+```bash
 docker kill <container-id>
 ```
 

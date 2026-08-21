@@ -74,11 +74,16 @@ here was produced with.
 
 ```bash
 docker pull bhagesh/cyraven:1.0.0
+```
+
+Then give it the short local name every command below uses:
+
+```bash
 docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
 ```
 
-The second line is only so that every command below can say `cyraven:1.0.0`. Use
-`bhagesh/cyraven:1.0.0` directly instead if you prefer.
+That second command is only for readability. Use `bhagesh/cyraven:1.0.0`
+directly instead if you prefer.
 
 **Build.** For a modified source tree, an air-gapped host, or if you would
 rather not run a third-party image. The build context is the repository root,
@@ -86,7 +91,13 @@ the directory holding `DESCRIPTION`.
 
 ```bash
 git clone https://github.com/bhagesh-h/cyRAVEN.git
+```
+
+```bash
 cd cyRAVEN
+```
+
+```bash
 docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
 ```
 
@@ -95,8 +106,15 @@ finishes by running `--help` and printing every package version, so a broken
 image fails at build time rather than during an analysis.
 
 Both routes pin R 4.4.3, the same dated CRAN snapshot and Bioconductor 3.20, so
-they are numerically interchangeable. Confirm what you have with
-`docker run --rm --entrypoint Rscript cyraven:1.0.0 -e 'packageVersion("cyRAVEN")'`.
+they are numerically interchangeable. Confirm what you have:
+
+```bash
+docker run --rm --entrypoint Rscript cyraven:1.0.0 -e 'packageVersion("cyRAVEN")'
+```
+
+```
+[1] '1.0.0'
+```
 
 ### 2. Run the demonstration cohort
 
@@ -104,22 +122,47 @@ Nothing is downloaded: the data ship inside a package cyRAVEN already depends on
 so the example is reproducible offline and cannot break when a repository moves
 or a certificate expires.
 
+Four commands, one block each. Copy and run them one at a time.
+
+**1. Make the folders.**
+
 ```bash
 mkdir -p demo results
+```
 
-# write the cohort, its sample sheet and its config
+**2. Write the cohort, its sample sheet and its config.**
+
+```bash
 docker run --rm -v "$PWD/demo:/demo" \
   --entrypoint Rscript cyraven:1.0.0 \
   /opt/cyraven/src/inst/scripts/demo_data.R /demo
+```
 
-# validate the inputs in seconds, without analysing anything
+Ends with:
+
+```
+wrote samples.csv, panel.yaml and sample_map.csv to /demo
+cohort: GvHD grade 1 n=7; GvHD grade 3 n=28
+```
+
+**3. Validate the inputs in seconds, without analysing anything.**
+
+```bash
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
   cyraven:1.0.0 --dir /data/fcs \
   --samples /data/samples.csv --config /data/panel.yaml \
   --group-column cohort --reference-group "GvHD grade 1" \
   --batch-column visit --outdir /results --check
+```
 
-# run
+It should report 35 files, four resolved markers, that every marker the
+specification names is present, that the sheet covers every file, and the group
+sizes. Nothing is written and nothing is analysed. Fix anything it reports before
+running step 4, which costs minutes rather than seconds.
+
+**4. Run it.**
+
+```bash
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
   cyraven:1.0.0 --dir /data/fcs \
   --samples /data/samples.csv --config /data/panel.yaml \
@@ -174,12 +217,16 @@ right for at most one.
 Two files besides the FCS directory: one CSV with a row per file, and one YAML
 declaring what to score.
 
+**A sheet with a row for every file, which you then fill in.**
+
 ```bash
-# a sheet with a row for every file, which you then fill in
 docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
   --dir /data/fcs --recursive --write-samples /data/samples.csv
+```
 
-# the annotated config template
+**The annotated config template.**
+
+```bash
 docker run --rm --entrypoint sh cyraven:1.0.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml' \
   > data/analysis.yaml

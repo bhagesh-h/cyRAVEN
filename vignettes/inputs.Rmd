@@ -28,7 +28,9 @@ Both templates ship with the package:
 ```bash
 docker run --rm --entrypoint sh cyraven:1.0.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/samples_template.csv'
+```
 
+```bash
 docker run --rm --entrypoint sh cyraven:1.0.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml'
 ```
@@ -212,34 +214,46 @@ Which to use:
 
 # 5. Worked example
 
+**The image, once. Pull it, or build it from source if you have changed the code -- see the Running cyRAVEN article.**
+
 ```bash
-# 0. the image, once. Pull it, or build it from source if you have changed
-#    the code -- see the Running cyRAVEN article.
 docker pull bhagesh/cyraven:1.0.0
+```
+
+```bash
 docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
+```
 
+```bash
 mkdir -p data results
-# put the FCS files in data/fcs/
+```
 
-# 1. a sheet covering every file
+**Put the FCS files in data/fcs/ a sheet covering every file.**
+
+```bash
 docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
   --dir /data/fcs --write-samples /data/samples.csv
+```
 
-# 2. edit samples.csv: patient_id, cohort, and any study variable
+**Edit samples.csv: patient_id, cohort, and any study variable a config: start from the shipped template.**
 
-# 3. a config: start from the shipped template
+```bash
 docker run --rm --entrypoint sh cyraven:1.0.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml' \
   > data/analysis.yaml
+```
 
-# 4. edit populations: to match the panel. --check lists the marker names.
+**Edit populations: to match the panel. --check lists the marker names. validate, in seconds.**
 
-# 5. validate, in seconds
+```bash
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
   cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
   --config /data/analysis.yaml --outdir /results --check
+```
 
-# 6. run
+**Run.**
+
+```bash
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
   cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
   --config /data/analysis.yaml --group-column cohort \

@@ -37,6 +37,13 @@ Check for an existing image before building one:
 docker images | grep cyraven
 ```
 
+Prints one line per image already present, nothing if none is:
+
+```
+bhagesh/cyraven   1.0.0   8261eb7fc1e0   2.59GB
+cyraven           1.0.0   8261eb7fc1e0   2.59GB
+```
+
 ### Get the image
 
 **Default to pulling.** It is a download rather than a 20-minute compile, and it
@@ -44,6 +51,9 @@ is the image the documented runs were produced with.
 
 ```bash
 docker pull bhagesh/cyraven:1.0.0
+```
+
+```bash
 docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
 ```
 
@@ -58,7 +68,13 @@ the directory holding `DESCRIPTION`:
 
 ```bash
 git clone https://github.com/bhagesh-h/cyRAVEN.git
+```
+
+```bash
 cd cyRAVEN
+```
+
+```bash
 docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
 ```
 
@@ -70,6 +86,13 @@ they are numerically interchangeable. Check what is present before doing either:
 
 ```bash
 docker images | grep cyraven
+```
+
+Prints one line per image already present, nothing if none is:
+
+```
+bhagesh/cyraven   1.0.0   8261eb7fc1e0   2.59GB
+cyraven           1.0.0   8261eb7fc1e0   2.59GB
 ```
 
 ### The two inputs
@@ -95,20 +118,28 @@ new work; leave existing three-file invocations alone.
 
 Never hand-author the sheet, and never run before checking. This sequence:
 
+**1. Write a sheet with a row for every file.**
+
 ```bash
-# 1. a sheet with a row for every file
 docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
   --dir /data/fcs --recursive --write-samples /data/samples.csv
+```
 
-# 2. user fills in patient_id, cohort and any study variable
+**2. The user fills in `patient_id`, `cohort` and any study variable.** An edit,
+not a command.
 
-# 3. validate against the FCS headers, seconds, writes nothing
+**3. Validate against the FCS headers.** Seconds, and writes nothing.
+
+```bash
 docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
   cyraven:1.0.0 --dir /data/fcs --recursive \
   --samples /data/samples.csv --config /data/analysis.yaml \
   --outdir /results --check
+```
 
-# 4. run
+**4. Run it.**
+
+```bash
 docker run --rm \
   -v "$PWD/data:/data:ro" \
   -v "$PWD/results:/results" \
@@ -155,6 +186,9 @@ Annotated templates for both files:
 ```bash
 docker run --rm --entrypoint sh cyraven:1.0.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml'
+```
+
+```bash
 docker run --rm --entrypoint sh cyraven:1.0.0 -c \
   'cat /usr/local/lib/R/site-library/cyRAVEN/examples/samples_template.csv'
 ```
@@ -175,6 +209,9 @@ When the user has no data to hand, or wants to see the output shape first:
 
 ```bash
 mkdir -p demo results
+```
+
+```bash
 docker run --rm -v "$PWD/demo:/demo" \
   --entrypoint Rscript cyraven:1.0.0 \
   /opt/cyraven/src/inst/scripts/demo_data.R /demo

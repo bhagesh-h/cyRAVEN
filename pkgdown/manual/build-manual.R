@@ -127,6 +127,38 @@ unhtml_img <- function(lines) {
   lines
 }
 
+# NAVIGATION SECTIONS ARE DROPPED FROM THE BOOK. "See also", "Where to go next"
+# and "Further reading" are lists of links to other articles. On the site they
+# are how a reader moves between pages. In a single document those pages are
+# already chapters, sitting in the reading order the list is recommending, so the
+# section tells the reader to go where they are about to arrive anyway and its
+# links point at chapters rather than at anything new.
+#
+# Dropped from the heading to the next heading of the same or higher level, which
+# is the section's real extent. Only these three titles, matched whole: a section
+# merely mentioning "see also" in its prose keeps it.
+NAV_TITLES <- c("see also", "where to go next", "further reading")
+
+drop_nav <- function(lines) {
+  is_h <- grepl("^#{1,6} ", lines)
+  # Level read straight off each line. regmatches() returns only the elements
+  # that matched, so it does not line up with `lines` and every level after the
+  # first heading would be read from the wrong one.
+  lvl <- ifelse(is_h, nchar(sub("^(#{1,6}) .*$", "\\1", lines)), NA_integer_)
+  ttl <- ifelse(is_h, tolower(trimws(sub("^#{1,6} ", "", lines))), NA_character_)
+  drop <- rep(FALSE, length(lines))
+  i <- 1L
+  while (i <= length(lines)) {
+    if (is_h[i] && !is.na(ttl[i]) && ttl[i] %in% NAV_TITLES) {
+      j <- i + 1L
+      while (j <= length(lines) && !(is_h[j] && lvl[j] <= lvl[i])) j <- j + 1L
+      drop[i:(j - 1L)] <- TRUE
+      i <- j
+    } else i <- i + 1L
+  }
+  lines[!drop]
+}
+
 body <- character(0)
 for (nm in names(CHAPTERS)) {
   rmd <- file.path(vig_dir, paste0(nm, ".Rmd"))
@@ -138,7 +170,7 @@ for (nm in names(CHAPTERS)) {
   old <- setwd(vig_dir); on.exit(setwd(old), add = TRUE)
   knitr::knit(rmd, output = md, quiet = TRUE)
   setwd(old)
-  txt <- relink(unhtml_img(demote(strip_yaml(readLines(md, warn = FALSE)))))
+  txt <- relink(unhtml_img(demote(drop_nav(strip_yaml(readLines(md, warn = FALSE))))))
   # \clearpage rather than a page break inside the chapter: a chapter that starts
   # halfway down a page reads as a section of the one before it.
   body <- c(body, "", "\\clearpage", "",
