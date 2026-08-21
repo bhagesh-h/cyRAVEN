@@ -56,65 +56,28 @@ jobs:
         shell: Rscript {0}
 
       # THE WHOLE SITE AS ONE PDF, built after the site so it can be dropped into
-      # docs/ and deployed with it. TinyTeX rather than a full TeX Live: the
-      # manual needs about a dozen packages and a full distribution is a
-      # multi-gigabyte download on every build.
-      #
-      # continue-on-error, deliberately. A LaTeX failure must not stop the site
-      # from deploying -- the HTML is the primary artefact and the PDF is a
-      # convenience. When this step fails the site publishes without the download
-      # link resolving, which is visible and fixable; blocking the deployment
-      # would take the documentation offline over a missing .sty file.
-      # TinyTeX IS INSTALLED FROM R, NOT BY THE ACTION. r-lib/actions/setup-tinytex
-      # was here and completed in five seconds, which is not long enough to fetch a
-      # hundred megabytes, so it was failing and continue-on-error was hiding both
-      # the failure and the reason. Its logs are the only place the reason exists
-      # and they need a token to read. tinytex::install_tinytex() does the same job
-      # inside the step, so a failure surfaces as an R condition in this log
-      # instead of inside somebody else's action.
-      #
-      # Every stage prints what it found. Three builds in a row produced no PDF and
-      # the only evidence available each time was a step duration, so the step now
-      # reports the package version, whether the distribution is present, and where
-      # tlmgr resolved to.
+      # docs/ and deployed with it. TinyTeX rather than a full TeX Live: the manual
+      # needs about a dozen packages and a full distribution is a multi-gigabyte
+      # download on every build.
       #
       # continue-on-error stays. The HTML is the primary artefact and must deploy
-      # even when LaTeX will not; the check after the deploy is what turns a
-      # missing PDF into a red run.
+      # even when LaTeX will not; the check after the deploy is what turns a missing
+      # PDF into a red run.
+      # THE LOG IS PUBLISHED WITH THE SITE. Three builds produced no PDF and the
+      # only evidence available was a step duration: a failing step's log needs a
+      # token to read, and continue-on-error reports it as success either way.
+      # Teeing into docs/ turns an opaque CI failure into a URL,
+      # /manual-build.log, readable by anyone who needs to know why the download
+      # link is missing. It is overwritten every build and costs a few kilobytes.
+      #
+      # The R lives in pkgdown/manual/ci-build.R rather than inline: an R heredoc
+      # inside YAML inside a shell is where two earlier attempts went wrong.
       - name: Build the PDF manual
         continue-on-error: true
+        shell: bash
         run: |
-          # THE ACTUAL CAUSE OF THREE EMPTY BUILDS, found by running the install
-          # in a container rather than reading step durations.
-          #
-          # install_tinytex() fetches https://yihui.org/tinytex/TinyTeX-1.tar.gz,
-          # which redirects to the tinytex-releases "daily" tag. That asset was
-          # renamed upstream to TinyTeX-1-tar.gz, a hyphen where the package
-          # expects a dot, so the download 404s and the install aborts in seconds.
-          # r-lib/actions/setup-tinytex fetches the same URL, which is why it also
-          # finished in five seconds.
-          #
-          # Two changes fix it. CRAN rather than the pinned snapshot, because the
-          # snapshot carries tinytex 0.56 and the naming was fixed after it; and a
-          # pinned TinyTeX release rather than "daily", so a future rename upstream
-          # cannot break this again without someone choosing to move the pin.
-          # Verified in a container: the asset downloads, extracts, and
-          # is_tinytex() returns TRUE.
-          install.packages("tinytex", repos = "https://cloud.r-project.org")
-          cat("tinytex package:", as.character(packageVersion("tinytex")), "\n")
-          cat("distribution present:", tinytex::is_tinytex(), "\n")
-          if (!tinytex::is_tinytex()) tinytex::install_tinytex(version = "2026.08")
-          cat("is_tinytex now:", tinytex::is_tinytex(), "\n")
-          cat("tlmgr resolves to:", Sys.which("tlmgr"), "\n")
-          # latexmk auto-installs a missing style file, so this list is a
-          # pre-fetch rather than a requirement. One unresolvable name must not
-          # stop the build before it has tried.
-          try(tinytex::tlmgr_install(c("pdflscape", "titlesec", "fancyhdr",
-                                       "fvextra", "xurl", "ragged2e", "booktabs",
-                                       "framed", "environ", "trimspaces",
-                                       "koma-script")))
-          source("pkgdown/manual/build-manual.R")
-        shell: Rscript {0}
+          mkdir -p docs
+          Rscript pkgdown/manual/ci-build.R 2>&1 | tee docs/manual-build.log
       # v4.8.0 is the first release on the Node 24 runtime; 4.5.0 ran on Node 20,
       # which the runners now force onto 24 and warn about.
       #
