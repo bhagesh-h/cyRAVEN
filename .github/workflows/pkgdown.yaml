@@ -65,24 +65,38 @@ jobs:
       # convenience. When this step fails the site publishes without the download
       # link resolving, which is visible and fixable; blocking the deployment
       # would take the documentation offline over a missing .sty file.
-      - name: Install TinyTeX
-        continue-on-error: true
-        uses: r-lib/actions/setup-tinytex@v2
-
-      # setup-tinytex installs the LaTeX DISTRIBUTION and puts it on PATH. It does
-      # not install the tinytex R PACKAGE, and tlmgr_install below is a function of
-      # that package. cyRAVEN does not depend on it and setup-r-dependencies was
-      # not asked for it, so the step failed on its first line with "there is no
-      # package called tinytex", produced no PDF, and reported success because of
-      # continue-on-error. That was the whole of the second 404.
+      # TinyTeX IS INSTALLED FROM R, NOT BY THE ACTION. r-lib/actions/setup-tinytex
+      # was here and completed in five seconds, which is not long enough to fetch a
+      # hundred megabytes, so it was failing and continue-on-error was hiding both
+      # the failure and the reason. Its logs are the only place the reason exists
+      # and they need a token to read. tinytex::install_tinytex() does the same job
+      # inside the step, so a failure surfaces as an R condition in this log
+      # instead of inside somebody else's action.
+      #
+      # Every stage prints what it found. Three builds in a row produced no PDF and
+      # the only evidence available each time was a step duration, so the step now
+      # reports the package version, whether the distribution is present, and where
+      # tlmgr resolved to.
+      #
+      # continue-on-error stays. The HTML is the primary artefact and must deploy
+      # even when LaTeX will not; the check after the deploy is what turns a
+      # missing PDF into a red run.
       - name: Build the PDF manual
         continue-on-error: true
         run: |
           if (!requireNamespace("tinytex", quietly = TRUE))
             install.packages("tinytex")
-          tinytex::tlmgr_install(c("pdflscape", "titlesec", "fancyhdr", "fvextra",
-                                   "xurl", "ragged2e", "booktabs", "framed",
-                                   "environ", "trimspaces", "koma-script"))
+          cat("tinytex package:", as.character(packageVersion("tinytex")), "\n")
+          cat("distribution present:", tinytex::is_tinytex(), "\n")
+          if (!tinytex::is_tinytex()) tinytex::install_tinytex()
+          cat("tlmgr resolves to:", Sys.which("tlmgr"), "\n")
+          # latexmk auto-installs a missing style file, so this list is a
+          # pre-fetch rather than a requirement. One unresolvable name must not
+          # stop the build before it has tried.
+          try(tinytex::tlmgr_install(c("pdflscape", "titlesec", "fancyhdr",
+                                       "fvextra", "xurl", "ragged2e", "booktabs",
+                                       "framed", "environ", "trimspaces",
+                                       "koma-script")))
           source("pkgdown/manual/build-manual.R")
         shell: Rscript {0}
       # v4.8.0 is the first release on the Node 24 runtime; 4.5.0 ran on Node 20,
