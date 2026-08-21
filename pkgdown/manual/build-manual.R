@@ -172,7 +172,7 @@ header <- c(
   "    number_sections: true",
   "    latex_engine: xelatex",
   "    includes:",
-  "      in_header: preamble.tex",
+  sprintf("      in_header: %s", file.path(work, "preamble.tex")),
   "documentclass: report",
   "geometry: margin=2.5cm",
   "colorlinks: true",
@@ -182,7 +182,8 @@ header <- c(
   "---",
   "")
 
-writeLines(c(header, body), file.path(work, "manual.md"))
+manual_md <- file.path(work, "manual.md")
+writeLines(c(header, body), manual_md)
 file.copy(file.path(pkg_root, "pkgdown", "manual", "preamble.tex"), work,
           overwrite = TRUE)
 file.copy(file.path(pkg_root, "pkgdown", "manual", "landscape-tables.lua"), work,
@@ -190,16 +191,30 @@ file.copy(file.path(pkg_root, "pkgdown", "manual", "landscape-tables.lua"), work
 logo <- file.path(pkg_root, "man", "figures", "logo.png")
 if (file.exists(logo)) file.copy(logo, work, overwrite = TRUE)
 
-old <- setwd(work); on.exit(setwd(old), add = TRUE)
+# ABSOLUTE PATHS, NOT setwd. This ran correctly when the script was the top-level
+# program and failed under source() from the CI wrapper with "The file 'manual.md'
+# does not exist", after all sixteen chapters had knitted: the render was reading
+# a relative path against a working directory that was not the one the file had
+# just been written to. Every path handed to render is now absolute, so the
+# working directory at the moment of the call stops being load-bearing.
+#
+# knit_root_dir and intermediates_dir are pinned to the same place for the same
+# reason: pandoc resolves the images and the Lua filter relative to where it runs,
+# and leaving that implicit is what broke.
+message("  rendering: ", manual_md, " (exists: ", file.exists(manual_md), ")")
 rmarkdown::render(
-  "manual.md",
+  manual_md,
   output_file = "cyRAVEN-manual.pdf",
+  output_dir = work,
+  knit_root_dir = work,
+  intermediates_dir = work,
   # The Lua filter is what puts wide tables on their own landscape page; see
   # landscape-tables.lua for why it is a filter rather than a LaTeX package
   # option.
-  output_options = list(pandoc_args = c("--lua-filter=landscape-tables.lua")),
+  output_options = list(
+    pandoc_args = c(paste0("--lua-filter=",
+                           file.path(work, "landscape-tables.lua")))),
   quiet = TRUE)
-setwd(old)
 
 file.copy(file.path(work, "cyRAVEN-manual.pdf"),
           file.path(out_dir, "cyRAVEN-manual.pdf"), overwrite = TRUE)
