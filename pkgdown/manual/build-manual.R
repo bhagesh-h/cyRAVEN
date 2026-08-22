@@ -127,6 +127,38 @@ unhtml_img <- function(lines) {
   lines
 }
 
+# KNITR'S FIGURE WRAPPER IS REMOVED. A chunk with fig.alt and no fig.cap is
+# emitted as a <div class="figure"> holding the image and a caption paragraph
+# that reads "plot of chunk <label>". That is knitr's placeholder for a caption
+# nobody wrote, and all 47 figures in the manual had one printed under them:
+# "plot of chunk donors-not-cells", in the finished book, under a figure whose
+# real caption was already there.
+#
+# It also broke the layout. pandoc reads the wrapper as a Div, which puts the
+# image in a block list of its own, and page-fit.lua looks at the block ABOVE a
+# figure to find the heading that titles it. Through a Div it finds the top of
+# the Div instead, so no figure in the manual was bound to its own heading.
+#
+# Line-based, because the wrapper is, and paired rather than by pattern: only a
+# </div> that closes a figure div this saw open is removed, so a div from
+# anywhere else survives intact.
+unwrap_figure <- function(lines) {
+  keep <- rep(TRUE, length(lines))
+  open <- FALSE
+  for (i in seq_along(lines)) {
+    if (grepl('^<div class="figure', lines[i])) {
+      open <- TRUE
+      keep[i] <- FALSE
+    } else if (open && grepl("^</div>\\s*$", lines[i])) {
+      open <- FALSE
+      keep[i] <- FALSE
+    } else if (open && grepl('^<p class="caption">.*</p>\\s*$', lines[i])) {
+      keep[i] <- FALSE
+    }
+  }
+  lines[keep]
+}
+
 # NAVIGATION SECTIONS ARE DROPPED FROM THE BOOK. "See also", "Where to go next"
 # and "Further reading" are lists of links to other articles. On the site they
 # are how a reader moves between pages. In a single document those pages are
@@ -170,7 +202,8 @@ for (nm in names(CHAPTERS)) {
   old <- setwd(vig_dir); on.exit(setwd(old), add = TRUE)
   knitr::knit(rmd, output = md, quiet = TRUE)
   setwd(old)
-  txt <- relink(unhtml_img(demote(drop_nav(strip_yaml(readLines(md, warn = FALSE))))))
+  txt <- readLines(md, warn = FALSE)
+  txt <- relink(unhtml_img(unwrap_figure(demote(drop_nav(strip_yaml(txt))))))
   # \clearpage rather than a page break inside the chapter: a chapter that starts
   # halfway down a page reads as a section of the one before it.
   body <- c(body, "", "\\clearpage", "",
@@ -218,7 +251,7 @@ manual_md <- file.path(work, "manual.md")
 writeLines(c(header, body), manual_md)
 file.copy(file.path(pkg_root, "pkgdown", "manual", "preamble.tex"), work,
           overwrite = TRUE)
-file.copy(file.path(pkg_root, "pkgdown", "manual", "landscape-tables.lua"), work,
+file.copy(file.path(pkg_root, "pkgdown", "manual", "page-fit.lua"), work,
           overwrite = TRUE)
 logo <- file.path(pkg_root, "man", "figures", "logo.png")
 if (file.exists(logo)) file.copy(logo, work, overwrite = TRUE)
@@ -240,12 +273,13 @@ rmarkdown::render(
   output_dir = work,
   knit_root_dir = work,
   intermediates_dir = work,
-  # The Lua filter is what puts wide tables on their own landscape page; see
-  # landscape-tables.lua for why it is a filter rather than a LaTeX package
-  # option.
+  # The Lua filter sizes every table's columns to the page and keeps each table
+  # and figure with the heading above it. It has to be a filter rather than a
+  # preamble setting because the column widths come from the content of each
+  # table, which only the document knows; see page-fit.lua.
   output_options = list(
     pandoc_args = c(paste0("--lua-filter=",
-                           file.path(work, "landscape-tables.lua")))),
+                           file.path(work, "page-fit.lua")))),
   quiet = TRUE)
 
 file.copy(file.path(work, "cyRAVEN-manual.pdf"),

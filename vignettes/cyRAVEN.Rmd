@@ -165,7 +165,7 @@ docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
 On Windows PowerShell substitute `${PWD}` for `$PWD`; on Git Bash prefix with
 `MSYS_NO_PATHCONV=1`.
 
-This writes 22 figures and 36 tables from 35 samples across five allogeneic
+This writes 24 figures and 35 tables from 35 samples across five allogeneic
 transplant recipients. `report.html` carries all of them embedded in one
 self-contained file, in the order they have to be read.
 

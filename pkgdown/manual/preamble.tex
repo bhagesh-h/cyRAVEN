@@ -2,8 +2,8 @@
 
 % pdflscape rotates BOTH the page content and the page in the PDF viewer, so a
 % landscape table is read by turning the screen rather than the head. lscape
-% alone rotates only the content. This is what landscape-tables.lua wraps its
-% tables in.
+% alone rotates only the content. This is what page-fit.lua wraps a table in on
+% the rare occasion one is too wide for a portrait page.
 \usepackage{pdflscape}
 
 % Tables that run past one page continue with their header repeated rather than
@@ -12,8 +12,8 @@
 \usepackage{booktabs}
 
 % Wrapping inside a cell. Without it a long cell sets on one line and pushes the
-% table past the page edge, which is the overlap the landscape filter exists to
-% prevent -- rotation buys width, this buys the ability to use it.
+% table past the page edge. page-fit.lua decides how wide each column should be;
+% this is what lets a cell use the width it was given rather than run past it.
 \usepackage{array}
 \usepackage{ragged2e}
 
@@ -52,8 +52,72 @@
 
 % Images wider than the text block are scaled down rather than overrunning it.
 % The figures in the worked example are full-width panel grids.
+%
+% THE HEIGHT CAP IS WHAT KEEPS A FIGURE WITH ITS TITLE. pandoc bounds an image
+% to the full text height, and a figure exactly as tall as the page leaves
+% nowhere for the heading and the line above it: they stay on the page before and
+% the figure is on its own, which is the split this cap exists to prevent. At
+% 0.82 there is room left for the heading, the line describing it, the caption
+% and the space a float leaves around itself. Verified on the built manual: all
+% 31 figures that have a heading of their own keep it on their own page.
+%
+% It binds only on a figure taller than it is wide, which here is six of
+% forty-seven: the panel grids are wider than they are tall and are limited by
+% the line width, not by this.
 \usepackage{graphicx}
-\setkeys{Gin}{width=\linewidth, keepaspectratio}
+\setkeys{Gin}{width=\linewidth, height=0.82\textheight, keepaspectratio}
+
+% Figures are printed where they are written rather than floated to wherever
+% they next fit. These are documentation figures discussed by the sentence above
+% them, not plates that can be read in any order, and a float that moves is a
+% figure whose text is now on another page.
+\usepackage{float}
+\floatplacement{figure}{H}
+
+% RESERVING THE PAGE A TABLE OR FIGURE AND ITS TITLE NEED.
+%
+% \cyneed{<height>} starts a new page when less than that height is left on this
+% one, so a heading and the line under it move to the page their table or figure
+% lands on rather than being stranded above the break. page-fit.lua emits one
+% call before each heading, sized from the title's own length.
+%
+% WHY NOT THE needspace PACKAGE. \needspace asks for the space with stretchable
+% glue and a penalty of -100, which is a breakpoint TeX may CONSIDER later, once
+% more material has been contributed. When the material after it is a longtable,
+% later means after the table has begun, and longtable reacts to a break inside
+% its own extent by repeating its header on the next page. The manual came out
+% with a stray column header floating above the heading of the table it belonged
+% to. The comparison here is made against \pagegoal at the moment of the call and
+% the break, if one is needed, is \newpage, whose penalty of -10000 fires the
+% output routine on the spot, before any of the table exists.
+%
+% \pagegoal is \maxdimen until something has been contributed to the page. That
+% means the page is empty, so there is nothing to break away from.
+\newcommand{\cyneed}[1]{%
+  \par
+  \begingroup
+  \dimen0  = \dimexpr#1\relax
+  % Clamped to one page: a request larger than a page can never be satisfied, so
+  % honouring it would eject a blank page and change nothing.
+  \ifdim\dimen0 >\textheight \dimen0 =\textheight \fi
+  \ifdim\pagegoal=\maxdimen\else
+    \ifdim\dimexpr\pagegoal-\pagetotal\relax<\dimen0  \newpage \fi
+  \fi
+  \endgroup}
+
+% A figure's height is known only once the file has been opened, so the image is
+% measured into a box that is never printed and the reservation is made from
+% that. #2 is the number of lines the heading and description above it take.
+%
+% \IfFileExists rather than assuming: the vignettes guard every include_graphics
+% with file.exists(), so a missing illustration is meant to leave a gap in the
+% text, not stop the build.
+\newsavebox{\cyfigbox}
+\newcommand{\cyfigneed}[2]{%
+  \IfFileExists{#1}{%
+    \sbox\cyfigbox{\includegraphics{#1}}%
+    \cyneed{\ht\cyfigbox+\dp\cyfigbox+#2\baselineskip}%
+  }{}}
 
 % URLs break at any character. Several in the documentation are long enough that
 % \sloppy alone leaves them protruding into the margin.
