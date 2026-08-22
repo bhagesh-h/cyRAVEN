@@ -1,0 +1,93 @@
+'getOption("repos")' replaces Bioconductor standard repositories, see
+'help("repositories", package = "BiocManager")' for details.
+Replacement repositories:
+    CRAN: https://cran.rstudio.com
+R:        R version 4.6.1 (2026-06-24)
+wd:       /home/runner/work/cyRAVEN/cyRAVEN
+pandoc:   /usr/bin/pandoc
+tinytex:  0.60
+is_tinytex before: FALSE
+trying URL 'https://github.com/rstudio/tinytex-releases/releases/download/v2026.08/TinyTeX-1-linux-x86_64-v2026.08.tar.xz'
+Content type 'application/octet-stream' length 53980584 bytes (51.5 MB)
+==================================================
+downloaded 51.5 MB
+
+tlmgr option sys_bin ~/bin
+tlmgr: setting option sys_bin to /home/runner/bin.
+tlmgr: updating /home/runner/.TinyTeX/tlpkg/texlive.tlpdb
+tlmgr option repository 'https://tlnet.yihui.org'
+tlmgr: setting default package repository to https://tlnet.yihui.org
+tlmgr: updating /home/runner/.TinyTeX/tlpkg/texlive.tlpdb
+tlmgr update --list
+===============================================================================
+tlmgr itself needs to be updated.
+Please do this via either
+  tlmgr update --self
+or by getting the latest updater for Unix-ish systems:
+  https://mirror.ctan.org/systems/texlive/tlnet/update-tlmgr-latest.sh
+and/or Windows systems:
+  https://mirror.ctan.org/systems/texlive/tlnet/update-tlmgr-latest.exe
+Then continue with other updates as usual.
+===============================================================================
+tlmgr: package repository https://tlnet.yihui.org (verified)
+update:   babel              [243k]: local:    79370, source:    79911
+update:   fancyvrb            [12k]: local:    78721, source:    79962
+update:   fontspec            [27k]: local:    77682, source:    79934
+update:   l3kernel           [202k]: local:    79405, source:    80015
+update:   latex-bin            [1k]: local:    78282, source:    80015
+update:   texlive.infra      [451k]: local:    79653, source:    79982
+update:   texlive-scripts    [728k]: local:    79836, source:    80039
+update:   unicode-data       [310k]: local:    76413, source:    79913
+update:   xetex                [8k]: local:    77830, source:    80015
+You may have to restart your system after installing TinyTeX to make sure ~/bin appears in your PATH variable (https://github.com/rstudio/tinytex/issues/16).
+is_tinytex after:  TRUE
+tlmgr:    
+pdflatex: 
+tlmgr update --all --self
+tlmgr install pdflscape titlesec fancyhdr fvextra xurl ragged2e booktabs framed environ trimspaces koma-script float
+tlmgr: package repository https://tlnet.yihui.org (verified)
+tlmgr install: package already present: booktabs
+tlmgr install: package already present: float
+tlmgr install: package already present: framed
+[1/12, ??:??/??:??] install: environ [2k]
+[2/12, 00:00/00:00] install: fancyhdr [9k]
+[3/12, 00:00/00:00] install: fvextra [17k]
+[4/12, 00:00/00:00] install: koma-script [6823k]
+[5/12, 00:01/00:01] install: lineno [62k]
+[6/12, 00:01/00:01] install: pdflscape [3k]
+[7/12, 00:01/00:01] install: ragged2e [3k]
+[8/12, 00:01/00:01] install: titlesec [20k]
+[9/12, 00:01/00:01] install: trimspaces [1k]
+[10/12, 00:01/00:01] install: upquote [2k]
+[11/12, 00:01/00:01] install: xpatch [2k]
+[12/12, 00:01/00:01] install: xurl [2k]
+running mktexlsr ...
+done running mktexlsr.
+tlmgr: package log updated: /home/runner/.TinyTeX/texmf-var/web2c/tlmgr.log
+tlmgr: command log updated: /home/runner/.TinyTeX/texmf-var/web2c/tlmgr-commands.log
+=== building ===
+  chapter: Get started (185 lines)
+  chapter: Flow cytometry for dummies (197 lines)
+  chapter: Commands and every option (927 lines)
+  chapter: Inputs, the sample sheet and config (275 lines)
+  chapter: Gating specification (410 lines)
+  chapter: Driving it from Claude Code (136 lines)
+  chapter: Using it with cyCONDOR (247 lines)
+  chapter: How it works, the ten stages (220 lines)
+  chapter: Diagnostics, in reading order (481 lines)
+  chapter: Explore mode, unsupervised discovery (277 lines)
+  chapter: Why explore mode is built that way (247 lines)
+  chapter: Every output file (536 lines)
+  chapter: Statistics (467 lines)
+  chapter: Worked example, every figure (588 lines)
+  chapter: Scope and boundaries (157 lines)
+  chapter: Known limitations (169 lines)
+  rendering: /tmp/RtmpcoZDHl/manual/manual.md (exists: TRUE)
+tlmgr: package repository https://tlnet.yihui.org (verified)
+[1/1, ??:??/??:??] install: caption [61k]
+running mktexlsr ...
+done running mktexlsr.
+tlmgr: package log updated: /home/runner/.TinyTeX/texmf-var/web2c/tlmgr.log
+tlmgr: command log updated: /home/runner/.TinyTeX/texmf-var/web2c/tlmgr-commands.log
+wrote docs/cyRAVEN-manual.pdf (28.7 MB, 16 chapters)
+result: 28.7 MB

@@ -1,0 +1,140 @@
+# Claude skill
+
+The repository ships a skill for [Claude
+Code](https://claude.com/claude-code) at `.claude/skills/cyraven/`.
+Installed, it gives the assistant the parts of this documentation that
+determine whether an answer is correct: Docker as the execution path,
+the gate hierarchy and specification syntax, and the order in which the
+outputs must be read.
+
+It is documentation, not a wrapper. Nothing about the pipeline changes,
+and every command works without it.
+
+The skill executes through Docker by default and does not fall back to a
+local R installation unless the user states that Docker is unavailable,
+for the reproducibility reasons given in the
+[README](https://github.com/bhagesh-h/cyRAVEN#quick-setup).
+
+## 1. What it covers
+
+| File | Content |
+|----|----|
+| `SKILL.md` | What cyRAVEN does, the Docker execution commands, required inputs, the flags that matter, and the analytical constraints in section 4 |
+| `references/docker.md` | Build and run in detail, path and mount semantics, Windows and PowerShell, resource tuning, iterating with `CYRAVEN_SOURCE`, container-specific failures |
+| `references/gating.md` | The four-gate hierarchy, per-sample thresholding and the `source` column, writing the population YAML, three-level markers, arcsinh against logicle, compensation |
+| `references/interpretation.md` | Every output file and the order to read them in, with the columns that decide whether a result stands |
+| `references/troubleshooting.md` | Failure modes with their actual causes |
+
+Only `SKILL.md` is read when the skill activates. The reference files
+are opened when the task needs them, so the description above is also
+the routing table.
+
+## 2. Installing
+
+### For every project
+
+Copy the directory into the personal skills folder:
+
+``` bash
+cp -r .claude/skills/cyraven ~/.claude/skills/
+```
+
+``` powershell
+Copy-Item -Recurse .claude\skills\cyraven $HOME\.claude\skills\
+```
+
+Confirm with `/skills`, or ask Claude to invoke `/cyraven`.
+
+### For this repository only
+
+Nothing to do. A checkout already contains `.claude/skills/cyraven/`,
+and Claude Code discovers it when the session is rooted in the
+repository.
+
+### Without a copy
+
+Point Claude at the raw files:
+
+    Read https://raw.githubusercontent.com/bhagesh-h/cyRAVEN/main/.claude/skills/cyraven/SKILL.md
+    and follow it.
+
+## 3. Using it
+
+The skill activates on its own when a request matches its description.
+Force it with `/cyraven`.
+
+Requests it is built for:
+
+    Run cyRAVEN on the FCS files in ./data. The panel is CD3, CD4, CD8,
+    CD14, CD16, CD19, CD56, HLA-DR.
+
+    Set up the demonstration dataset and show me what the output looks like.
+
+    Write a population spec for this panel and explain each definition.
+
+    My frequency table came out empty. Why?
+
+    Read results/ and tell me which findings survive.
+
+    Is the difference in CD8 T cells between the two cohorts real?
+
+The first builds and invokes the container without being asked to,
+because that is the skill’s default execution path.
+
+The last is the case worth having the skill for. It has a documented
+answer that is not a p-value: adjusted p, then Cliff’s delta, then
+`difference_over_gate_u`, then `difference_over_total_u`, then a check
+that the marker is not flagged in `threshold_drift_stats.csv`. The order
+is set out in
+[Statistics](https://bhagesh-h.github.io/cyRAVEN/articles/statistics.md)
+§8, and the skill states it so the assistant does not stop at the first
+significant result.
+
+## 4. Analytical constraints
+
+The skill carries five positions the tool takes. They are recorded
+because overriding any of them produces output that appears correct and
+is not. Each is documented at length elsewhere and summarised there only
+to the extent needed to apply it.
+
+| Constraint | Treated in full |
+|----|----|
+| Thresholds are not transferred between samples | [Gating](https://bhagesh-h.github.io/cyRAVEN/articles/gating.md) §2.1 |
+| `count` is an event count, not a cell number | [Output](https://bhagesh-h.github.io/cyRAVEN/articles/outputs.md) §4 |
+| Placement precision does not imply counting sufficiency | [Gating](https://bhagesh-h.github.io/cyRAVEN/articles/gating.md) §2.5 |
+| A specification is a hypothesis, not a validated result | [Diagnostics](https://bhagesh-h.github.io/cyRAVEN/articles/diagnostics.md) |
+| Gates are inspected before any derived number is quoted | [Diagnostics](https://bhagesh-h.github.io/cyRAVEN/articles/diagnostics.md) §1 |
+
+## 5. Contributing through it
+
+`SKILL.md` also carries the conventions this package is maintained
+under, so a change proposed with the skill loaded arrives in the right
+shape:
+
+- Additions are additive. Every file the previous version wrote is still
+  written, with the same name, the same columns in the same order, and
+  the same values.
+- Additivity is verified by running both versions on one cohort and
+  comparing byte for byte, not by asserting it.
+- Anything that only adds an output is on by default. Anything that
+  changes an existing number is opt-in.
+- Any new entry point that consumes random draws saves and restores
+  `.Random.seed`.
+  [`run_cyraven()`](https://bhagesh-h.github.io/cyRAVEN/reference/run_cyraven.md)
+  seeds once and the UMAP cell selection draws from that stream, so a
+  step that spends draws silently redraws every embedding in the run.
+
+## 6. Keeping it accurate
+
+The skill quotes flag defaults, output filenames and column names. Those
+were checked against the source when it was written and will drift if
+the package changes without it.
+
+When adding a flag or an output, update `SKILL.md` and the reference
+file that mentions the area. The filenames are verifiable mechanically:
+
+``` bash
+grep -rohE '"[a-z0-9_]+\.(csv|png|txt|rds)"' R/pipeline.R | sort -u
+```
+
+Cross-check that list against `references/interpretation.md`.

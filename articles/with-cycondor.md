@@ -1,0 +1,243 @@
+# Interoperability
+
+cyRAVEN applies a declared specification and tests whether it held.
+cyCONDOR clusters events and assigns identity afterwards. The two
+approaches carry non-overlapping failure modes, which makes combined
+application informative for a substantial class of study designs.
+
+## 1. Rationale
+
+Supervised quantification is bounded by its specification. A population
+absent from the declaration cannot be recovered, because no gate exists
+to fail.
+
+Unsupervised partitioning carries the complementary limitation. It
+returns clusters for any input and holds no prior claim capable of being
+contradicted, so it cannot identify a mis-specified threshold. Its own
+parameters, cluster count, feature set and transform, are selected after
+inspecting the data, which relocates analyst discretion rather than
+removing it.
+
+Applied together, each constrains the other. The principle is
+established: DAFi converts a manual gating strategy into constraints on
+a recursive clustering and recovers rare populations that neither
+approach resolves independently ([Lee et al.,
+2018](https://pubmed.ncbi.nlm.nih.gov/29665244/)).
+
+## 2. Selection
+
+| Objective | Tool | Basis |
+|----|----|----|
+| Abundance of a declared population between groups | cyRAVEN | Populations defined a priori, donor-level inference |
+| Verification that gates transferred across samples | cyRAVEN | Threshold drift, phenotype concordance, gate-cluster concordance |
+| Detection of an undeclared population | Both | cyRAVEN identifies the discordance, cyCONDOR characterises the population |
+| Conversion of a cluster into executable gate geometry | cyRAVEN | `--explain-clusters`, or `--external-labels` for a labelling cyCONDOR produced |
+| Whether that gate works on the next donor | cyRAVEN | Leave-one-donor-out refitting |
+| A gate file the instrument or Cytobank can read | cyRAVEN | `--export-gates`, Gating-ML 2.0 in linear units |
+| How precisely a reported frequency is determined | cyRAVEN | Threshold resampling propagated to the population |
+| Differentiation trajectory | cyCONDOR | Diffusion maps and Slingshot |
+| Label transfer to an independent cohort | cyCONDOR | Trained classifiers |
+| Ingestion of existing FlowJo gates | cyCONDOR | `.wsp` workspace parsing |
+| Data-determined cluster count | cyCONDOR | Phenograph |
+| Unsupervised discovery without leaving cyRAVEN | cyRAVEN | `--explore`, over every eligible channel, with clusters named from per-sample thresholds. See [Explore mode](https://bhagesh-h.github.io/cyRAVEN/articles/explore.md) |
+| Whether batch correction is admissible | cyRAVEN | Cramér’s *V* refusal rule |
+
+## 3. Applications
+
+### 3.1 Abundance change
+
+A declared population differs in frequency between groups. Four outputs
+determine whether the difference is interpretable, read in order.
+
+`threshold_drift_stats.csv`. A flagged marker means the per-sample
+thresholds separate by group, so the population is not identically
+defined across the comparison and the difference is partly definitional.
+
+`compositional_concordance.csv`. Percentages are constrained to sum to
+100. A result classified `raw_only__possible_composition_artefact` is
+consistent with expansion elsewhere in the composition rather than
+change in the population tested.
+
+`cluster_gate_agreement_populations.csv`. A declared population
+distributed across several clusters is phenotypically heterogeneous, and
+the aggregate frequency averages subsets that may respond in opposite
+directions.
+
+`confounding_diagnostics.csv`. Whether a covariate both differs between
+groups and associates with the outcome.
+
+cyCONDOR contributes nothing here unless the third output indicates
+heterogeneity, in which case the constituent subsets require
+characterisation.
+
+### 3.2 Undeclared population
+
+Order matters in this analysis.
+
+Run cyRAVEN with `--cluster --explain-clusters`. Gate-cluster
+concordance identifies a cluster dominated by the unassigned label,
+which establishes that the specification is incomplete.
+`cluster_gate_proposals.csv` returns two-marker gate geometry selecting
+those events, with performance measured on held-out cells, which is
+sufficient to reproduce the gate at the instrument.
+
+Characterise in cyCONDOR. `plot_marker_ridgeplot`,
+`plot_marker_violinplot` and `plot_marker_dotplot` resolve the full
+intensity distribution rather than a median, and `plot_marker_group_HM`
+compares it across groups. Where the population may occupy a
+differentiation axis, `runDM` and `runPseudotime` establish whether a
+trajectory is supported.
+
+Return to cyRAVEN. Add the population to the `populations:` block using
+the markers the proposal identified and re-run. It now carries a
+per-sample frequency and a donor-level test.
+
+The final step is not optional. A population identified by clustering
+and tested by clustering on the same events was selected because it
+separated in those samples. Once declared, it is tested honestly in the
+next cohort.
+
+### 3.3 A cyCONDOR cluster made executable
+
+The reverse direction, and the one that closes the loop. cyCONDOR finds
+a population; the finding lives in a vector of cluster assignments and
+cannot be sorted on, drawn at the instrument, or applied to next year’s
+files without clustering them again.
+
+Export the assignment with the sample and the event index, then hand it
+over.
+
+`cl`` ``<-`` `[`data.frame`](https://rdrr.io/r/base/data.frame.html)`(``sample ``=`` ``condor``@``anno``$``sample_id``,`` `` event ``=`` ``condor``@``anno``$``event_index``,`` `` cluster ``=`` `[`paste0`](https://rdrr.io/r/base/paste.html)`(``"k"``, ``condor``@``clustering``$``FlowSOM``$``metacluster``)``)`` `[`write.csv`](https://rdrr.io/r/utils/write.table.html)`(``cl``, ``"labels.csv"``, row.names ``=`` ``FALSE``)`
+
+``` bash
+--external-labels labels.csv --export-gates
+```
+
+cyRAVEN fits a sequence of two-marker polygon gates to each label, then
+refits the whole sequence with one donor withheld and scores it on that
+donor, once per donor. `gate_transferability_summary.csv` carries the
+spread of those scores. Read `f1_min`: a gate that works on nine donors
+and fails on the tenth has the same median as one that works on all ten.
+
+`--export-gates` writes the surviving strategy as Gating-ML 2.0 in the
+linear units the FCS file stores, which Cytobank and FlowRepository read
+directly and FlowJo reads through an ACS archive.
+
+The join is on sample and event index, never row position. cyCONDOR
+subsamples at `prep_fcd(max_cell = )` and cyRAVEN takes its own cap for
+the embedding, so the two tables are not row-aligned and a positional
+join would relabel every cell without raising anything.
+
+Hypergate established cluster-to-gate conversion, fitting one
+hyperrectangle per cluster ([Becht et al.,
+2018](https://academic.oup.com/bioinformatics/article/35/2/301/5042172)).
+What is added here is the polygon hierarchy, which is the shape a sorter
+is actually driven in, the per-donor score distribution, and the gate
+file.
+
+### 3.4 Multi-site or longitudinal designs
+
+Analyst variance is the limiting factor. Operators gating identical
+files report population sizes differing by approximately 32%, and
+subjectivity accounts for up to 78% of technical variability once more
+than one analyst is involved ([Cadwell et al.,
+2021](http://journal.pda.org/content/75/1/33)). Reagent standardisation
+alone is insufficient: EuroFlow reached between-centre coefficients of
+variation below 7% only after standardising the analysis ([Kalina et
+al., 2012](https://www.nature.com/articles/leu2012122)).
+
+Use cyRAVEN as the primary analysis. A declared specification with
+per-sample thresholds removes the analyst from the step at which that
+variance enters. Version-control the config alongside the results and
+retain `run_manifest.txt`.
+
+Write a baseline from the first accepted run and pass `--baseline` on
+every later one. The within-run threshold check compares each sample
+against its peers, which finds a bad tube and cannot find a site or a
+season that moved as a whole, since the peer median moves with it. On a
+scheduled pipeline, `--fail-on-drift` makes the verdict an exit code.
+
+Use cyCONDOR as a periodic audit. Cluster the accumulated data without
+reference to the specification and confirm that reported populations
+still resolve as coherent clusters. Populations that begin to split or
+merge indicate acquisition drift requiring the specification to be
+revisited.
+
+## 4. Execution
+
+Both tools read the same FCS files. cyCONDOR requires an annotation
+table whose first column names the files, which is the information a
+cyRAVEN sample map already carries, so one file serves both.
+
+[`run_cyraven`](https://bhagesh-h.github.io/cyRAVEN/reference/run_cyraven.md)`(`[`list`](https://rdrr.io/r/base/list.html)`(`` `` dir ``=`` ``"data/fcs/"``, outdir ``=`` ``"results_cyraven/"``,`` `` sample_map ``=`` ``"data/sample_map.csv"``,`` `` config ``=`` ``"data/panel.yaml"``,`` `` group_column ``=`` ``"cohort"``, reference_group ``=`` ``"Healthy controls"``,`` `` unsupervised ``=`` ``TRUE``, explain_clusters ``=`` ``TRUE`` ``)``)`` `` ``anno`` ``<-`` `[`read.csv`](https://rdrr.io/r/utils/read.table.html)`(``"data/sample_map.csv"``)`` `[`write.csv`](https://rdrr.io/r/utils/write.table.html)`(``anno``, ``"results_condor/anno_table.csv"``, row.names ``=`` ``FALSE``)`` `` ``condor`` ``<-`` ``cyCONDOR``::``prep_fcd``(`` `` data_path ``=`` ``"data/fcs/"``, max_cell ``=`` ``30000``, useCSV ``=`` ``FALSE``,`` `` transformation ``=`` ``"auto_logi"``, remove_param ``=`` `[`c`](https://rdrr.io/r/base/c.html)`(``"Time"``, ``"InFile"``)``,`` `` anno_table ``=`` ``"results_condor/anno_table.csv"``,`` `` filename_col ``=`` ``"file"``, seed ``=`` ``42``)`` ``condor`` ``<-`` ``cyCONDOR``::``runPCA``(``condor``, data_slot ``=`` ``"orig"``, seed ``=`` ``42``)`` ``condor`` ``<-`` ``cyCONDOR``::``runUMAP``(``condor``, input_type ``=`` ``"pca"``, data_slot ``=`` ``"orig"``, seed ``=`` ``42``)`` ``condor`` ``<-`` ``cyCONDOR``::``runFlowSOM``(``condor``, input_type ``=`` ``"pca"``, data_slot ``=`` ``"orig"``,`` `` nClusters ``=`` ``8``, seed ``=`` ``42``)`
+
+The `benchmark/` directory of the cyRAVEN repository executes both on a
+public dataset and writes the comparison.
+
+## 5. Embeddings
+
+The two UMAPs are not comparable, for four reasons measured on the
+benchmark dataset and given in order of magnitude.
+
+**Event set.** cyCONDOR embeds all 235,259 events. cyRAVEN embeds 40,000
+events surviving scatter, singlet, viability and CD45 gating. A fraction
+of the cyCONDOR manifold is debris.
+
+**Feature set.** cyCONDOR includes FSC-A, FSC-H, FSC-W and SSC-A among
+eleven features. Scatter spans decades and dominates the principal
+components on which the embedding is computed, so much of the resulting
+structure reflects size and granularity. cyRAVEN uses scatter for gating
+and excludes it from the feature set, embedding four markers.
+
+**Input space.** cyCONDOR embeds principal component scores; cyRAVEN
+embeds the scaled marker matrix, which alters the neighbour graph before
+construction.
+
+**Transform.** Auto-logicle per file against arcsinh pooled per panel
+places identical raw intensities at different coordinates.
+
+Compare the tables, not the figures.
+
+## 6. Resolution
+
+Cluster count is an analytical choice with consequences. On the
+benchmark data FlowSOM requested at 8 returns 8 clusters; Phenograph,
+which determines its own, returns 24 on the same events. Both are
+correct implementations. Neither corresponds to the number of
+populations present.
+
+A result that appears at one resolution and disappears at another is a
+property of the setting. Confirm persistence across resolutions before
+interpretation.
+
+FlowSOM is a defensible default: it ranked at or near the top across
+every dataset in the reference comparison of clustering methods, at
+runtimes permitting routine use as a cross-check ([Weber and Robinson,
+2016](https://onlinelibrary.wiley.com/doi/full/10.1002/cyto.a.23030)).
+
+## 7. References
+
+- [Lee et al., 2018](https://pubmed.ncbi.nlm.nih.gov/29665244/). DAFi:
+  gating strategy as constraint on recursive clustering. *Cytometry A*.
+- [Briefings in Bioinformatics,
+  2025](https://academic.oup.com/bib/article/26/1/bbae633/7916377).
+  Systematic comparison of manual gating, unsupervised clustering and
+  auto-gating across 23 tools.
+- [Weber and Robinson,
+  2016](https://onlinelibrary.wiley.com/doi/full/10.1002/cyto.a.23030).
+  Clustering method comparison. *Cytometry A* 89:1084.
+- [Kalina et al., 2012](https://www.nature.com/articles/leu2012122).
+  EuroFlow standardisation. *Leukemia* 26:1986.
+- [Cadwell et al., 2021](http://journal.pda.org/content/75/1/33).
+  Operator contribution to technical variability. *PDA J Pharm Sci
+  Technol* 75:33.
+- [Becht et al.,
+  2018](https://academic.oup.com/bioinformatics/article/35/2/301/5042172).
+  Hypergate: reverse-engineering a gating strategy from a cluster.
+  *Bioinformatics* 35:301.
+- [Spidlen et al.,
+  2015](https://onlinelibrary.wiley.com/doi/full/10.1002/cyto.a.22690).
+  ISAC Gating-ML 2.0. *Cytometry A* 87:683.
+- [Whitmore et al.,
+  2021](https://pmc.ncbi.nlm.nih.gov/articles/PMC8103269/). Uncertainty
+  analysis applied to manual gating. *Methods Protoc* 4:24.

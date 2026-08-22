@@ -1,0 +1,174 @@
+# Scope
+
+Nine methods available in comparable toolboxes are absent from cyRAVEN.
+Each section states the omission, the reasoning, and the condition under
+which it should be revisited. Where a method is required now, the
+[interoperability
+article](https://bhagesh-h.github.io/cyRAVEN/articles/with-cycondor.md)
+covers combined use with cyCONDOR.
+
+## 1. Harmony and CytoNorm
+
+Batch correction is implemented. `--correct-batch` performs monotone
+quantile alignment and refuses above a configurable Cramér’s *V* between
+batch and group.
+
+These two implementations specifically are not wrapped. Both introduce
+substantial dependency weight, and neither declines to execute when
+batch and biological effect are collinear. That refusal is the behaviour
+cyRAVEN treats as the purpose of the feature.
+
+**Revisit when** a study design requires reference-based normalisation
+across instruments rather than distributional alignment within a batch.
+
+## 2. Phenograph
+
+FlowSOM addresses the same requirement at lower cost at these event
+counts. Phenograph determines cluster count from the data rather than
+accepting it as a parameter, which is informative, but requires
+`Rphenograph` or `Rphenoannoy`. Neither is distributed through CRAN or
+Bioconductor, and a GitHub-only dependency is incompatible with the
+reproducibility guarantee the container provides.
+
+**Revisit when** cluster count is the quantity under investigation
+rather than a setting.
+
+`--explore-k` is likewise a setting rather than a finding, and
+`explore_provenance.csv` records it as one, because a cluster count
+chosen from the data is one more thing the number of significant results
+depends on.
+
+## 3. diffcyt
+
+The rank tests address the same hypotheses without distributional
+assumptions, which is the correct trade at single-digit *n* per group.
+
+**Revisit at** approximately fifteen samples per group, where the
+empirical Bayes prior becomes informative and mixed models can
+accommodate repeated measures.
+
+## 4. Per-marker cofactors
+
+[`derive_cofactor()`](https://bhagesh-h.github.io/cyRAVEN/reference/derive_cofactor.md)
+computes per-marker candidates and returns them in
+`attr(cf, "per_marker")`. Application is not implemented.
+
+Applying them alters the arcsinh scale per channel, displacing every
+threshold, marker median and embedding distance. Validation requires
+re-derivation and re-inspection of every gating QC figure in the
+affected dataset.
+
+**Revisit when** gating QC demonstrates channels whose background
+distributions differ in scale. The data required for that judgement is
+already collected.
+
+## 5. Trajectory inference
+
+Pseudotime methods assume a continuous differentiation process sampled
+across its extent. Peripheral blood immunophenotyping panels
+predominantly measure terminally differentiated populations, where a
+fitted trajectory reflects the fitting procedure rather than a
+developmental process.
+
+**Revisit when** the panel resolves a developmental axis, for example
+thymic emigrants or plasmablast maturation. cyCONDOR provides diffusion
+maps and Slingshot.
+
+## 6. Label transfer
+
+Classifier-based cell type assignment is standard elsewhere. Here the
+training labels originate from a gating specification, so a classifier
+trained on them reproduces that specification including its errors.
+
+Unsupervised cluster concordance is the stronger check for the same
+purpose, since it does not consult the labels.
+
+**Revisit when** an externally annotated reference dataset is available
+for training.
+
+## 7. FlowJo ingestion
+
+Gates travel outward. `--export-gates` writes learned strategies as ISAC
+Gating-ML 2.0, and `--flowjo-export` writes FCS with embedding
+coordinates as additional parameters, so a result can be opened in
+FlowJo, Cytobank or FlowRepository.
+
+The inverse is absent: cyRAVEN does not read gates from a `.wsp`
+workspace, which requires `CytoML` and `flowWorkspace`. The export needs
+neither, because a Gating-ML document is written directly, whereas
+parsing a proprietary workspace is not something to reimplement.
+
+**Revisit when** manual FlowJo gates are required as input rather than
+output.
+
+## 8. Cell-level testing
+
+Absent for the reason in section 1 of the [statistics
+article](https://bhagesh-h.github.io/cyRAVEN/articles/statistics.md):
+event counts are set by acquisition duration, so a test over pooled
+events derives its degrees of freedom from instrument time. Toolboxes
+providing a cell-level Wilcoxon distribute it with a warning against its
+use.
+
+The cell-level view is available descriptively in
+`subcluster_marker_shifts.csv`, which reports effect sizes without
+p-values.
+
+## 9. Compensation matrices
+
+cyRAVEN applies the spillover matrix stored in the FCS keyword block and
+reports its absence. It does not compute one from single-stain controls,
+which belongs in acquisition software where the controls can be
+inspected.
+
+## 10. The 2025-2026 methods survey
+
+A survey of cytometry method releases and papers to August 2026,
+recorded here so the same candidates are not re-evaluated from scratch.
+Adopting nothing is a decision too, and this is where it is written
+down.
+
+**Worth adopting, ranked.**
+
+| Method | What it adds that cyRAVEN lacks | Licence |
+|----|----|----|
+| [staRgate](https://bioconductor.org/packages/release/bioc/html/staRgate.html) | Gates a marker against a *unimodal background* population rather than a density minimum. That is exactly the case cyRAVEN currently sends to `quantile_fallback`, and on a 29-marker panel across 266 subpopulations it matched manual gating at 0.97 concordance | MIT |
+| [CompensAID](https://www.bioconductor.org/packages/release/bioc/html/CompensAID.html) | Flags a bad single-stain control by segmenting the positive population and testing the Secondary Stain Index per segment. cyRAVEN reports how far spillover spreads and never asks whether the reference was wrong | GPL-3 |
+| [CytoScan](https://www.biorxiv.org/content/10.1101/2025.09.24.678276v1) | Between-file anomaly detection, including novelty against a locked reference set. cyRAVEN’s acquisition QC is within-file, so a whole tube that is unlike its cohort passes | preprint |
+| [CytoMDS](https://onlinelibrary.wiley.com/doi/10.1002/cyto.a.24921) | Attributes a batch separation back to the channels that caused it. cyRAVEN’s EMD says a batch differs; this says which markers made it differ | GPL-3 |
+| [Rajwa & Roederer 2025](https://onlinelibrary.wiley.com/doi/10.1002/cyto.a.24972) | Effective rank, information efficiency and the Cramer-Rao lower bound matrix, all computable from the spillover matrix already parsed. Not software – three formulas and a vocabulary that makes the existing QC legible to a reviewer | paper |
+
+**Considered and declined, with the reason.**
+
+`sccomp` tests differential *variability* and can transfer priors from
+an earlier cohort, neither of which the CLR re-test does, but it pulls
+Stan into the image for a question users have not asked. `propeller`
+borrows variance across populations, which is the right instinct at n =
+5-10, and is worth offering beside the rank tests rather than instead of
+them – it assumes a variance structure the rank tests deliberately do
+not.
+[CytoBatchFlagR](https://onlinelibrary.wiley.com/doi/10.1002/cyto.a.70024)
+is CC BY-NC-ND, which forbids redistribution in a packaged pipeline, and
+its MSI/frequency/EMD triad largely duplicates what is here.
+[flowMagic](https://github.com/semontante/flowMagic) reaches 65%
+accuracy on rare populations, which is where automated gating has to
+earn its keep, and a trained model is not auditable the way a declared
+threshold is. GPCT is a Python transformer answering a different
+question, sample-level outcome prediction rather than population
+quantification.
+
+**What did not change, which is why nothing here chases it.** MIFlowCyt
+has had no revision. Gating-ML is still 2.0 and FCS still 3.2, so the
+export target is stable. The Cossarizza EJI guidelines are still the
+third edition. EuroFlow’s 2025 updates are wet-lab only. `SOULCAP`
+intends to standardise population naming against Cell Ontology
+identifiers but has shipped no ontology, so the whole of the
+forward-compatible work is an optional `cl_id:` field per population.
+
+**And on small cohorts specifically: there is no consensus to follow.**
+No ISAC position paper, no journal guidance, no methods paper aimed at
+the n \< 20 immunophenotyping case. The field is quietly importing
+`propeller` and `sccomp` from single-cell RNA sequencing. The approach
+here – rank tests, Cliff’s delta, Benjamini-Hochberg within a family,
+bootstrap intervals, and the attainable-p floor drawn on the figure – is
+behind no published standard, because there is not one.

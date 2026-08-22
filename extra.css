@@ -1,0 +1,75 @@
+/* Site styling that the Bootstrap 5 template does not cover.
+   pkgdown picks this file up automatically; nothing references it by name. */
+
+:root {
+  /* The hex sticker's fill, sampled from man/figures/logo.png rather than
+     guessed: it is the modal colour of the image. Every rule below that needs
+     the brand colour reads this variable, so a new logo means one edit here. */
+  --cyraven-orange: #EC7414;
+}
+
+/* The wordmark in the navigation bar is the logo written out, so it is the
+   logo's colour and weight rather than the default link grey. */
+.navbar .navbar-brand {
+  color: var(--cyraven-orange) !important;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.navbar .navbar-brand:hover,
+.navbar .navbar-brand:focus {
+  color: var(--cyraven-orange) !important;
+  filter: brightness(1.15);
+}
+
+/* ONE LOGO SIZE FOR THE WHOLE SITE. The template sizes the header logo against
+   the heading beside it, and the home page's heading is larger than an article's,
+   so the same image arrived at two sizes depending on which page you were on.
+   Pinning the height decouples it from the heading. */
+.page-header .logo,
+.page-header img.logo {
+  height: 5rem;
+  width: auto;
+  margin-right: 0.75rem;
+}
+
+/* ORCID BESIDE THE NAME, NOT AFTER THE ROLES. pkgdown emits the author's name,
+   a <br>, the roles, then the ORCID link, which put the identifier at the end of
+   a sentence describing what the person did rather than next to who they are.
+   The list item becomes a flex row: the name is the anonymous first item and
+   keeps order 0, the ORCID link is pulled up to sit beside it, and the roles are
+   pushed onto their own line by taking the full width. Reordering in CSS rather
+   than in markup because the markup is the template's, not ours. */
+.developers ul > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+.developers ul > li br {
+  display: none;
+}
+.developers ul > li > a[aria-label="ORCID"] {
+  order: 1;
+}
+.developers ul > li small.roles {
+  order: 2;
+  flex-basis: 100%;
+  margin: 0;
+}
+
+/* The licence is shown as the GPLv3 badge. Keep it on its own baseline rather
+   than inheriting the list's text metrics, which left it sitting low. */
+.license img {
+  vertical-align: middle;
+}
+
+/* README-only content. The home page is built from README.md, so a line written
+   for someone reading the repository -- "the documentation is over there" --
+   also appeared on the documentation itself, where it points at the page the
+   reader is already on. Hiding it here keeps ONE source of truth: an index.md
+   holding a copy of the README minus that line would drift from it within a
+   release or two. GitHub ignores the class and shows the line, which is where it
+   belongs. */
+.readme-only {
+  display: none;
+}
