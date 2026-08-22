@@ -14,7 +14,7 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", echo = FALSE,
                       out.width = "100%")
 ```
 
-All 22 figures a run produces, shown as unmodified output, with what each
+Every figure a run produces, shown as unmodified output, with what each
 measures and what this particular run shows. The two further figures the package
 can write, and why this cohort cannot produce them, are at the end.
 
@@ -105,7 +105,7 @@ a Windows path.
 
 Step 4 should report 35 files, four resolved markers, that every marker the
 specification names is present, that the sheet covers every file, and the group
-sizes. Step 5 writes 22 figures and 36 tables into `results/`, plus
+sizes. Step 5 writes 24 figures and 35 tables into `results/`, plus
 `report.html`, which carries all of them embedded in one file.
 
 ## 0.3 What each flag is doing
@@ -592,7 +592,7 @@ and removing the finding would be the same operation.
 
 # The two figures this cohort cannot produce
 
-Twenty-two figures is everything the GvHD cohort supports. The package writes two
+That is everything the GvHD cohort supports. The package writes two
 more, and both need an input no public FCS archive carries.
 
 `absolute_counts.png` and `absolute_counts_qc.png` are written by

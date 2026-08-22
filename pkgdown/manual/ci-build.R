@@ -38,7 +38,10 @@ say("pdflatex: ", Sys.which("pdflatex"))
 # unresolvable name must not stop the build before it has tried.
 r <- tryCatch(tinytex::tlmgr_install(
   c("pdflscape", "titlesec", "fancyhdr", "fvextra", "xurl", "ragged2e",
-    "booktabs", "framed", "environ", "trimspaces", "koma-script")),
+    "booktabs", "framed", "environ", "trimspaces", "koma-script",
+    # float pins each figure where it was written instead of letting it drift
+    # away from the heading above it; see preamble.tex and page-fit.lua.
+    "float")),
   error = function(e) e)
 if (inherits(r, "error")) say("TLMGR ERROR: ", conditionMessage(r))
 

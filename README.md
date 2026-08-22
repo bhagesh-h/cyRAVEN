@@ -175,7 +175,7 @@ within a mounted volume or the output is discarded when the container exits. On
 Windows PowerShell substitute `${PWD}` for `$PWD`; on Git Bash prefix with
 `MSYS_NO_PATHCONV=1`.
 
-This writes 22 figures and 36 tables from 35 samples across five allogeneic
+This writes 24 figures and 35 tables from 35 samples across five allogeneic
 transplant recipients (Brinkman et al., 2007, *Biol Blood Marrow Transplant*
 13:691; Artistic-2.0).
 
@@ -242,9 +242,10 @@ for, is in
 Every page below is also available as a single PDF, one chapter per page, with a
 table of contents and continuous page numbering:
 **[cyRAVEN-manual.pdf](https://bhagesh-h.github.io/cyRAVEN/cyRAVEN-manual.pdf)**.
-It is rebuilt with the site, so it never lags behind these pages, and the wide
-reference tables are set landscape there rather than being squeezed until the
-columns touch.
+It is rebuilt with the site, so it never lags behind these pages. Every column of
+every reference table is sized to the width its own content needs, so the wide
+ones read upright rather than being squeezed until the columns touch, and each
+table and figure stays on the same page as the heading above it.
 
 New to flow cytometry?
 [Flow cytometry for dummies](https://bhagesh-h.github.io/cyRAVEN/articles/flow-cytometry-for-dummies.html)
@@ -281,7 +282,7 @@ why, so the same arguments do not get relitigated.
 | [Explore mode](https://bhagesh-h.github.io/cyRAVEN/articles/explore.html) | Unsupervised discovery over every channel, run beside the declared analysis or standalone; the cluster-level QC gate, and what `--maybe-learn` lets the two sides tell each other |
 | [Output files](https://bhagesh-h.github.io/cyRAVEN/articles/outputs.html) | Every file the pipeline writes, its columns, the flag producing it, and why event counts are not cell counts |
 | [Statistics](https://bhagesh-h.github.io/cyRAVEN/articles/statistics.html) | Sample-level aggregation; rank tests against moderated *t*; the compositional constraint; covariate diagnosis against adjustment; clinical variables as the question rather than a nuisance; multiplicity; differences expressed in units of uncertainty |
-| [Worked example](https://bhagesh-h.github.io/cyRAVEN/articles/figures.html) | All 22 figures from a run on public data, each with what it measures and what that run shows |
+| [Worked example](https://bhagesh-h.github.io/cyRAVEN/articles/figures.html) | Every figure from a run on public data, each with what it measures and what that run shows |
 | [Scope](https://bhagesh-h.github.io/cyRAVEN/articles/scope.html) | Nine excluded methods with the reasoning and the condition under which each becomes appropriate |
 
 **These pages are the website, not the install.** The package sources carry all
