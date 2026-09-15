@@ -101,7 +101,10 @@ lisi_score <- function(coords, labels, k = 30L) {
 #'
 #' @param cells embedding cell table with umap_1/umap_2
 #' @param batch_col column naming the batch (acquisition date, run, operator)
-#' @param group_col biological grouping, used for the confounding check
+#' @param group_col one or more columns to test batch against; one row of the
+#'   confounding table per column. Pass the study group AND the timepoint on a
+#'   repeated-measures design: the visit is the primary comparison there, and
+#'   checking only the study group leaves it unexamined.
 #' @param k neighbourhood size
 #' @param max_cells subsample ceiling; LISI is a local statistic and converges
 #'   quickly, so a few thousand cells is ample and keeps this from dominating
@@ -155,30 +158,46 @@ batch_mixing_report <- function(cells, batch_col, group_col = "cohort",
   p_emp <- (sum(perm <= med) + 1) / (length(perm) + 1)
   n_batch <- length(unique(bl))
 
-  # ---- confounding between batch and biological group ----------------------
+  # ---- confounding between batch and each design variable -------------------
+  #
+  # ONE ROW PER VARIABLE, NOT JUST THE STUDY GROUP. Checking only the
+  # --group-column leaves the other axis of a longitudinal design unchecked, and
+  # on a repeated-measures cohort the timepoint IS the primary comparison. A
+  # cohort whose small batches each fall at one visit is confounded exactly
+  # where it matters, and reporting only batch-vs-group says nothing about it --
+  # so a timepoint difference that is partly an acquisition difference passes
+  # through as biology.
   conf <- NULL
-  if (group_col %in% names(cells)) {
-    g <- as.character(cells[[group_col]])[idx]
+  .conf_one <- function(gc) {
+    if (!gc %in% names(cells)) return(NULL)
+    g <- as.character(cells[[gc]])[idx]
     keep <- !is.na(g) & nzchar(trimws(g))
-    if (sum(keep) > 10L && length(unique(g[keep])) > 1L) {
-      tb <- table(bl[keep], g[keep])
-      # Cramer's V: association between two categoricals, scaled to \code{[0,1]} so it
-      # does not depend on table size the way chi-squared does. 1 means each batch
-      # contains exactly one group -- total confounding, no correction is safe.
-      chi <- suppressWarnings(stats::chisq.test(tb)$statistic)
-      nn <- sum(tb)
-      v <- sqrt(as.numeric(chi) / (nn * (min(dim(tb)) - 1)))
-      conf <- data.frame(
-        batch_column = batch_col, group_column = group_col,
-        n_batches = nrow(tb), n_groups = ncol(tb),
-        cramers_v = round(v, 3),
-        verdict = if (!is.finite(v)) "not estimable"
-                  else if (v >= 0.8) "SEVERE - batch and group are near-identical; NO batch correction is safe"
-                  else if (v >= 0.5) "substantial - batch and group overlap; correction would remove real signal"
-                  else if (v >= 0.3) "moderate - interpret batch-adjacent findings with care"
-                  else "low - batch and group are largely separable",
-        stringsAsFactors = FALSE)
-    }
+    if (sum(keep) <= 10L || length(unique(g[keep])) < 2L) return(NULL)
+    tb <- table(bl[keep], g[keep])
+    # Cramer's V: association between two categoricals, scaled to \code{[0,1]} so it
+    # does not depend on table size the way chi-squared does. 1 means each batch
+    # contains exactly one group -- total confounding, no correction is safe.
+    chi <- suppressWarnings(stats::chisq.test(tb)$statistic)
+    nn <- sum(tb)
+    v <- sqrt(as.numeric(chi) / (nn * (min(dim(tb)) - 1)))
+    data.frame(
+      batch_column = batch_col, group_column = gc,
+      n_batches = nrow(tb), n_groups = ncol(tb),
+      cramers_v = round(v, 3),
+      verdict = if (!is.finite(v)) "not estimable"
+                else if (v >= 0.8) "SEVERE - batch and group are near-identical; NO batch correction is safe"
+                else if (v >= 0.5) "substantial - batch and group overlap; correction would remove real signal"
+                else if (v >= 0.3) "moderate - interpret batch-adjacent findings with care"
+                else "low - batch and group are largely separable",
+      stringsAsFactors = FALSE)
+  }
+  rows <- Filter(Negate(is.null), lapply(unique(group_col), .conf_one))
+  if (length(rows)) {
+    conf <- do.call(rbind, rows)
+    # Worst first: the caption and the log quote the head of this, and the
+    # variable most entangled with batch is the one a reader must know about.
+    conf <- conf[order(-conf$cramers_v), , drop = FALSE]
+    rownames(conf) <- NULL
   }
 
   summary <- data.frame(
@@ -208,16 +227,40 @@ batch_mixing_report <- function(cells, batch_col, group_col = "cohort",
 #' @param report The report.
 #' @param outfile Path to write the figure to.
 #' @param batch_col Column naming the acquisition batch.
+#' @param facet_col Column of `cells` splitting the embedding panel into one
+#'   UMAP per level -- the timepoint, typically. NULL, or a column with fewer
+#'   than two levels, draws the single pooled embedding. Default `NULL`.
 #' @param panel_label Marker-panel name added to the figure title; empty for none. Default `""`.
 #' @param dpi Resolution in dots per inch. May be reduced automatically to respect the raster ceiling; see [safe_ggsave()]. Default `200`.
 #' @param colors Named list of colours; defaults to the package palette. See [fcs_colors()]. Default `fcs_colors()`.
 #' @export
 fig_batch_diagnostic <- function(cells, report, outfile, batch_col,
-                                 panel_label = "", dpi = 200, colors = fcs_colors()) {
+                                 facet_col = NULL, panel_label = "", dpi = 200,
+                                 colors = fcs_colors()) {
   if (is.null(report)) return(invisible(NULL))
   d <- cells[report$cell_index, , drop = FALSE]
   d$.batch <- as.character(cells[[batch_col]])[report$cell_index]
   d$.lisi  <- report$per_cell
+
+  # ONE EMBEDDING PER TIMEPOINT RATHER THAN ALL VISITS SUPERIMPOSED. Pooled, the
+  # panel cannot distinguish the two things a reader needs to tell apart: a
+  # batch that sits apart in the embedding, and a batch that was simply acquired
+  # at one visit. Split by visit, a batch effect shows as the same separation
+  # inside every facet, whereas a visit effect shows as a facet that differs
+  # from its neighbours while each facet is internally mixed. The iLISI panel
+  # beside it is unchanged and still computed on the pooled embedding -- that is
+  # the test, and splitting it per facet would leave too few cells per level.
+  .fv <- NULL
+  if (!is.null(facet_col) && facet_col %in% names(cells)) {
+    .fv <- as.character(cells[[facet_col]])[report$cell_index]
+    if (all(is.na(.fv)) || length(unique(.fv[!is.na(.fv)])) < 2L) .fv <- NULL
+  }
+  n_facet <- 1L
+  if (!is.null(.fv)) {
+    d$.facet <- natural_cluster_factor(.fv)
+    d <- d[!is.na(d$.facet), , drop = FALSE]
+    n_facet <- length(levels(d$.facet))
+  }
 
   lv <- sort(unique(d$.batch))
   cols <- population_colours(lv, colors = colors)
@@ -227,10 +270,15 @@ fig_batch_diagnostic <- function(cells, report, outfile, batch_col,
     geom_point(size = aes_pt$size, alpha = aes_pt$alpha, stroke = 0) +
     scale_colour_manual(values = cols, name = batch_col) +
     guides(colour = guide_legend(override.aes = list(size = 2.4, alpha = 1))) +
-    labs(x = "UMAP 1", y = "UMAP 2", title = paste0("Embedding by ", batch_col)) +
+    labs(x = "UMAP 1", y = "UMAP 2",
+         title = paste0("Embedding by ", batch_col,
+                        if (!is.null(.fv)) paste0(", one panel per ", facet_col)
+                        else "")) +
     theme_cyto(colors = colors) +
     theme(legend.position = "right", legend.key.size = unit(9, "pt"),
           legend.text = element_text(size = 7))
+  if (!is.null(.fv))
+    p1 <- p1 + ggplot2::facet_wrap(~ .facet, nrow = 1) + theme_panel_borders()
 
   s <- report$summary
   p2 <- ggplot(data.frame(lisi = d$.lisi), aes(lisi)) +
@@ -241,8 +289,11 @@ fig_batch_diagnostic <- function(cells, report, outfile, batch_col,
                colour = colors$gate_highlight) +
     labs(x = paste0("iLISI (k = ", s$k, ")"), y = "cells",
          title = "Local batch mixing",
+         # One fact per line. On a faceted figure the embedding takes most of
+         # the width, and this panel is narrow enough that a two-fact line was
+         # clipped mid-number at the canvas edge.
          subtitle = paste0("solid = observed median ", s$ilisi_observed_median,
-                           "; dashed = permutation null ", s$ilisi_null_median,
+                           "\ndashed = permutation null ", s$ilisi_null_median,
                            "\n1 = no mixing, ", s$n_batches, " = full mixing")) +
     theme_cyto(colors = colors)
 
@@ -251,13 +302,23 @@ fig_batch_diagnostic <- function(cells, report, outfile, batch_col,
     " label permutations (one-sided: is mixing WORSE than chance?). Verdict: ",
     s$verdict, ".")
   if (!is.null(report$confounding))
-    cap <- paste0(cap, "\nBatch vs group confounding: Cramer's V = ",
-                  report$confounding$cramers_v, ", ", report$confounding$verdict, ".")
+    # EVERY ROW, not just the first. The table carries one row per design
+    # variable now, and printing only one of them would hide precisely the case
+    # this was widened for -- a batch structure that tracks the timepoint rather
+    # than the study group.
+    cap <- paste0(cap, "\n", paste(sprintf(
+      "Batch vs %s: Cramer's V = %s, %s.",
+      report$confounding$group_column, report$confounding$cramers_v,
+      report$confounding$verdict), collapse = "\n"))
   cap <- paste0(cap,
     "\nDIAGNOSTIC ONLY: no batch correction is applied by this pipeline. ",
     "Computed on the 2-D embedding, so it measures batch structure as PLOTTED.")
 
-  fig <- patchwork::wrap_plots(list(p1, p2), ncol = 2, widths = c(1.35, 1)) +
+  # The embedding takes the extra width the facets need; the histogram beside it
+  # is one panel however many facets there are and must not be stretched to
+  # match, or the whole figure becomes mostly empty axis.
+  fig <- patchwork::wrap_plots(list(p1, p2), ncol = 2,
+                               widths = c(1.35 * n_facet, 1 + 0.3 * (n_facet - 1))) +
     patchwork::plot_annotation(
       title = paste0("Batch-effect diagnostic",
                      if (nzchar(panel_label)) paste0(", ", panel_label) else ""),
@@ -265,8 +326,8 @@ fig_batch_diagnostic <- function(cells, report, outfile, batch_col,
       theme = ggplot2::theme(
         plot.title = element_text(size = 11, face = "bold"),
         plot.caption = element_text(size = 7, hjust = 0, colour = colors$caption_text)))
-  safe_ggsave(outfile, plot = fig, width = 11.5, height = 4.6, dpi = dpi,
-              limitsize = FALSE)
+  safe_ggsave(outfile, plot = fig, width = 11.5 + 3.4 * (n_facet - 1L),
+              height = 4.6, dpi = dpi, limitsize = FALSE)
   log_msg("[fig] wrote ", outfile, " (iLISI ", s$ilisi_observed_median,
           " vs null ", s$ilisi_null_median, ", p = ", s$p_empirical, ")")
   invisible(fig)

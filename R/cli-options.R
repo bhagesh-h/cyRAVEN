@@ -61,6 +61,31 @@ build_option_list <- function() list(
                            "first), absolute_counts.png/.csv and, with --group-column,",
                            "absolute_counts_stats.csv. See system.file(",
                            "'examples', package = 'cyRAVEN')")),
+  optparse::make_option("--auto-fix-gates", action = "store_true", default = FALSE,
+              dest = "auto_fix_gates",
+              help = paste("act on the observation that a hierarchy gate rests on",
+                           "a quantile fallback rather than a density minimum. A",
+                           "fallback fixes that gate's retention by construction --",
+                           "exactly 90% for the live gate, exactly 10% for CD45 --",
+                           "because the constant, not the data, decides it. Under",
+                           "this flag such a gate is SKIPPED and its parent carried",
+                           "through unchanged, on the grounds that no minimum means",
+                           "one population rather than two. Changes every count in",
+                           "an affected file, so it is opt-in. Writes",
+                           "gate_adjustments.csv naming every gate changed and why.",
+                           "Population markers are untouched.")),
+  optparse::make_option("--total-counts", type = "character", default = NULL,
+              dest = "total_counts",
+              help = paste("externally measured TOTAL cell yield per acquisition:",
+                           ".xlsx, .csv or .tsv, wide format, optionally blocked by",
+                           "timepoint (block label row, then a 'Patient' header beside",
+                           "a count header such as 'PBMC count x 10^6'). Joined on",
+                           "patient_id AND timepoint, so a yield stays attached to one",
+                           "draw. Multiplies each population share to give",
+                           "cells_absolute, which unlike a frequency can show every",
+                           "population moving the same way. Reported in its own",
+                           "columns and its own test, never replacing the share.",
+                           "Requires a sample sheet.")),
   optparse::make_option("--reference-date", type = "character", default = NULL,
               dest = "reference_date",
               help = paste("YYYY-MM-DD used to derive age from date of birth and",
@@ -248,6 +273,28 @@ build_option_list <- function() list(
               dest = "flowjo_no_groups",
               help = paste("with --flowjo-export, skip the per-group",
                            "_GROUP_<cohort>.fcs files")),
+  # NO --add-subsets OPTION. The subset layer annotates EXPLORE CLUSTERS and
+  # nothing else, so it needs no flag: it applies whenever explore runs, and it
+  # changes no declared output. An option here would imply it could be turned on
+  # for the declared analysis, which is exactly what it must not do -- appending
+  # generated subsets to the specification changes every frequency, legend and
+  # panel count downstream of scoring. See R/subsets.R.
+  # WHY THIS IS OPT-IN RATHER THAN AUTOMATIC. It multiplies the figure count by
+  # the number of visits, which is a large amount of output for a design where
+  # the timepoint is incidental rather than the subject. On a repeated-measures
+  # study it is the view you want; on a cross-sectional one that happens to
+  # record a collection date it is noise. The pooled figures are written either
+  # way, so this adds a view rather than replacing one.
+  optparse::make_option("--split-by-timepoint", action = "store_true",
+              default = FALSE, dest = "split_by_timepoint",
+              help = paste("also write the whole figure set once per timepoint",
+                           "into by_timepoint/<level>/, using the sample sheet's",
+                           "timepoint column. The embedding, the thresholds and",
+                           "the statistics are NOT recomputed per visit -- only",
+                           "the rows drawn are restricted -- so positions and",
+                           "cuts stay comparable between visits. The pooled",
+                           "figures are still written. Ignored when the sheet",
+                           "has no timepoint with two or more levels.")),
   # WHY "Other CD45+" IS HIDDEN BY DEFAULT: it is not a population, it is the
   # leftover -- every CD45+ cell that matched no definition in the spec. Here it
   # is the single largest label (36% of cells), so on a UMAP it blankets the
@@ -257,8 +304,15 @@ build_option_list <- function() list(
   # frequency table. --other puts them back on the figures.
   optparse::make_option("--other", action = "store_true", default = FALSE,
               dest = "include_other",
-              help = paste("also draw the 'Other CD45+' catch-all on the UMAP",
-                           "figures [hidden by default; never affects tables]")),
+              help = paste("draw the 'Other CD45+' catch-all on the UMAP figures",
+                           "AND carry it as a row in population_frequencies.csv,",
+                           "so it reaches population_marker_heatmap.png and",
+                           "cohort_composition_heatmap.png. It is the CD45+ cells",
+                           "no definition matched, and therefore the direct",
+                           "measure of how much of the data the specification",
+                           "does not describe: without it a spec covering a fifth",
+                           "of the parent looks like one covering all of it.",
+                           "[off by default; adds a row, changes no existing one]")),
   # marker_umaps_by_group/ writes ONE PNG PER MARKER, so a 40-marker panel makes
   # a folder of 40 files. That is the only reason to turn it off; nothing else
   # in the run reads it, and no table changes either way.

@@ -523,14 +523,25 @@ subdirectory. Nothing outside it changes.
 | `explore_cluster_stats.csv` | Donor-level group tests, carrying the batch/group confounding verdict |
 | `explore_cells.csv` | One row per cell: sample, event index, cluster, UMAP coordinates |
 | `explore_vs_populations.csv` | Cross-tab against the declared labels |
+| `explore_cluster_identity.csv` | Per cluster: the declared population it best corresponds to, the precision and recall behind that match and their harmonic mean (F1), the runner-up, and the share of the cluster that is the catch-all. A cluster at or above 70% catch-all is reported as undescribed |
+| `explore_cluster_subsets.csv` | Per cluster: the immune subset its own marker profile matches, the requirements checked, and the margin — the smallest distance from the positivity cut across them. Written whether or not a specification was scored |
 | `explore_findings.csv` | Clusters no declared population covers |
 | `explore_population_split.csv` | Declared labels spanning several clusters |
 | `explore_suggested_spec.yaml` | A draft specification, for curation |
 | `explore_provenance.csv` | Every choice explore made, and on what basis |
 
-Figures: `explore_umap_clusters.png`, `explore_cluster_heatmap.png`,
+Figures: `explore_cluster_identity.png`, `explore_umap_clusters.png`,
+`explore_cluster_heatmap.png`, `explore_cluster_median_heatmap.png`,
 `explore_umap_by_group.png`, `explore_umap_markers.png`, and
 `explore_marker_umaps_by_group/`.
+
+`explore_cluster_identity.png` is the one to read first: clusters as rows,
+declared populations as columns, grouped by the population each cluster best
+matches, with the subset its marker profile matches in the row label. The match
+is scored by F1 rather than by the largest overlap, because a cluster holding
+300 of a run's 6,000 CD4 T cells has CD4 as its plurality while accounting for
+almost none of that population. See
+[Explore mode](explore.html).
 
 The last four tables appear only when a specification was scored **and**
 `--maybe-learn` is set. Without that flag the two analyses are computed in
@@ -539,6 +550,45 @@ isolation and neither sees the other; see [Explore mode](explore.html).
 `spec_gaps.csv` is the one file explore may add to the run directory itself, and
 only under `--maybe-learn`. It names declared populations spanning several
 clusters and clusters no population covers.
+
+## 10c. `by_timepoint/`: the figure set per visit
+
+Written under `--split-by-timepoint`, when the sample sheet carries a
+`timepoint` column with two or more levels of at least two samples each. One
+subdirectory per level, each holding the same figures the pooled run writes,
+drawn over that visit's samples alone.
+
+| File | Content |
+|---|---|
+| `by_timepoint/<level>/population_frequencies.png` | Abundance, that visit only |
+| `by_timepoint/<level>/population_marker_heatmap.png` | Phenotype check, that visit only |
+| `by_timepoint/<level>/marker_state.png` | Positivity per population, that visit only |
+| `by_timepoint/<level>/umap_overview.png` | The shared embedding, that visit's cells |
+| `by_timepoint/<level>/umap_markers.png` | Marker grid on the shared embedding |
+| `by_timepoint/<level>/umap_density.png` | Density per sample |
+| `by_timepoint/<level>/functional_markers.png` | Functional blocks, that visit only |
+| `by_timepoint/<level>/population_ratios.png` | Declared ratios, that visit only |
+| `by_timepoint/<level>/absolute_vs_share.png` | Written when an external total was supplied |
+| `by_timepoint/<level>/frequency_uncertainty.png`, `detection_limits.png` | Counting uncertainty, that visit only |
+
+**The embedding, the thresholds and the statistics are not recomputed per
+visit.** Only the rows drawn are restricted. A position on one visit's UMAP is
+therefore the same position on another's, and a threshold is the same cut — a
+difference between two of these directories is a difference in the cells, not in
+the method. Re-running the pipeline per visit would instead produce embeddings
+computed from different cells, between which no position is comparable, and
+re-derive the thresholds, making "CD4-positive" a different predicate at each
+visit.
+
+No test is annotated on these figures. Splitting the cohort by visit and again
+by study group leaves too few samples per comparison, and a bracket computed on
+the pooled cohort drawn beside one visit's data would attribute a cohort-level
+result to a subset of it.
+
+The paired views — `timepoint_trajectories_*.png`, `timepoint_subset_balance.png`,
+`timepoint_marker_intensity.png` — stay in the run directory and are written
+whether or not the flag is set. They need every visit at once, so splitting them
+by visit is what destroys them.
 
 ## 11. Failure handling
 

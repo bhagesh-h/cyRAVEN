@@ -301,7 +301,7 @@ population_frequency_uncertainty <- function(tmat, thr, parent, spec, u,
                                              loq_events = 50L) {
   pct_at <- function(thr2, parent2) {
     hi <- derive_intermediate_bounds(tmat, thr2, parent2, spec)
-    sp <- score_populations(tmat, thr2, parent2, spec, hi_thr = hi)
+    sp <- score_populations(tmat, thr2, parent2, spec, hi_thr = hi, quiet = TRUE)
     den <- max(1L, sum(parent2))
     vapply(sp$masks, function(m) 100 * sum(m) / den, numeric(1))
   }
@@ -311,7 +311,7 @@ population_frequency_uncertainty <- function(tmat, thr, parent, spec, u,
   # pct_at(thr, parent), so `base` is unchanged; the counts come out of it free.
   n_parent <- sum(parent)
   hi0  <- derive_intermediate_bounds(tmat, thr, parent, spec)
-  sp0  <- score_populations(tmat, thr, parent, spec, hi_thr = hi0)
+  sp0  <- score_populations(tmat, thr, parent, spec, hi_thr = hi0, quiet = TRUE)
   k0   <- vapply(sp0$masks, sum, integer(1))
   base <- 100 * k0 / max(1L, n_parent)
   if (!length(base)) return(NULL)

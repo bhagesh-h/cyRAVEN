@@ -208,6 +208,59 @@ The report is separate from `report.html` rather than a section inside it, for
 the reason in section 8: `report.html` is a declared deliverable and `--explore` must
 not change it.
 
+## What each cluster corresponds to, and what it is
+
+Two questions, two answers, and they can disagree.
+
+**Correspondence** is measured by which cells overlap.
+`explore_cluster_identity.png` puts clusters in rows and declared populations in
+columns, grouped by the population each cluster best matches. The match is
+scored by the **F1 statistic** — the harmonic mean of precision (how much of the
+cluster is that population) and recall (how much of that population is in the
+cluster) — rather than by the largest overlap. The distinction matters: a
+cluster of 500 cells holding 300 CD4 T cells has CD4 as its plurality even when
+those 300 are a twentieth of the CD4 T cells in the run. The label would
+describe the cluster; the cluster would not describe the label. F1 can only be
+high when both directions hold. The method follows Weber & Robinson, *Cytometry
+A* 2016;89:1084–1096, who match clusters to manually gated populations this way.
+
+Every cluster has a best match, so the call is qualified rather than asserted:
+`confident` at F1 ≥ 0.5, `partial`, or `no clear match`, all written to
+`explore_cluster_identity.csv` with the precision and recall behind them.
+
+The catch-all is ranked apart. It is not a cell type — it is the complement of
+the specification — and letting it compete would name most clusters "Other" on a
+specification with modest coverage, which is true and useless. A cluster at or
+above 70% catch-all is reported as **undescribed**, which is a gap in the
+specification rather than a property of the cluster. A cluster more than half
+catch-all is never called confident, however clean its F1 against the remainder.
+
+**Identity** is read from the cluster's own marker profile.
+`explore_cluster_subsets.csv` matches each cluster's positivity fractions
+against the immune subsets the panel can express — activated, exhausted and
+homing T cell subsets, NK CD56 bright/dim, HLA-DR low and CD38+ monocytes, and
+so on — and takes the most specific definition the profile satisfies. The base
+lineages are candidates too, so a cluster of plain CD4 T cells is named rather
+than left blank. The `margin` column is the smallest distance from the
+positivity cut across the requirements that were checked: a cluster 51% positive
+for a marker satisfies the same requirement as one 99% positive, and only the
+margin separates them.
+
+This is written whether or not a specification was scored, so an explore-only
+run still gets it.
+
+The subsets a panel can define are a property of the **panel**, not of
+immunology. Only definitions whose every marker is present are proposed, and the
+canonical groups that cannot be reached are named in the log with the markers
+they would need — naive/central-memory/effector-memory without CD45RA and CCR7,
+the three monocyte subsets without CD16, senescent T cells without CD28.
+
+The subsets are deliberately **not** added to the declared specification.
+Appending them there re-scores every cell, changes every frequency and legend,
+and asks a circular question of a subset named after the marker that defines it:
+a CD69+ subset is 100% CD69-positive by construction. The annotation attaches to
+the cluster, never to the cell, and no declared output changes.
+
 ## The heatmap is fractions, not medians
 
 `explore_cluster_heatmap.png` plots the **fraction of each cluster positive** for

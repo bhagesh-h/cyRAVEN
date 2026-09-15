@@ -849,18 +849,43 @@ fig_clinical_landscape <- function(freq, clin, outfile, order_by = NULL,
   if (!nrow(d)) return(invisible(NULL))
 
   vars <- utils::head(names(clin), max_vars)
-  # Order by the first numeric variable, because ordering is only meaningful for
-  # something with an order; with no numeric variable the columns stay in
-  # sample-id order and the strips still carry the categories.
-  if (is.null(order_by)) {
+  # ORDER BY THE DESIGN, NOT BY A SEVERITY SCORE. Ordering by the first numeric
+  # variable put the visits in the order sofa happened to fall -- d3 columns,
+  # then d0, then d7 -- so the timepoint strip was a scatter of three colours
+  # and the one comparison this cohort is built to make could not be read off
+  # the figure at all. The design variables come first instead: the visit, then
+  # the study group inside it, so each timepoint is a contiguous block and the
+  # infection foci line up the same way within every block. A severity score is
+  # a MEASUREMENT, and ordering columns by a measurement invites reading the
+  # gradient it necessarily produces as a result.
+  #
+  # order_by takes several variables, applied in turn. Numeric ones sort
+  # numerically; categorical ones sort by natural_cluster_factor, so d10 follows
+  # d7 instead of landing between d0 and d3.
+  if (is.null(order_by))
+    order_by <- intersect(c("timepoint", "visit", "day"), names(clin))
+  if (!length(order_by) || all(is.na(order_by))) {
     nm <- vars[vapply(vars, function(v) clin_is_numeric(clin[[v]]), logical(1))]
-    order_by <- if (length(nm)) nm[1] else NA_character_
+    order_by <- if (length(nm)) nm[1] else character(0)
   }
+  order_by <- order_by[!is.na(order_by) & order_by %in% names(clin)]
+  # One string for the caption and subtitle. order_by is a VECTOR now, so the
+  # `if (!is.na(order_by))` these two used to carry would be a length-0 or
+  # length-2 condition -- an error either way.
+  ord_lab <- if (length(order_by)) paste(order_by, collapse = ", then ") else ""
   ids <- sort(unique(d$sample_id))
   if (length(ids) < 3L) return(invisible(NULL))
-  if (!is.na(order_by) && order_by %in% names(clin)) {
-    ov <- suppressWarnings(as.numeric(as.character(clin[[order_by]][ids])))
-    if (!all(is.na(ov))) ids <- ids[order(ov, na.last = TRUE)]
+  if (length(order_by)) {
+    keys <- lapply(order_by, function(v) {
+      x <- clin[[v]][ids]
+      if (clin_is_numeric(x)) suppressWarnings(as.numeric(as.character(x)))
+      else as.integer(natural_cluster_factor(as.character(x)))
+    })
+    # A key that is entirely NA would sort every column into one bucket and
+    # silently discard the variable; drop it and keep the rest.
+    keys <- Filter(function(k) !all(is.na(k)), keys)
+    if (length(keys))
+      ids <- ids[do.call(order, c(keys, list(ids), list(na.last = TRUE)))]
   }
   d$.samp <- factor(d$sample_id, levels = ids)
   d <- d[!is.na(d$.samp), , drop = FALSE]
@@ -888,8 +913,8 @@ fig_clinical_landscape <- function(freq, clin, outfile, order_by = NULL,
     scale_x_discrete(drop = FALSE) +
     labs(x = NULL, y = NULL,
          caption = cap_wrap(paste0(
-           "Descriptive. Columns are samples", if (!is.na(order_by))
-             paste0(" ordered by ", order_by) else "",
+           "Descriptive. Columns are samples", if (nzchar(ord_lab))
+             paste0(" ordered by ", ord_lab) else "",
            "; the fill is a z-score within each row, so colours compare samples ",
            "within a population and never populations with each other. A visible ",
            "gradient is a reason to read clinical_association.csv, not a result ",
@@ -955,7 +980,7 @@ fig_clinical_landscape <- function(freq, clin, outfile, order_by = NULL,
     patchwork::plot_annotation(
       title = "The cohort in one picture: clinical variables above, populations below",
       subtitle = paste0("one column per sample",
-                        if (!is.na(order_by)) paste0(", ordered by ", order_by) else "",
+                        if (nzchar(ord_lab)) paste0(", ordered by ", ord_lab) else "",
                         "; strips are the clinical variables, tiles are ",
                         "population abundance as a z-score within each row"),
       theme = theme_cyto(9, colors = colors) +

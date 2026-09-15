@@ -244,7 +244,7 @@ frequency_delta_if_cleaned <- function(tmat, thr, parent, spec, keep) {
   pct_at <- function(p) {
     if (!sum(p)) return(NULL)
     hi <- derive_intermediate_bounds(tmat, thr, p, spec)
-    sp <- score_populations(tmat, thr, p, spec, hi_thr = hi)
+    sp <- score_populations(tmat, thr, p, spec, hi_thr = hi, quiet = TRUE)
     vapply(sp$masks, function(m) 100 * sum(m) / sum(p), numeric(1))
   }
   a <- pct_at(parent)

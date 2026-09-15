@@ -177,6 +177,10 @@ p_annotation <- function(p, style = c("stars_and_trend", "stars", "numeric")) {
 #' @param ncol Number of panel columns; NULL computes one that keeps the canvas roughly square. Default `3L`.
 #' @param panel_label Marker-panel name added to the figure title; empty for none. Default `""`.
 #' @param dpi Resolution in dots per inch. May be reduced automatically to respect the raster ceiling; see [safe_ggsave()]. Default `300`.
+#' @param panel_order `"abundance"` orders panels common to rare; `"name"` groups
+#'   them by the part of the panel name before the first comma -- the cell type,
+#'   for callers that name panels `"<population>, <marker>"` -- and orders by
+#'   abundance within each group. Default `"abundance"`.
 #' @param colors Named list of colours; defaults to the package palette. See [fcs_colors()]. Default `fcs_colors()`.
 #' @export
 fig_group_comparison <- function(freq, outfile, group_of, stats = NULL,
@@ -186,8 +190,10 @@ fig_group_comparison <- function(freq, outfile, group_of, stats = NULL,
                                  value_col = NULL, value_label = NULL,
                                  value_caveat = NULL,
                                  title_noun = "Population abundance",
+                                 panel_order = c("abundance", "name"),
                                  colors = fcs_colors()) {
   p_source <- match.arg(p_source)
+  panel_order <- match.arg(panel_order)
   meas <- if (!is.null(value_col))
             list(col = value_col, label = value_label %||% value_col,
                  absolute = FALSE, caveat = value_caveat)
@@ -227,7 +233,17 @@ fig_group_comparison <- function(freq, outfile, group_of, stats = NULL,
   # Order panels by overall abundance so the eye moves from common to rare
   # populations rather than alphabetically.
   ord <- stats::aggregate(stats::reformulate("population", meas$col), d, median)
-  pops <- ord$population[order(-ord[[meas$col]])]
+  pops <- if (identical(panel_order, "name")) {
+    # BY CELL TYPE, for the callers whose panel name is "<population>, <marker>".
+    # Pure abundance order interleaves the cell types -- every population's CD3
+    # panel first because those are all near 100%, then every population's CD56,
+    # and so on -- so reading one cell type's phenotype means hunting its markers
+    # across a grid of two hundred panels. Splitting at the first comma keeps a
+    # cell type's markers contiguous, and abundance still orders the markers
+    # inside each block, so the common-to-rare reading survives within it.
+    order(sub(",.*$", "", ord$population), -ord[[meas$col]])
+  } else order(-ord[[meas$col]])
+  pops <- ord$population[pops]
 
   # ncol = 3 reads well at the population counts this was developed against.
   # fig_functional_markers() can hand this population x marker panels -- a

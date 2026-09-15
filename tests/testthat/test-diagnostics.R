@@ -123,3 +123,46 @@ test_that("verbosity is controlled by an option, not by an argument", {
   withr::local_options(cyRAVEN.verbose = "inform")
   expect_message(log_msg("this must appear"), "must appear")
 })
+
+test_that("batch confounding is reported for every design variable, not only the study group", {
+  # A cohort whose batches each fall at one visit: batch is entangled with the
+  # timepoint and NOT with the study group. Checking only the group column
+  # returns "low" and says nothing about the comparison the design exists to
+  # make, so a timepoint difference that is partly an acquisition difference
+  # would pass through as biology.
+  set.seed(1)
+  n <- 600
+  tp <- rep(c("d0", "d3", "d7"), each = n / 3)
+  cells <- data.frame(
+    umap_1 = stats::rnorm(n), umap_2 = stats::rnorm(n),
+    sample_id = paste0("S", rep(seq_len(12), each = n / 12)),
+    batch = ifelse(tp == "d0", "B1", ifelse(tp == "d3", "B2", "B3")),
+    timepoint = tp,
+    grp = rep(c("A", "B"), length.out = n),
+    stringsAsFactors = FALSE)
+
+  br <- batch_mixing_report(cells, "batch", group_col = c("grp", "timepoint"),
+                            n_perm = 3L, max_cells = 300L)
+  expect_false(is.null(br$confounding))
+  expect_setequal(br$confounding$group_column, c("grp", "timepoint"))
+  # Worst first, so the caption and the log quote the variable that matters.
+  expect_identical(br$confounding$group_column[1], "timepoint")
+  v <- stats::setNames(br$confounding$cramers_v, br$confounding$group_column)
+  expect_gt(v[["timepoint"]], 0.9)   # batch IS the timepoint here
+  expect_lt(v[["grp"]], 0.3)
+})
+
+test_that("a single group column still yields a one-row confounding table", {
+  set.seed(2)
+  n <- 300
+  cells <- data.frame(
+    umap_1 = stats::rnorm(n), umap_2 = stats::rnorm(n),
+    sample_id = paste0("S", rep(seq_len(6), each = n / 6)),
+    batch = rep(c("B1", "B2"), length.out = n),
+    grp = rep(c("A", "B"), each = n / 2),
+    stringsAsFactors = FALSE)
+  br <- batch_mixing_report(cells, "batch", group_col = "grp",
+                            n_perm = 3L, max_cells = 200L)
+  expect_identical(nrow(br$confounding), 1L)
+  expect_identical(br$confounding$group_column, "grp")
+})
