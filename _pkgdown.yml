@@ -106,6 +106,18 @@ reference:
   - default_functional_blocks
   - expected_positive_markers
   - compute_population_ratios
+  - immune_subset_spec
+
+- title: Absolute cell counts
+  desc: >
+    An externally measured cell yield per acquisition, joined on patient and
+    timepoint, turns a share into a number of cells. That is the one thing a
+    frequency table cannot express, because shares are constrained to sum to
+    100 and so cannot separate one population expanding from every other
+    contracting.
+  contents:
+  - load_total_counts
+  - attach_absolute_cells
 
 - title: Embedding
   desc: One shared UMAP per marker panel, plus model persistence for later batches.
@@ -128,6 +140,7 @@ reference:
   - cluster_gate_agreement
   - subcluster_by_reference
   - choose_subcluster_k
+  - write_suggested_config
 
 - title: Learned gates
   desc: >
@@ -242,6 +255,8 @@ reference:
   contents:
   - starts_with("fig_")
   - theme_cyto
+  - theme_panel_borders
+  - natural_cluster_factor
 
 - title: Inputs
   desc: >
