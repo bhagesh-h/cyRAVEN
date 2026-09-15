@@ -117,7 +117,7 @@ detect_viability_marker <- function(markers, explicit = NULL) {
 apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,
                                  singlet_k = 3, viability_name = NULL,
                                  cd45_name = "CD45", transform = NULL,
-                                 overrides = NULL) {
+                                 overrides = NULL, autofix = FALSE) {
   ex <- rd$exprs; sc <- rd$scatter_cols; mc <- rd$marker_cols
   sg <- derive_scatter_gate(ex, sc)
   sb <- derive_singlet_band(ex, sc, sg$mask, k = singlet_k)
@@ -142,14 +142,33 @@ apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,
   # --- live gate -------------------------------------------------------------
   vmk <- detect_viability_marker(names(mc), viability_name)
   live <- sb$mask; v_thr <- NA_real_; v_src <- "skipped"
+  adjustments <- list()
   if (!is.na(vmk)) {
     vx <- tf(vmk)
     rr <- resolve_threshold(vmk, vx[sb$mask], cfg_threshold(cfg[[vmk]]),
                             control_ref[[vmk]], fallback_q = 0.90,
                             override = sample_override(list(x = overrides), "x", vmk))
     v_thr <- rr$threshold; v_src <- rr$source
-    live <- sb$mask & vx < v_thr        # dead cells are the BRIGHT tail
-    log_msg("  viability '", vmk, "' threshold ", round(v_thr, 2), " (", v_src, ")")
+    # The candidate mask is built BEFORE the gate is judged, because one of the
+    # two things being judged is how much it keeps. A "below" gate on a fallback
+    # threshold keeps exactly fallback_q of its parent -- 90% -- whatever the dye
+    # did; a badly placed valley can keep almost nothing. See R/gate-autofix.R.
+    .live_try <- sb$mask & vx < v_thr        # dead cells are the BRIGHT tail
+    .fx <- gate_needs_autofix(v_src, autofix, kept = sum(.live_try),
+                              parent = sum(sb$mask))
+    if (isTRUE(.fx$skip)) {
+      adjustments[[length(adjustments) + 1L]] <- gate_adjustment_row(
+        rd$sample_id %||% NA_character_, "live_cells", vmk, v_src, v_thr,
+        "skipped", .fx$reason, sum(sb$mask), sum(sb$mask))
+      v_src <- "skipped_autofix"; v_thr <- NA_real_
+      log_msg("  viability '", vmk, "' gate SKIPPED (--auto-fix-gates): ",
+              .fx$reason, " Every singlet is carried through.")
+    } else {
+      live <- .live_try
+      log_msg("  viability '", vmk, "' threshold ", round(v_thr, 2), " (", v_src, ")")
+      if (!is.na(.fx$reason))
+        log_msg("  NOTE live_cells: ", .fx$reason)
+    }
   } else {
     log_msg("  no viability dye detected, live gate skipped")
   }
@@ -162,8 +181,26 @@ apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,
                             control_ref[[cd45_name]],
                             override = sample_override(list(x = overrides), "x", cd45_name))
     c_thr <- rr$threshold; c_src <- rr$source
-    cd45 <- live & cd45_x > c_thr
-    log_msg("  CD45 threshold ", round(c_thr, 2), " (", c_src, ")")
+    # An "above" gate on the same fallback keeps exactly 1 - fallback_q, 10%.
+    # In PBMC every cell is a leukocyte, so CD45 has no negative mode to find
+    # and the 10% is entirely an artefact of the constant. Judged on retention
+    # too, for the reason given beside the live gate above.
+    .cd45_try <- live & cd45_x > c_thr
+    .fx <- gate_needs_autofix(c_src, autofix, kept = sum(.cd45_try),
+                              parent = sum(live))
+    if (isTRUE(.fx$skip)) {
+      adjustments[[length(adjustments) + 1L]] <- gate_adjustment_row(
+        rd$sample_id %||% NA_character_, "cd45_pos", cd45_name, c_src, c_thr,
+        "skipped", .fx$reason, sum(live), sum(live))
+      c_src <- "skipped_autofix"; c_thr <- NA_real_
+      log_msg("  CD45 gate SKIPPED (--auto-fix-gates): ", .fx$reason,
+              " Every live cell is treated as the parent.")
+    } else {
+      cd45 <- .cd45_try
+      log_msg("  CD45 threshold ", round(c_thr, 2), " (", c_src, ")")
+      if (!is.na(.fx$reason))
+        log_msg("  NOTE cd45_pos: ", .fx$reason)
+    }
   } else {
     warning("CD45 absent from this panel, all live cells treated as the parent")
   }
@@ -186,7 +223,13 @@ apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,
   list(masks = masks, counts = counts, scatter_gate = sg, singlet = sb,
        viability_marker = vmk, viability_threshold = v_thr, viability_source = v_src,
        cd45_threshold = c_thr, cd45_source = c_src, cd45_x = cd45_x,
-       cofactor = cofactor)
+       cofactor = cofactor,
+       # Empty on a run without --auto-fix-gates, and on any sample whose gates
+       # rested on a density minimum. Collected by the caller into
+       # gate_adjustments.csv so every change is named rather than inferred from
+       # a count that moved.
+       gate_adjustments = if (length(adjustments))
+         do.call(rbind, adjustments) else NULL)
 }
 
 #' Staining QC verdict per file

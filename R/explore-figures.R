@@ -28,19 +28,32 @@ explore_figures <- function(cells, feats, prof, ex_dir, tag = "",
 
   lab <- setNames(paste0(prof$cluster, ": ", prof$phenotype), prof$cluster)
   cells$cluster_lab <- unname(lab[cells$cluster])
+  # k1, k2, ... k30 rather than k1, k10, k11, ... k2. See natural_cluster_factor().
+  cells$cluster <- natural_cluster_factor(cells$cluster)
+  nk <- length(levels(cells$cluster))
 
   # ---- 1. the embedding, coloured by cluster -------------------------------
+  # THE LEGEND IS SIZED TO THE FIGURE, not left to run off it. At --explore-k 30
+  # a single-column legend is 30 keys tall, which is taller than the 6.5in plot,
+  # so ggplot silently clipped it and the last third of the clusters -- k7
+  # onwards -- had no visible key at all. The number of columns is chosen so
+  # the legend fits the panel height, and the canvas widens to hold them.
+  leg_ncol <- max(1L, ceiling(nk / 22L))
   f1 <- file.path(ex_dir, sprintf("explore_umap_clusters%s.png", tag))
   p1 <- ggplot2::ggplot(cells, ggplot2::aes(umap_1, umap_2, colour = cluster)) +
     ggplot2::geom_point(size = 0.25, alpha = 0.55, show.legend = TRUE) +
     ggplot2::guides(colour = ggplot2::guide_legend(
-      override.aes = list(size = 2.5, alpha = 1), ncol = 1)) +
+      override.aes = list(size = 2.5, alpha = 1), ncol = leg_ncol)) +
     ggplot2::labs(title = "Explore: unsupervised clusters",
                   subtitle = paste("every eligible channel, no population",
                                    "specification used"),
                   x = "UMAP1", y = "UMAP2", colour = NULL) +
-    theme_cyto()
-  safe_ggsave(f1, plot = p1, width = 9, height = 6.5, dpi = 200)
+    theme_cyto() + ggplot2::theme(aspect.ratio = 1)
+  # Square panel plus room for the legend beside it, rather than a wide canvas
+  # the panel is stretched to fill.
+  .h1 <- max(7, 0.28 * min(nk, 22L) + 2)
+  safe_ggsave(f1, plot = p1, width = .h1 + 1.1 * leg_ncol + 0.8,
+              height = .h1, dpi = 200, limitsize = FALSE)
   keep(f1)
 
   # ---- 2. what each cluster is ---------------------------------------------
@@ -73,6 +86,53 @@ explore_figures <- function(cells, feats, prof, ex_dir, tag = "",
     keep(f2)
   }
 
+  # ---- 2b. the same clusters as scaled median expression --------------------
+  #
+  # WHY BOTH THIS AND THE FRACTION-POSITIVE HEATMAP ABOVE. They answer different
+  # questions and disagree usefully. A fraction positive is "what share of this
+  # cluster is above its own sample's cut", which is the quantity a person reads
+  # a gate for, and it is the honest one when thresholds exist. A scaled median
+  # is "how bright is this cluster for this marker relative to the other
+  # clusters", which needs no threshold at all -- so it still says something
+  # when every threshold is a quantile fallback, and it is what an unsupervised
+  # tool with no gating step (cyCONDOR's cluster_marker_heatmap.png, FlowSOM's
+  # own star plots) shows. Reading one cohort through both is how you notice
+  # that a cluster is uniformly dim rather than genuinely negative.
+  #
+  # Rows and columns are ordered by hierarchical clustering rather than left in
+  # cluster-number order, because the point of the figure is which clusters
+  # resemble each other, and k7 and k19 being adjacent on the axis is otherwise
+  # invisible.
+  md <- prof[, grep("^median\\.", names(prof)), drop = FALSE]
+  if (ncol(md) >= 2L && nrow(prof) >= 2L) {
+    names(md) <- sub("^median\\.", "", names(md))
+    M <- as.matrix(md)
+    rownames(M) <- prof$cluster
+    # z-score per MARKER (column): the colour has to mean "bright for this
+    # marker relative to other clusters". Scaling per cluster instead would
+    # make every cluster look like it has one bright marker.
+    M <- M[, apply(M, 2, function(v) is.finite(stats::sd(v)) && stats::sd(v) > 0),
+           drop = FALSE]
+    if (ncol(M) >= 2L) {
+      Z <- scale(M)
+      Z[!is.finite(Z)] <- 0
+      f2b <- file.path(ex_dir, sprintf("explore_cluster_median_heatmap%s.png", tag))
+      ok <- tryCatch({
+        grDevices::png(f2b, width = max(1400, 46 * ncol(Z) + 700),
+                       height = max(900, 34 * nrow(Z) + 500), res = 150)
+        on.exit(grDevices::dev.off(), add = TRUE)
+        stats::heatmap(t(Z), scale = "none",
+                       col = grDevices::colorRampPalette(
+                         c("#2166ac", "#f7f7f7", "#b2182b"))(64),
+                       margins = c(7, 12),
+                       xlab = "cluster", ylab = NULL,
+                       main = "Explore: scaled median expression per cluster")
+        TRUE
+      }, error = function(e) FALSE)
+      if (isTRUE(ok)) keep(f2b)
+    }
+  }
+
   # ---- 3. by group ----------------------------------------------------------
   if (!is.null(group_col) && group_col %in% names(cells) &&
       length(unique(stats::na.omit(cells[[group_col]]))) > 1L) {
@@ -86,9 +146,14 @@ explore_figures <- function(cells, feats, prof, ex_dir, tag = "",
                                      "cells per sample, so panel density is",
                                      "comparable"),
                     x = "UMAP1", y = "UMAP2") +
-      theme_cyto()
-    safe_ggsave(f3, plot = p3, width = max(7, 3.2 * ng + 1), height = 4.2,
-                dpi = 200)
+      theme_cyto() + theme_panel_borders() +
+      ggplot2::theme(aspect.ratio = 1)
+    # Height follows the rows the facets actually occupy, and aspect.ratio
+    # above keeps each panel square, so the embedding has the same shape here
+    # as in every other figure of it.
+    .nc3 <- min(4L, ng); .nr3 <- ceiling(ng / .nc3)
+    safe_ggsave(f3, plot = p3, width = 2.9 * .nc3 + 1.4,
+                height = 2.9 * .nr3 + 1.4, dpi = 200, limitsize = FALSE)
     keep(f3)
   }
 
@@ -108,17 +173,23 @@ explore_figures <- function(cells, feats, prof, ex_dir, tag = "",
                       stringsAsFactors = FALSE)
       f <- file.path(bg_dir, sprintf("explore_umap_%s_by_group%s.png",
                                      gsub("[^A-Za-z0-9]+", "_", m), tag))
+      .nc <- min(4L, ng); .nr <- ceiling(ng / .nc)
       p <- ggplot2::ggplot(d, ggplot2::aes(umap_1, umap_2, colour = value)) +
         ggplot2::geom_point(size = 0.18, alpha = 0.5) +
-        ggplot2::facet_wrap(~ grp) +
+        ggplot2::facet_wrap(~ grp, ncol = .nc) +
         ggplot2::scale_colour_viridis_c(option = "C") +
         ggplot2::labs(title = paste(m, "by", group_col),
                       subtitle = paste("one embedding, equal cells per sample;",
                                        "colour is expression, shared across panels"),
                       x = "UMAP1", y = "UMAP2", colour = m) +
-        theme_cyto()
-      safe_ggsave(f, plot = p, width = max(7, 3.1 * ng + 1.4), height = 3.9,
-                  dpi = 170)
+        theme_cyto() + theme_panel_borders() +
+        ggplot2::theme(aspect.ratio = 1)
+      # Height was pinned at 3.9in whatever the panel count, so with four
+      # groups each panel was ~1.7in wide and 2.6in tall of usable area and the
+      # embedding came out letterboxed. aspect.ratio squares the panel and the
+      # canvas is sized from the grid rather than fixed.
+      safe_ggsave(f, plot = p, width = 2.9 * .nc + 1.8,
+                  height = 2.9 * .nr + 1.4, dpi = 170, limitsize = FALSE)
       written <- c(written, file.path(basename(bg_dir), basename(f)))
     }
   }
@@ -129,19 +200,39 @@ explore_figures <- function(cells, feats, prof, ex_dir, tag = "",
     long <- do.call(rbind, lapply(mf, function(m) data.frame(
       umap_1 = cells$umap_1, umap_2 = cells$umap_2, marker = m,
       value = cells[[m]], stringsAsFactors = FALSE)))
-    ncol_grid <- min(4L, length(mf))
+    # SQUARE-ISH GRID, not four columns. At 30 markers a 4-column grid is 8
+    # rows deep, so the figure came out 2244 x 4284 -- a strip twice as tall as
+    # it is wide. Scaled to fit any page or report pane that makes every panel
+    # tiny, which is what "squished" looks like. ceiling(sqrt(n)) is what
+    # fig_marker_grid() already uses for the declared equivalent, and it keeps
+    # the whole figure near 1:1 whatever the marker count.
+    ncol_grid <- max(1L, ceiling(sqrt(length(mf))))
+    nrow_grid <- ceiling(length(mf) / ncol_grid)
     f4 <- file.path(ex_dir, sprintf("explore_umap_markers%s.png", tag))
     p4 <- ggplot2::ggplot(long, ggplot2::aes(umap_1, umap_2, colour = value)) +
       ggplot2::geom_point(size = 0.15, alpha = 0.5) +
-      ggplot2::facet_wrap(~ marker, ncol = ncol_grid, scales = "free") +
+      # scales = "fixed", not "free". Every panel is the SAME embedding, so a
+      # free scale gave each marker its own axis range and the clouds no longer
+      # lined up between panels -- the one thing this figure exists to let you
+      # do. It also made each panel a slightly different shape, which is most of
+      # why the grid looked squashed.
+      ggplot2::facet_wrap(~ marker, ncol = ncol_grid) +
       ggplot2::scale_colour_viridis_c(option = "C") +
       ggplot2::labs(title = "Explore: marker expression over the embedding",
+                    subtitle = paste("one shared embedding; every panel is the",
+                                     "same cells, coloured by a different marker"),
                     x = "UMAP1", y = "UMAP2", colour = NULL) +
-      theme_cyto() +
+      theme_cyto() + theme_panel_borders() +
+      # aspect.ratio = 1 pins each PANEL square regardless of how the canvas is
+      # divided. Without it the panel takes whatever shape is left after the
+      # strips, legend and margins, and a UMAP drawn into a wide-short box is
+      # stretched horizontally -- the clusters change shape between figures of
+      # the same embedding, which is exactly what must not happen.
       ggplot2::theme(axis.text = ggplot2::element_blank(),
-                     axis.ticks = ggplot2::element_blank())
-    safe_ggsave(f4, plot = p4, width = 3.1 * ncol_grid + 1,
-                height = 2.8 * ceiling(length(mf) / ncol_grid) + 1, dpi = 170)
+                     axis.ticks = ggplot2::element_blank(),
+                     aspect.ratio = 1)
+    safe_ggsave(f4, plot = p4, width = 2.7 * ncol_grid + 1.6,
+                height = 2.7 * nrow_grid + 1.4, dpi = 170, limitsize = FALSE)
     keep(f4)
   }
 

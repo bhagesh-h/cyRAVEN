@@ -246,18 +246,59 @@ stats_marker_state <- function(mfi, group_of, reference = NULL,
 #' @param min_cells Minimum cells a sample must contribute before it is used. Default `20L`.
 #' @param ncol Number of panel columns; NULL computes one that keeps the canvas roughly square.
 #' @param panel_label Marker-panel name added to the figure title; empty for none. Default `""`.
+#' @param max_panels Ceiling on the population x marker panel count. Populations
+#'   over it are dropped rarest-first -- on abundance alone, before any test is
+#'   consulted, and whole populations rather than individual pairs -- and named
+#'   in the log. Without a bound this figure grows as the product of two
+#'   independently growing numbers and can exceed what the renderer can build.
+#'   Default `400L`.
 #' @param dpi Resolution in dots per inch. May be reduced automatically to respect the raster ceiling; see [safe_ggsave()]. Default `300`.
 #' @param colors Named list of colours; defaults to the package palette. See [fcs_colors()]. Default `fcs_colors()`.
 #' @export
 fig_marker_state <- function(mfi, outfile, group_of = NULL, stats = NULL,
                              reference = NULL, p_source = c("raw", "BH"),
                              min_cells = 20L, ncol = NULL, panel_label = "",
+                             max_panels = 400L,
                              dpi = 300, colors = fcs_colors()) {
   p_source <- match.arg(p_source)
   if (is.null(mfi) || !nrow(mfi) || !"pct_positive" %in% names(mfi))
     return(invisible(NULL))
   d <- mfi[is.finite(mfi$n_cells) & mfi$n_cells >= min_cells, , drop = FALSE]
   if (!nrow(d)) return(invisible(NULL))
+
+  # A STATED CEILING ON THE PANEL COUNT.
+  #
+  # This figure draws one panel per population x marker pair, so its size is the
+  # PRODUCT of two things a user can grow independently. At 11 populations and
+  # 25 markers it is 275 panels and already a 12,500-pixel square; with the
+  # subset layer added (--add-subsets) it became 51 populations, 1,275 panels,
+  # and a canvas the renderer was killed building -- one run wrote a 30 MB PNG
+  # nobody could open, the next died with a zero-byte file. A figure that cannot
+  # be built is worth less than one that is bounded and says so.
+  #
+  # This is NOT the selection the note below rules out. Populations are dropped
+  # rarest-first, on abundance alone, before any test is consulted; what is
+  # dropped never depends on a p-value or an effect size, so the figure's
+  # contents cannot be shaped by the result. Whole populations go, not
+  # individual pairs, so every population drawn keeps all of its markers and the
+  # cell-type grouping stays intact. What was dropped is named in the log, and
+  # marker_state_stats.csv carries every pair either way.
+  npop_all <- length(unique(d$population))
+  max_pop <- max(1L, floor(max_panels / max(1L, length(unique(d$marker)))))
+  if (npop_all > max_pop) {
+    sz <- tapply(d$n_cells, d$population, stats::median, na.rm = TRUE)
+    keep <- names(sort(sz, decreasing = TRUE))[seq_len(max_pop)]
+    dropped <- setdiff(names(sz), keep)
+    d <- d[d$population %in% keep, , drop = FALSE]
+    log_msg("  marker_state: ", npop_all, " populations x ",
+            length(unique(d$marker)), " markers exceeds the ", max_panels,
+            "-panel ceiling; drawing the ", max_pop, " largest and omitting ",
+            length(dropped), " rarer one(s): ",
+            paste(utils::head(dropped, 6), collapse = "; "),
+            if (length(dropped) > 6) ", ..." else "",
+            ". Dropped on abundance, never on a test result. Every pair is in ",
+            "marker_state_stats.csv and population_marker_heatmap.png")
+  }
   d <- mfi_panel_key(d)
 
   # COLUMN COUNT IS COMPUTED, NOT FIXED. This figure has one panel per
@@ -272,10 +313,12 @@ fig_marker_state <- function(mfi, outfile, group_of = NULL, stats = NULL,
   # The 168-panel case becomes ~33 x 31in -- still a large figure, because 168
   # panels IS large, but a balanced one that scales down to a page.
   #
-  # NO SILENT CAP: every pair is drawn. Truncating to the top-N by p-value would
-  # make the figure's contents depend on the test result, which is exactly the
-  # kind of selection this pipeline avoids elsewhere. If it is too big to read,
-  # marker_state_stats.csv is the sorted artefact to read instead.
+  # NO SELECTION BY RESULT: within whatever populations survived the abundance
+  # ceiling above, every marker is drawn. Truncating to the top-N by p-value
+  # would make the figure's contents depend on the test result, which is exactly
+  # the kind of selection this pipeline avoids elsewhere. The ceiling is a size
+  # bound applied before any test is read, and what it dropped is named in the
+  # log; marker_state_stats.csv carries every pair regardless.
   if (is.null(ncol)) {
     npair <- length(unique(d$population))
     ncol <- max(4L, as.integer(ceiling(sqrt(npair * 2.15 / 2.75))))
@@ -302,7 +345,12 @@ fig_marker_state <- function(mfi, outfile, group_of = NULL, stats = NULL,
       sprintf("populations with fewer than %d cells in a sample are omitted.", min_cells),
       "Intensity shifts (median arcsinh) are tested in marker_state_stats.csv",
       "and drawn in population_marker_heatmap.png."),
-    title_noun = "Marker state", colors = colors)
+    # Panels grouped by cell type. This figure's panel name is
+    # "<population>, <marker>", and ordering it by positivity alone put every
+    # population's near-saturated markers in the first rows and scattered each
+    # cell type's remaining markers across the rest of the grid -- so reading
+    # one population's phenotype meant hunting it through two hundred panels.
+    title_noun = "Marker state", panel_order = "name", colors = colors)
 }
 
 

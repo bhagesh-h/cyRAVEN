@@ -24,6 +24,21 @@ write_explore_report <- function(ex_dir, opt = NULL) {
     f <- c(...)
     f[file.exists(file.path(ex_dir, f))]
   }
+  # Same lookup, but tolerant of the panel suffix. A run that resolves to more
+  # than one panel writes explore_cluster_stats_panel_1.csv rather than
+  # explore_cluster_stats.csv, so an exact-name lookup finds nothing and a
+  # section gated on one disappears from the report entirely -- on exactly the
+  # runs that have the most in them.
+  has_stem <- function(...) {
+    all_f <- list.files(ex_dir)
+    out <- character(0)
+    for (s in c(...)) {
+      stem <- sub("[.][^.]+$", "", s)
+      ext  <- sub("^.*[.]", "", s)
+      out <- c(out, all_f[grepl(paste0("^", stem, "(_.*)?[.]", ext, "$"), all_f)])
+    }
+    unique(out)
+  }
   # Figures in the by-group subdirectory are referenced by relative path, which
   # report_section() resolves against ex_dir exactly like a top-level figure.
   bg <- list.files(file.path(ex_dir, "explore_marker_umaps_by_group"),
@@ -70,6 +85,22 @@ write_explore_report <- function(ex_dir, opt = NULL) {
           "internally consistent numbers that are unusable."),
     tables = has("explore_qc_clusters.csv"))))
 
+  if (length(has_stem("explore_cluster_median_heatmap.png")))
+    secs <- c(secs, list(report_section(ex_dir, "e2b",
+      "2b. The same clusters as scaled median expression",
+      paste("The heatmap above asks what share of each cluster is above its",
+            "own sample's threshold. This one asks how bright each cluster is",
+            "for each marker relative to the other clusters, which needs no",
+            "threshold at all. That matters when the thresholds are weak: a",
+            "cluster can read uniformly negative on the first figure and still",
+            "be clearly separated on this one, and the difference is a",
+            "statement about the gate rather than about the cells. It is also",
+            "the view an unsupervised tool with no gating step shows, so it is",
+            "the figure to compare against FlowSOM star plots or cyCONDOR's",
+            "cluster_marker_heatmap.png. Rows and columns are ordered by",
+            "hierarchical clustering, so adjacency means resemblance."),
+      figures = has_stem("explore_cluster_median_heatmap.png"))))
+
   secs <- c(secs, list(report_section(ex_dir, "e3",
     "3. Abundance per donor",
     paste("One value per sample, never one per cell. Cluster frequencies carry",
@@ -89,6 +120,37 @@ write_explore_report <- function(ex_dir, opt = NULL) {
     tables = has("explore_cluster_stats.csv"),
     figures = has("explore_umap_by_group.png"))))
 
+  # Written only when --total-counts supplied one, so a run without it produces
+  # the same report it always did.
+  if (length(has_stem("explore_cluster_stats_absolute.csv",
+                      "explore_absolute_vs_share.png",
+                      "explore_total_counts_qc.png")))
+    secs <- c(secs, list(report_section(ex_dir, "e4b",
+      "4b. Absolute cell numbers",
+      paste("Everything above this section is compositional: a share of the",
+            "events acquired, and shares are constrained to sum to 100. That",
+            "constraint means no frequency table can separate one cluster",
+            "expanding from every other cluster contracting -- the composition",
+            "is identical either way, and the centred log-ratio does not fix",
+            "it either. Multiplying each share by that acquisition's own",
+            "externally measured total lifts the constraint, because cell",
+            "numbers are free to all move the same way.",
+            "READ THE QC FIGURE FIRST: everything here inherits the errors of",
+            "those external totals, and a yield entered in the wrong unit is",
+            "obvious there and invisible in the derived table.",
+            "The concordance table is the point of the pair -- a cluster",
+            "significant on cell number but not on share is a compartment that",
+            "changed size; the reverse is a redistribution at constant size.",
+            "These are DUAL-PLATFORM numbers, one measurement from this run",
+            "multiplied by one from an instrument it never saw, and the",
+            "published interlaboratory CVs for that route are roughly 20-33%",
+            "against 10-16% for single-platform bead counting. Treat a",
+            "difference smaller than that as unresolved."),
+      tables = c(has_stem("explore_cluster_stats_absolute.csv"),
+                 has_stem("explore_cluster_count_concordance.csv")),
+      figures = c(has_stem("explore_total_counts_qc.png"),
+                  has_stem("explore_absolute_vs_share.png")))))
+
   if (length(bg))
     secs <- c(secs, list(report_section(ex_dir, "e5",
       "5. Each marker, split by group",
@@ -101,12 +163,25 @@ write_explore_report <- function(ex_dir, opt = NULL) {
 
   secs <- c(secs, list(report_section(ex_dir, "e6",
     "6. Against the declared specification",
-    paste("Where the two views agree and where they do not. A cluster whose",
-          "cells are mostly unlabelled is what the specification missed. A",
-          "declared population spanning several clusters is what it lumped",
-          "together -- the abundance of the whole may be flat while a subset",
-          "inside it moves."),
-    tables = has("explore_vs_populations.csv", "explore_population_split.csv"))))
+    paste("Where the two views agree and where they do not. The identity",
+          "figure is the one to read first: rows are clusters, grouped by the",
+          "declared population each best matches, so it answers 'this cluster",
+          "is what?' directly. The match is scored by F1 -- high only when the",
+          "cluster is mostly that population AND that population is mostly in",
+          "this cluster -- because the largest-overlap label alone names a",
+          "cluster after a population that barely overlaps it. A cluster",
+          "mostly made of the catch-all is what the specification MISSED, and",
+          "is shown as undescribed rather than being given a name. A declared",
+          "population spanning several clusters is what it lumped together --",
+          "the abundance of the whole may be flat while a subset inside it",
+          "moves."),
+    figures = has_stem("explore_cluster_identity.png"),
+    # explore_findings.csv is NOT named here: section 2 already names it, and a
+    # file named by two sections is embedded twice, at full size, in a report
+    # that is already the largest artefact the run writes.
+    tables = c(has_stem("explore_cluster_identity.csv"),
+               has("explore_vs_populations.csv",
+                   "explore_population_split.csv")))))
 
   secs <- c(secs, list(report_section(ex_dir, "e7",
     "7. Marker expression over the embedding",

@@ -1,3 +1,309 @@
+# cyRAVEN (development)
+
+## `explore_findings.csv` was reporting the opposite of what it found
+
+The table exists to name the clusters no declared population covers. The list of
+labels it treated as unlabelled was written out by hand and did not contain
+`Other CD45+` — the name this package itself assigns to cells inside the parent
+gate that match no definition. So `pct_unlabelled` was **0 for every cluster**
+and every verdict read "covered by the declared specification", including
+clusters that were 100% remainder, on runs whose specification described under a
+tenth of the cells. `spec_gaps.csv` inherited the same answer and told the next
+run there was nothing to fix.
+
+`is_catch_all_label()` is now the one definition, shared with the scoring step
+that assigns the label. It matches the assigned name and the conventional
+spellings, and deliberately does not match a real population that merely starts
+with the same letters (`Otherwise odd cells`).
+
+## What each unsupervised cluster corresponds to
+
+`explore_cluster_identity.png` and its CSV: clusters as rows, declared
+populations as columns, grouped by the population each cluster best matches.
+
+The match is scored by **F1**, not by the largest overlap. A cluster of 500 cells
+holding 300 CD4 T cells has CD4 as its plurality even when those are 5% of all
+the CD4 T cells in the run — the label describes the cluster, but the cluster
+does not describe the label. F1 is high only when both hold, and precision and
+recall are written beside it so a disagreement is legible. After Weber &
+Robinson, Cytometry A 2016;89:1084–1096.
+
+The catch-all is ranked apart and keeps its own column: a cluster at or above 70%
+remainder is reported as **undescribed** rather than named after whichever
+lineage owns the largest slice of what is left. A cluster more than half
+remainder is never called confident, however clean its F1.
+
+## Immune subsets, attached to explore clusters
+
+`explore_cluster_subsets.csv` names each cluster from its own marker profile —
+activated, exhausted and homing T cell subsets, NK CD56 bright/dim, HLA-DR low
+and CD38+ monocytes, and the rest that a given panel can express. The subsets a
+panel can define are a property of the panel, so only definitions whose every
+marker is present are proposed, and the canonical groups it cannot reach are
+named in the log with the markers they would need.
+
+Deliberately **not** added to the declared specification. Appending them there
+re-scores every cell, changes every frequency and legend, takes `marker_state`
+from 275 panels to 1,275, and asks a circular question of a subset named after
+the marker that defines it. The annotation attaches to the cluster, never to the
+cell, and no declared output changes.
+
+`score_populations()` gains a `bright` direction — the band above the
+intermediate one — because CD56 bright is the upper mode of a bimodal positive
+population and `above` would have returned the whole NK gate under a narrower
+name.
+
+## `--split-by-timepoint`
+
+Writes the whole figure set once per timepoint into `by_timepoint/<level>/`.
+The embedding, the thresholds and the statistics are **not** recomputed per
+visit: only the rows drawn are restricted, so a position on one visit's UMAP is
+the same position on another's. Running the pipeline separately per visit would
+have produced three incomparable embeddings.
+
+## Batch confounding is checked against every design variable
+
+`batch_group_confounding.csv` tested batch against `--group-column` alone. On a
+repeated-measures study the timepoint is the primary comparison, and a cohort
+whose small batches each fall at one visit is confounded exactly where it
+matters. One row per variable now, worst first, and the log warns from Cramér's
+V ≥ 0.3 rather than only at the "no correction is safe" threshold.
+
+## `marker_state` is bounded
+
+It draws one panel per population × marker pair, so its cost is the product of
+two numbers that grow independently. `max_panels` (default 400) drops
+populations rarest-first — on abundance alone, before any test is read, whole
+populations rather than individual pairs — and names what it dropped. This is a
+size bound, not selection by result: truncating by p-value remains ruled out.
+
+## Figures separated by timepoint, and read in execution order
+
+Per-timepoint twins of the functional-marker, population-ratio,
+absolute-vs-share and marker-grid figures now sit beside their pooled versions
+in the report instead of falling through to the catch-all. Report sections are
+ordered by the step that produced them, with provenance first and unsupervised
+discovery ahead of the declared analysis it should be read against. Figures and
+tables are separate tab strips within each section.
+
+`clinical_landscape` orders its columns by timepoint then study group rather
+than by a severity score — ordering columns by a measurement guarantees a
+gradient that reads as a result. `marker_state` groups its panels by cell type.
+`batch_diagnostic` draws one embedding per timepoint, which is what separates a
+batch that sits apart in the embedding from a batch acquired at one visit.
+
+
+## `--auto-fix-gates` acts on a gate the data did not support
+
+A hierarchy gate whose threshold came from `quantile_fallback` has its retention
+decided by the constant `fallback_q = 0.90`, not by the data — and the direction
+of the comparison decides which artefact you get:
+
+```
+live_cells   live <- parent & x <  threshold     keeps exactly 90%
+cd45_pos     cd45 <- live   & x >  threshold     keeps exactly 10%
+```
+
+One constant, two opposite meanings. On the cohort that surfaced this,
+`live_cells` was 90.00% of its parent in 12 of 12 samples — range 90.00 to
+90.00 — and on the extended cohort 19 of 20.
+
+Under the flag such a gate is **skipped** and its parent carried through, on the
+grounds that a density minimum is absent when the data show one population
+rather than two, and that choosing any quantile then fabricates a boundary the
+data do not contain. `gate_adjustments.csv` names every gate changed, with the
+threshold that was not applied and why. Opt-in, because it changes every count
+in an affected file.
+
+Population markers are deliberately untouched: a quantile fallback on CD19 is a
+poor threshold, but "no threshold" does not mean "every cell is a B cell".
+
+## `explore_suggested_spec.yaml` is a file you can actually run
+
+It was written in `pos`/`neg`. No parser in this package reads either word —
+`score_populations()` takes `above`/`below`. So the file whose header invites
+you to curate it and pass it to `--config` could never have been run, and doing
+so reported every population UNAVAILABLE without raising an error. Now emitted
+in the vocabulary the parser takes, and the test asserts that what is written
+parses **and scores**, rather than matching a string.
+
+## `suggested_config_next_run.yaml`, assembled rather than described
+
+Under `--explore --maybe-learn`, `spec_gaps.csv` already said which clusters no
+declared population covered. Acting on it meant finding each cluster in the
+suggested spec and pasting it into the config by hand. The declared
+specification plus a draft entry per uncovered cluster is now written directly,
+in the config's own format, panel-qualified so `k9` in two panels cannot merge.
+It is a draft and nothing in the run that writes it uses it.
+
+## A scaled-median cluster heatmap, beside the fraction-positive one
+
+`explore_cluster_median_heatmap*.png` shows how bright each cluster is for each
+marker relative to the other clusters, hierarchically ordered on both axes. The
+existing heatmap shows the share of each cluster above that sample's own
+threshold. They answer different questions and disagree usefully: where
+thresholds are weak a cluster can read uniformly negative on the first and be
+cleanly separated on the second, and that difference is a statement about the
+gate rather than the cells. The median view needs no threshold, so it is the one
+that compares against a tool with no gating step.
+
+Every change below is additive or a bug fix. Verified rather than asserted: the
+reference cohort's run was repeated with this tree and compared to the recorded
+output file by file. **All 83 figures and `cells_umap.csv` are byte-identical**;
+the only differences are the run timestamp and, where the specification itself
+was changed to use `any_of`, the bookkeeping column `u_n_terms_missing` on the
+rows that disjunction covers. No frequency, uncertainty or embedding moved.
+
+## External total cell counts lift the compositional constraint
+
+Every abundance this package reported was a share of the events acquired, and
+shares sum to 100. That constraint is not a rounding detail: it means a
+frequency table cannot, even in principle, distinguish one population expanding
+from every other population contracting, because the composition is identical
+either way. `stats-compositional.R` already said so in its own header — the
+centred log-ratio fixes the geometry of the test and not this — and the only
+escape was `wbc_per_ul`, which is keyed by patient and therefore cannot change
+between that patient's timepoints.
+
+In sepsis that gap is the whole finding. The characteristic result is a global
+lymphopenia rather than a redistribution between subsets, and a share cannot
+represent it.
+
+* `--total-counts` takes one measured total cell yield per **acquisition**
+  (a PBMC yield, a haemocytometer count) as `.xlsx`, `.csv` or `.tsv`. Wide
+  layouts blocked by timepoint are read directly, so the sheet does not have to
+  be reshaped by hand: a block-label row, then a `Patient` header beside a count
+  header such as `PBMC count x 10^6`, repeated across the sheet.
+* The multiplier is read from the count header. Where none is stated the values
+  are taken at face value and a NOTE names the header it looked at, because
+  guessing silently between "count" and "count x 10^6" is wrong by six orders of
+  magnitude in a table that still looks internally consistent.
+* The join is on `patient_id` **and** `timepoint`. A yield belongs to one draw,
+  so a patient's d0 and d7 totals cannot collapse onto each other, and an
+  unlabelled yield facing several acquisitions is reported unmatched rather than
+  broadcast across them.
+* Explore mode gains `cells_absolute` beside `pct_of_gated` in
+  `explore_cluster_abundance.csv`, a second test in
+  `explore_cluster_stats_absolute.csv`, and
+  `explore_cluster_count_concordance.csv`, which names the clusters that move on
+  cell number but not on share — the case a frequency table cannot express — and
+  the reverse, which is a redistribution at constant size.
+* `explore_total_counts_qc.png` is drawn whenever a total is supplied, on a log
+  axis, and is meant to be read first: everything derived inherits those totals'
+  errors, and a yield in the wrong unit lands decades off the median there while
+  staying invisible in the derived table.
+* Shares are never overwritten. The derived numbers are dual-platform — one
+  measurement from this run multiplied by one from an instrument it never saw —
+  and the published interlaboratory CVs for that route are roughly 20–33%
+  against 10–16% for single-platform bead counting. `count_basis` records the
+  route on every table carrying them.
+
+## `--explore-only` resolves the grouping it was given
+
+`--explore-only` returns before the declared run assembles `group_of`, so a run
+that named a perfectly good `--group-column` found its clusters and then tested
+nothing on them, silently. The grouping is now resolved on that path using the
+same order the declared run uses (patient table first, sample map second), so
+the two cannot disagree about where the group lives.
+
+## `--explore-cells-per-sample` now bounds memory, not just output size
+
+Explore transformed **every event in a file** and let the caller subset the
+result afterwards, so the cell cap limited how large the output was and not the
+peak memory reached producing it. Under `--max-events-per-file 0` a single
+4-million-event acquisition materialises a 4e6 x 24 double matrix, roughly
+770 MB, before one cell is discarded — on top of the declared run's own event
+matrices, still resident. The symptom was a container killed with SIGKILL
+partway through explore on a run whose declared half had completed comfortably,
+and lowering the cap did not help, because the cap was never what governed it.
+
+`explore_matrix()` takes a `rows` argument and transforms only the drawn events.
+The change is exact, not an approximation: every transform `make_transform()`
+returns is elementwise with parameters fixed at construction, so
+`transform(x)[i]` and `transform(x[i])` are the same numbers, and the draw is
+taken with the same seed over the same event count either way. Asserted with
+`identical()` rather than `all.equal()` in `test-explore-matrix-rows.R`, so a
+transform that later derives a parameter from its input fails the test instead
+of silently changing results.
+
+## `--total-counts` reaches the declared analysis, not only explore
+
+The flag was accepted on the declared path, loaded the sheet, wrote
+`total_counts.csv` — and then did nothing with it, because the load sat several
+hundred lines below the point where `population_frequencies.csv` is written. A
+flag that produces one bookkeeping file and no derived number is worse than one
+that is refused.
+
+The load now happens before the frequency table is written, so the declared run
+gains `cells_absolute` beside `pct_of_cd45_pos`, plus
+`group_comparison_stats_absolute*.csv`, `total_counts_qc*.png` and
+`absolute_vs_share*.png`. Everything stays gated behind the flag, so a run
+without it writes exactly what it always did.
+
+`fig_absolute_vs_share()` now resolves its share column (`pct_of_gated` for
+explore, `pct_of_cd45_pos` for the declared run) instead of hard-coding one, and
+titles itself "Populations" or "Explore clusters" from the row names rather than
+calling a curated gate a cluster.
+
+## `--check` no longer tells you to break a working configuration
+
+`--check` and `--list-channels` reported any specification name containing a
+hyphen, slash or space as "spelled the way the run CANNOT match", and instructed
+the user to rewrite `TCR-Vd1` as `TCR.Vd1` and `HLA-DR` as `HLA.DR`. The
+comparison was the wrong way round, and following the advice would have produced
+the failure the message warns about: every population using those markers
+reported UNAVAILABLE, with no error raised.
+
+The run matches marker symbols **verbatim**. `score_populations()` compares the
+specification against `colnames(tmat)`, and `pipeline.R` sets those from
+`names(rd$marker_cols)` — the resolved `$PnS` symbols, hyphens intact.
+`make.names()` is applied nowhere on the run path; it occurred only inside the
+check itself.
+
+Established against a reference run rather than by reading: a configuration
+declaring `TCR-Vd1: above` scores 10,783 Vd1 T cells, which is impossible if the
+hyphenated form matched nothing.
+
+The check now flags the opposite and genuinely broken case — a name written in
+R's syntactic form — and names the exact string to copy instead. On the cohort
+that surfaced this it turned one spurious PROBLEM into "every named marker is
+present" plus the note that actually mattered: `TCR-Vd1` and `TCR-Vd2` are
+present in some files but not all.
+
+## The count figures cannot move an embedding
+
+`geom_jitter()` draws from the RNG, and `run_cyraven()` seeds once so every
+later draw — the embedding's cell selection, the clustering, the bootstraps —
+comes from that one stream. A figure that spends draws therefore shifts
+everything after it: on a two-panel explore run, drawing panel 1's figure
+re-rolled panel 2's embedding, so a run with `--total-counts` would no longer
+match one without it.
+
+The jitter is now `position_jitter(seed = 42)`, which is both reproducible and
+evaluated in a temporary RNG state, and both figures are drawn inside
+`without_spending_draws()`, which saves and restores `.Random.seed` the way
+`clin_boot_ci()` and `run_flowsom()` already do. Verified rather than asserted:
+the stream is identical either side of the call.
+
+## A multi-panel explore report no longer drops the count section
+
+`explore_report.html` looked its files up by exact name, and a run resolving to
+more than one panel suffixes every one of them (`..._panel_1.csv`). The new
+absolute-count section was gated on such a lookup and therefore vanished from
+the report on exactly the runs carrying the most output. It now matches on the
+stem, so tagged and untagged names both resolve.
+
+The existing sections still use the exact-name lookup and so still show no
+tables on a multi-panel run. That is unchanged behaviour and is left alone here
+rather than altered as a side effect of an unrelated addition.
+
+## `--no-group-tests` reaches explore mode
+
+It is documented as skipping every between-group test and was applied only to
+the declared path. Explore's cluster tests are the same test on a different
+partition of the same cells, and are just as unsupportable when the donors run
+out, so the flag now suppresses those too.
+
 # cyRAVEN 1.0.0
 
 Explore mode, the statistics catalogue and the input format, together with

@@ -93,18 +93,36 @@ explore_features <- function(panel_markers, scatter_names = character(0),
 #' @param tr Transform object from [make_transform()].
 #' @return Numeric matrix, cells x features.
 #' @keywords internal
-explore_matrix <- function(rd, feats, tr) {
+explore_matrix <- function(rd, feats, tr, rows = NULL) {
   fl <- intersect(feats, names(rd$marker_cols))
   sc <- intersect(feats, names(rd$scatter_cols))
-  n <- nrow(rd$exprs)
+  # ROWS ARE SELECTED BEFORE THE TRANSFORM, NOT AFTER.
+  #
+  # This used to transform every event in the file and let the caller subset the
+  # result, which made --explore-cells-per-sample bound the SIZE of the output
+  # and not the peak memory reached producing it. With --max-events-per-file 0
+  # a single 4-million-event acquisition materialises a 4e6 x 24 double matrix,
+  # about 770 MB, before one cell is discarded -- on top of the declared run's
+  # own event matrices, still resident. The observable symptom was a container
+  # killed with SIGKILL partway through explore, on a run whose declared half
+  # had completed comfortably.
+  #
+  # Subsetting first is exact rather than an approximation: every transform
+  # make_transform() returns is elementwise with parameters fixed at
+  # construction (arcsinh is asinh(x / cofactor), none is identity), so
+  # transform(x)[i] and transform(x[i]) are the same numbers. The draw itself is
+  # unchanged -- the caller still takes it with the same seed over the same
+  # event count -- so this alters memory and nothing else.
+  idx <- rows %||% seq_len(nrow(rd$exprs))
+  n <- length(idx)
   out <- NULL
   if (length(fl)) {
-    out <- vapply(fl, function(m) tr$fn(rd$exprs[, rd$marker_cols[[m]]], m),
+    out <- vapply(fl, function(m) tr$fn(rd$exprs[idx, rd$marker_cols[[m]]], m),
                   numeric(n))
     if (!is.matrix(out)) out <- matrix(out, nrow = n, dimnames = list(NULL, fl))
   }
   if (length(sc)) {
-    sm <- vapply(sc, function(k) log10(pmax(rd$exprs[, rd$scatter_cols[[k]]], 1)),
+    sm <- vapply(sc, function(k) log10(pmax(rd$exprs[idx, rd$scatter_cols[[k]]], 1)),
                  numeric(n))
     if (!is.matrix(sm)) sm <- matrix(sm, nrow = n, dimnames = list(NULL, sc))
     out <- if (is.null(out)) sm else cbind(out, sm)

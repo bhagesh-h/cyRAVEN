@@ -185,6 +185,7 @@ report_table_note <- function(file) {
     "explore_cluster_stats.csv" = "Donor-level group tests on cluster abundance, carrying the batch and group confounding verdict.",
     "explore_cells.csv" = "One row per cell: sample, event index, cluster and UMAP coordinates.",
     "explore_vs_populations.csv" = "Cross-tabulation of unsupervised clusters against the declared population labels.",
+    "explore_cluster_identity.csv" = "One row per cluster: the declared population it best corresponds to, the precision and recall behind that match and their harmonic mean (F1), the runner-up, and the share of the cluster that is the catch-all. A cluster at or above 70% catch-all is reported as undescribed -- a gap in the specification, not a property of the cluster.",
     "explore_findings.csv" = "Clusters that no declared population covers -- what the specification is missing.",
     "explore_population_split.csv" = "Declared labels that span several clusters -- what the specification lumps together.",
     "explore_provenance.csv" = "Every choice explore mode made, and the basis for each.",
@@ -262,6 +263,44 @@ marker_umap_files <- function(outdir) {
   file.path("marker_umaps_by_group", c(sort(f[!split_by]), sort(f[split_by])))
 }
 
+#' A figure and its split-out variants, pooled one first
+#'
+#' WHY THIS EXISTS RATHER THAN ONE list.files() PATTERN. Sorting cannot be left
+#' to the locale here. R collates through the platform's collation order, which
+#' on the usual locales ignores punctuation when comparing -- so
+#' "umap_markers_d0.png" and "umap_markers.png" compare as "umapmarkersd0png"
+#' against "umapmarkerspng", and the day figure sorts FIRST. The section
+#' descriptions tell the reader to take the pooled view before the split ones,
+#' and a tab strip that opens on d0 contradicts that on the first click.
+#'
+#' The split figures are then ordered by the number inside the suffix rather
+#' than as text, so a d10 visit follows d7 instead of landing between d0 and d3.
+#'
+#' @param outdir the results directory.
+#' @param stem filename stem, e.g. "umap_markers".
+#' @param suffix regex for the split variants' suffix, after the stem and any
+#'   `_panel_N`. Defaults to any single alphanumeric run.
+#' @return filenames present in `outdir`: pooled first, then the split ones.
+#' @keywords internal
+pooled_then_split <- function(outdir, stem, suffix = "_[A-Za-z0-9]+") {
+  # The stem is pasted into a regex, so it has to BE a regex-safe identifier
+  # rather than be escaped into one: escaping differs between R's regex engines
+  # and a half-escaped stem fails silently, matching nothing and dropping the
+  # figure from the report. Every caller passes a filename stem.
+  stopifnot(grepl("^[A-Za-z0-9_]+$", stem))
+  panel <- "(_panel_[0-9]+)?"
+  pooled <- list.files(outdir, paste0("^", stem, panel, "[.]png$"))
+  split <- list.files(outdir, paste0("^", stem, panel, suffix, "[.]png$"))
+  if (length(split) > 1L) {
+    # The LAST digit run in the name, so a _panel_1 prefix does not stand in for
+    # the timepoint it precedes.
+    num <- suppressWarnings(as.numeric(
+      sub(".*[^0-9]([0-9]+)[^0-9]*$", "\\1", sub("[.]png$", "", split))))
+    split <- split[order(is.na(num), num, split)]
+  }
+  c(sort(pooled), split)
+}
+
 #' Build one report section, embedding its figures and tables
 #'
 #' @param outdir the results directory.
@@ -297,7 +336,7 @@ report_section <- function(outdir, id, title, description, figures = character(0
   # claim from "this check did not run".
   if (!length(fig_present) && !length(tab_present) && !length(oversize) &&
       is.null(body))
-    return(list(html = "", nav = "", n_fig = 0L, n_tab = 0L, bytes = 0,
+    return(list(id = id, html = "", nav = "", n_fig = 0L, n_tab = 0L, bytes = 0,
                 used = character(0)))
 
   h <- c(sprintf("<section class='sec' id='%s'>", id),
@@ -313,6 +352,24 @@ report_section <- function(outdir, id, title, description, figures = character(0
 
   nav <- character(0)
   bytes <- 0
+  # EVERY FIGURE AND TABLE BECOMES A NAMED TAB.
+  #
+  # A section used to stack its contents vertically, so reaching the fourth
+  # figure of a section holding six figures and a dozen tables meant scrolling
+  # past everything above it, and a reader who wanted to compare two of them had
+  # to hold one in memory. Collected here instead and emitted below as a tab
+  # strip: one named tab per item, left to right in the order the section
+  # declares them, so the order of the report is unchanged and only the
+  # navigation differs.
+  # FIGURES AND TABLES ARE TWO STRIPS, NOT ONE. A single strip mixing them ran
+  # to thirty-odd tabs on the larger sections, and because the figures come
+  # first, every table sat off the right-hand end of a strip the reader had to
+  # scan past the figures to reach. Two labelled groups means each is a short
+  # strip, and a reader looking for a table looks at the table strip.
+  panes <- list()
+  add_pane <- function(label, id, html, grp)
+    panes[[length(panes) + 1L]] <<- list(label = label, id = id, html = html,
+                                         grp = grp)
   for (f in fig_present) {
     p <- file.path(outdir, f)
     uri <- file_data_uri(p, "image/png")
@@ -325,7 +382,7 @@ report_section <- function(outdir, id, title, description, figures = character(0
     # at, and the same string was being used as the download file name.
     fid <- paste0("fig-", gsub("[^A-Za-z0-9]+", "-", sub("[.]png$", "", f)))
     fb  <- basename(f)
-    h <- c(h, sprintf(paste0(
+    add_pane(sub("[.]png$", "", fb), fid, sprintf(paste0(
       "<figure class='fig' id='%s'>",
       "<div class='figbox'><img src='%s' alt='%s' loading='lazy' ",
       "onclick='cyZoom(this)'/>",
@@ -334,7 +391,8 @@ report_section <- function(outdir, id, title, description, figures = character(0
       "<figcaption><span class='fn'>%s</span>",
       "<a class='dl' download='%s' href='%s'>Full resolution PNG</a>",
       "</figcaption></figure>"),
-      fid, uri, html_escape(fb), html_escape(fb), html_escape(fb), uri))
+      fid, uri, html_escape(fb), html_escape(fb), html_escape(fb), uri),
+      grp = "Figures")
     nav <- c(nav, sprintf("<a class='nav-fig' href='#%s'>%s</a>", fid,
                           html_escape(sub("[.]png$", "", fb))))
   }
@@ -348,6 +406,7 @@ report_section <- function(outdir, id, title, description, figures = character(0
     bytes <- bytes + file.size(p)
     tid <- paste0("tab-", gsub("[^A-Za-z0-9]+", "-", sub("[.]csv$", "", t)))
     note <- report_table_note(t)
+    .tab_html <- character(0)
     # EACH TABLE IS ITS OWN TOGGLE, CLOSED. A section can carry a dozen tables of
     # several hundred rows each, and opening the section to look at one figure
     # used to unroll all of them: the figures ended up separated by yards of
@@ -359,9 +418,12 @@ report_section <- function(outdir, id, title, description, figures = character(0
     # It is also why the body renders lazily: cyInit() fills only the tables whose
     # toggle is open, and the rest are built the first time they are opened. On a
     # run with forty tables that is most of the report's load time.
-    h <- c(h, sprintf(paste0(
+    .tab_html <- c(.tab_html, sprintf(paste0(
       "<div class='tab' id='%s'>",
-      "<details class='tabdet'><summary>",
+      # open: the tab strip already shows one item at a time, so a second
+      # collapsed layer inside it means two clicks to reach a table the reader
+      # has already selected.
+      "<details class='tabdet' open><summary>",
       "<span class='chev' aria-hidden='true'></span>",
       "<h3>%s</h3><span class='dim'>%d rows &times; %d cols</span></summary>",
       "%s",
@@ -377,10 +439,34 @@ report_section <- function(outdir, id, title, description, figures = character(0
       tid, html_escape(basename(t)), nrow(d), ncol(d),
       if (nzchar(note)) sprintf("<p class='tabnote'>%s</p>", html_escape(note)) else "",
       tid, html_escape(basename(t)), tid, tid))
-    h <- c(h, sprintf("<script type='application/json' id='%s-data'>%s</script>",
-                      tid, json_table(d)))
+    .tab_html <- c(.tab_html,
+                   sprintf("<script type='application/json' id='%s-data'>%s</script>",
+                           tid, json_table(d)))
+    add_pane(basename(t), tid, paste(.tab_html, collapse = "\n"), grp = "Tables")
     nav <- c(nav, sprintf("<a class='nav-tab' href='#%s'>%s</a>", tid,
                           html_escape(basename(t))))
+  }
+
+  # One tab strip per group, each wrapped in its own .tabgroup. The wrapper is
+  # what keeps the groups independent: cyTab() takes the button's grandparent as
+  # the container to search for panes, so two strips sharing one parent would
+  # have each click blank the other group's open pane.
+  for (g in c("Figures", "Tables")) {
+    gp <- Filter(function(p) identical(p$grp, g), panes)
+    if (!length(gp)) next
+    btns <- vapply(seq_along(gp), function(i) sprintf(
+      "<button class='tabbtn%s' role='tab' data-pane='%s' onclick='cyTab(this)'>%s</button>",
+      if (i == 1L) " active" else "", gp[[i]]$id,
+      html_escape(gp[[i]]$label)), character(1))
+    bodies <- vapply(seq_along(gp), function(i) sprintf(
+      "<div class='pane%s' id='pane-%s'>%s</div>",
+      if (i == 1L) " active" else "", gp[[i]]$id, gp[[i]]$html),
+      character(1))
+    h <- c(h, "<div class='tabgroup'>",
+           sprintf("<div class='grouplab'>%s <span class='dim'>%d</span></div>",
+                   g, length(gp)),
+           "<div class='tabbar' role='tablist'>", btns, "</div>",
+           "<div class='panes'>", bodies, "</div>", "</div>")
   }
 
   for (t in oversize) {
@@ -397,7 +483,10 @@ report_section <- function(outdir, id, title, description, figures = character(0
   }
 
   h <- c(h, "</div></details></section>")
-  list(html = paste(h, collapse = "\n"),
+  # The id travels with the section so the caller can put the sections into
+  # execution order without depending on the order they were constructed in.
+  list(id = id,
+       html = paste(h, collapse = "\n"),
        # The per-figure and per-table links live in their own container so the
        # sidebar can show section titles alone until a section is opened. A
        # twelve-section run lists over a hundred entries otherwise, and the
@@ -551,6 +640,32 @@ report_css <- function() {
   # hovered, and the file name in the mono face it is referred to by everywhere
   # else.
   ".tab{margin:.55rem 0}",
+  # --- tab strip -------------------------------------------------------------
+  # Horizontal, scrollable, and the strip does not wrap: a section with thirty
+  # figures becomes a strip you scroll sideways rather than a block of buttons
+  # that pushes the content off the screen before you have chosen one.
+  ".tabbar{display:flex;gap:.25rem;overflow-x:auto;overflow-y:hidden;",
+  "border-bottom:1px solid var(--line);margin:.6rem 0 0;padding-bottom:0;",
+  "scrollbar-width:thin}",
+  ".tabbar::-webkit-scrollbar{height:6px}",
+  ".tabbar::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}",
+  ".tabbtn{flex:0 0 auto;padding:.35rem .7rem;border:1px solid transparent;",
+  "border-bottom:none;background:none;cursor:pointer;font:inherit;",
+  "font-size:.82rem;color:var(--muted);border-radius:6px 6px 0 0;",
+  "white-space:nowrap;margin-bottom:-1px}",
+  ".tabbtn:hover{background:var(--bg);color:var(--fg)}",
+  ".tabbtn.active{background:var(--panel);border-color:var(--line);",
+  "color:var(--fg);font-weight:600}",
+  ".pane{display:none;padding-top:.5rem}",
+  ".pane.active{display:block}",
+  # The two groups need a visible boundary or the second strip reads as a second
+  # row of the first, and the count tells the reader how far the strip runs
+  # before they start scrolling it.
+  ".tabgroup{margin-top:.9rem}",
+  ".tabgroup + .tabgroup{border-top:1px solid var(--line);padding-top:.5rem}",
+  ".grouplab{font-size:.72rem;font-weight:600;letter-spacing:.06em;",
+  "text-transform:uppercase;color:var(--mut)}",
+  ".grouplab .dim{font-weight:400;letter-spacing:0;text-transform:none}",
   ".tabdet{border:1px solid var(--line);border-radius:6px;overflow:hidden}",
   ".tabdet > summary{padding:.4rem .6rem;background:var(--bg);gap:.5rem}",
   ".tabdet > summary:hover{background:var(--panel)}",
@@ -620,11 +735,35 @@ report_js <- function() {
   "if(!t||t.open)cyShow(id);});",
   "cySync();cyCur();}\n",
   "function cyShow(id){if(!CY[id]||CY[id].drawn)return;CY[id].drawn=1;cyFilter(id);}\n",
+  # Switch which pane of a section is showing. The table inside a pane is filled
+  # on first reveal rather than at load, for the same reason the toggles were:
+  # a report with forty tables would otherwise spend its load time building
+  # grids nobody has asked to see.
+  "function cyTab(b){var bar=b.parentNode,box=bar.parentNode,i,",
+  "bs=bar.querySelectorAll('.tabbtn'),ps=box.querySelectorAll('.pane'),",
+  "want='pane-'+b.getAttribute('data-pane');",
+  "for(i=0;i<bs.length;i++)bs[i].classList.toggle('active',bs[i]===b);",
+  "for(i=0;i<ps.length;i++){var on=ps[i].id===want;",
+  "ps[i].classList.toggle('active',on);",
+  "if(on){var t=ps[i].querySelector('.tab');if(t)cyShow(t.id);}}",
+  "cySync();cyCur();}\n",
+  # Activate whichever tab holds this element, if it is inside a pane.
+  "function cyTabFor(el){for(var n=el;n&&n!==document.body;n=n.parentNode){",
+  "if(n.classList&&n.classList.contains('pane')){",
+  "var box=n.parentNode,bar=box.previousElementSibling;",
+  "if(bar&&bar.classList&&bar.classList.contains('tabbar')){",
+  "var want=n.id.replace(/^pane-/,''),bs=bar.querySelectorAll('.tabbtn');",
+  "for(var i=0;i<bs.length;i++)if(bs[i].getAttribute('data-pane')===want)",
+  "{cyTab(bs[i]);break;}}",
+  "return;}}}\n",
   # A table link in the contents opens the table it points at. Without this the
   # browser jumps to a collapsed toggle and the reader sees the name they clicked
   # and no table, which reads as a broken link.
   "function cyReveal(el){for(var n=el;n;n=n.parentNode){",
   "if(n.tagName==='DETAILS'&&!n.open)n.open=true;}",
+  # ...and select the tab it sits behind, which opening the section alone does
+  # not do now that a section's contents are panes rather than a stack.
+  "cyTabFor(el);",
   "var b=el.closest?el.closest('.tab'):null;if(b)cyShow(b.id);}\n",
   "document.addEventListener('click',function(e){",
   "var a=e.target&&e.target.closest?e.target.closest('a.nav-tab,a.nav-fig'):null;",
@@ -886,8 +1025,14 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
             "label is a population the specification does not describe, and a",
             "declared label spread thinly across many clusters covers several",
             "distinct phenotypes."),
+      # THE STEM RATHER THAN THE BARE NAME, so the per-timepoint marker grids
+      # land here beside the pooled one instead of in the catch-all at the
+      # bottom of the report -- written to disk, but invisible where a reader
+      # would look for them. Pooled first, then the days: the order this
+      # section's description asks the reader to follow.
       figures = c("population_frequencies.png", "umap_overview.png",
-                  "umap_overview_by_group.png", "umap_markers.png",
+                  "umap_overview_by_group.png",
+                  pooled_then_split(outdir, "umap_markers"),
                   "umap_density.png", "umap_density_by_group.png",
                   "umap_multigraph_overlay.png", "unsupervised_clusters.png"),
       tables = c("population_frequencies.csv", "population_marker_mfi.csv",
@@ -928,10 +1073,22 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
       # carefully. population_trajectories.png is last because it only exists for
       # a repeated-measures design and answers a different question -- direction
       # of travel rather than difference at a timepoint.
+      # THE BY-TIMEPOINT TWIN SITS NEXT TO ITS POOLED VERSION. Both were being
+      # written, but only the pooled one was named here, so the day-separated
+      # figure fell through to the catch-all at the foot of the report -- present
+      # on disk, invisible where anyone would look for it. Named here they become
+      # adjacent tabs: the same panels by study group, then by day.
       figures = c("group_differences.png", "group_comparison.png",
                   "marker_state.png",
-                  "functional_markers.png", "population_ratios.png",
+                  pooled_then_split(outdir, "functional_markers",
+                                    suffix = "_by_timepoint"),
+                  pooled_then_split(outdir, "population_ratios",
+                                    suffix = "_by_timepoint"),
                   "absolute_counts.png", "absolute_counts_qc.png",
+                  # absolute_vs_share was named by no section at all and reached
+                  # the reader only through the catch-all. It is a counting
+                  # figure and belongs beside the other two.
+                  "absolute_vs_share.png", "absolute_vs_share_by_timepoint.png",
                   "population_trajectories.png"),
       # design_feasibility comes FIRST because it decides which of the tests
       # below exist at all: a comparison it rules out is absent from the results
@@ -995,6 +1152,34 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
       tables = c("clinical_association.csv",
                  "clinical_association_markers.csv")),
 
+    # s8c, not s8b: the clinical section above already claims s8b, and two
+    # sections sharing an HTML id means every "#s8b" link -- the sidebar entry
+    # for this section included -- lands on the first of them, so this section
+    # was unreachable from the contents.
+    report_section(outdir, "s8c", "Change over the admission course",
+      paste("The timepoints are the same patients, so these samples are PAIRED",
+            "and the between-group figures elsewhere in this report -- which",
+            "treat their groups as independent -- cannot represent them. Two",
+            "cohorts can produce identical boxplots per visit while every",
+            "individual rises in one and falls in the other, so the figures",
+            "here keep the patient visible: one line per patient across their",
+            "visits, with the cohort median drawn over rather than instead of",
+            "them. Read the direction of each line, not the spread between",
+            "them. The trajectories are on a log axis because population sizes",
+            "span orders of magnitude and a fold change is the comparable",
+            "quantity. Where an external yield was supplied, read",
+            "cells_per_ml across timepoints rather than cells_absolute: the",
+            "draws are not the same size, so a raw yield confounds the biology",
+            "with the volume of blood taken. The subset-balance figure shows",
+            "two subsets of one compartment against each other, which is how",
+            "a shift between them is reported -- the compartment can stay flat",
+            "while its composition moves. No p-value is drawn on any of these:",
+            "a test that respects the pairing needs more complete triplets",
+            "than this design has."),
+      figures = c(list.files(outdir, "^timepoint_trajectories_[A-Za-z0-9_]+[.]png$"),
+                  "timepoint_subset_balance.png",
+                  "timepoint_marker_intensity.png")),
+
     report_section(outdir, "s9", "Confounding and batch structure",
       paste("A variable confounds only when it both differs between the groups",
             "and associates with the outcome, and the two conditions are reported",
@@ -1020,6 +1205,116 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
             "moved as a whole, because the peer median moves with it; only a",
             "baseline from a different run can."),
       tables = c("specification_conformance.csv", "specification_changes.csv")))
+
+  # ---- unsupervised discovery -----------------------------------------------
+  # The headline explore figures, pulled into the main report. They were
+  # reaching the reader only through the catch-all at the foot of the document,
+  # because explore/ is a subdirectory no section named -- so the one view
+  # computed WITHOUT the specification was the last thing in a report otherwise
+  # built entirely around it.
+  #
+  # ON THE ORDER. Placed immediately after Provenance, ahead of the declared
+  # analysis, because the unsupervised map is the view that owes nothing to the
+  # specification and is what the specification should be read against. Worth
+  # being exact about the dependency, though: within a SINGLE run explore is
+  # computed last, after every declared figure, and it does not feed them. What
+  # it feeds is the NEXT run -- spec_gaps.csv and
+  # suggested_config_next_run.yaml are inputs to a later --config, which is the
+  # sense in which a declared specification comes to be derived from explore.
+  .exd <- file.path(outdir, "explore")
+  if (dir.exists(.exd)) {
+    .exfig <- c("explore_cluster_identity.png", "explore_umap_clusters.png",
+                "explore_cluster_median_heatmap.png", "explore_cluster_heatmap.png",
+                "explore_umap_markers.png", "explore_umap_by_group.png",
+                "explore_absolute_vs_share.png", "explore_total_counts_qc.png")
+    .exfig <- .exfig[file.exists(file.path(.exd, .exfig))]
+    .extab <- c("explore_cluster_identity.csv", "explore_findings.csv",
+                "explore_cluster_profile.csv", "explore_vs_populations.csv",
+                "explore_population_split.csv", "explore_cluster_abundance.csv",
+                "explore_provenance.csv")
+    .extab <- .extab[file.exists(file.path(.exd, .extab))]
+    if (length(.exfig) || length(.extab))
+      secs <- c(secs, list(report_section(outdir, "s0b",
+        "Unsupervised discovery",
+        paste("Clustering computed WITHOUT the population specification, so it",
+              "can contradict it. Read the identity figure first: it says which",
+              "declared population each cluster corresponds to, and a cluster",
+              "it reports as undescribed is a gap in the specification rather",
+              "than a property of the data. Within this run the declared",
+              "analysis below did not use any of this -- explore runs last and",
+              "writes spec_gaps.csv and suggested_config_next_run.yaml for a",
+              "LATER run to take as --config. The full explore report, with",
+              "every figure this section leaves out, is in",
+              "explore/explore_report.html."),
+        figures = file.path("explore", .exfig),
+        tables = file.path("explore", .extab))))
+  }
+
+  # ---- the figure set split by timepoint ------------------------------------
+  # ONE SECTION PER VISIT, not one section holding every visit. Each visit
+  # writes the same filenames, and the tab strip labels a tab by its file name,
+  # so a single combined section would show three tabs all called
+  # "population_frequencies" with nothing to tell them apart. Split by visit,
+  # the labels are unique inside each section and the section heading carries
+  # the day.
+  .bytp <- file.path(outdir, "by_timepoint")
+  if (dir.exists(.bytp)) {
+    for (.lv in sort(list.dirs(.bytp, full.names = FALSE, recursive = FALSE))) {
+      .figs <- list.files(file.path(.bytp, .lv), "[.]png$")
+      if (!length(.figs)) next
+      secs <- c(secs, list(report_section(outdir,
+        paste0("s7e-", gsub("[^A-Za-z0-9]+", "-", .lv)),
+        paste0("The figure set at ", .lv),
+        paste("The same figures as the pooled sections above, drawn over the",
+              "samples taken at this visit alone. The embedding, the gating",
+              "thresholds and the statistics are NOT recomputed per visit --",
+              "only the rows drawn are restricted -- so a position on this",
+              "UMAP is the same position as on every other visit's, and a",
+              "threshold is the same cut. Read a difference between two of",
+              "these sections as a difference in the cells, not in the method.",
+              "No test is annotated: splitting the cohort by visit leaves too",
+              "few samples per study group for one, and a bracket computed on",
+              "the pooled cohort would be attributing a cohort-level result to",
+              "a subset of it."),
+        figures = file.path("by_timepoint", .lv, .figs))))
+    }
+  }
+
+  # ---- reading order = the order the pipeline computed things ---------------
+  # The sections are CONSTRUCTED in the order that reads best as source, which
+  # is not the order the run produced them. Ordering them by execution instead
+  # means a reader meets each result after the checks it depends on: staining QC
+  # after the gates it is computed from, abundance after the scoring, the
+  # between-group tests after the embedding they are read against.
+  #
+  # Two deliberate departures from strict execution order, both above:
+  # Provenance is pinned first because it identifies the run, and unsupervised
+  # discovery is pulled forward from last because it is the view the declared
+  # analysis should be read against.
+  #
+  # Ids not named here keep their relative position at the end -- a section
+  # added later appears rather than vanishing, which is the safer failure.
+  .reading_order <- c(
+    "s0",          # provenance: what produced this folder
+    "s0b",         # unsupervised discovery, pulled forward
+    "s2",          # STEP 1b  acquisition stability
+    "s1",          # STEP 2   gate placement
+    "s5",          # STEP 2/3 threshold provenance and spreading
+    "s3",          # STEP 3   staining quality control
+    "s4",          # STEP 4   phenotype concordance
+    "s6",          # STEP 4b  gate uncertainty and detection limits
+    "s7",          # STEP 6/7 abundance and the shared embedding
+    "s7b",         # STEP 6   the embedding, one marker at a time
+    "s8",          # STEP 7   between-group differences
+    "s8b",         # STEP 7   clinical variables
+    "s8c",         # STEP 7d  change over the admission course
+    "s9",          # STEP 7c  confounding and batch structure
+    "s10")         # STEP 7c  agreement with a baseline
+  .ids <- vapply(secs, function(s) s$id %||% "", character(1))
+  .rank <- match(.ids, .reading_order)
+  # The by-timepoint sections (STEP 7e) sort after everything named above and
+  # among themselves by visit, which list.dirs already returned in order.
+  secs <- secs[order(is.na(.rank), .rank, seq_along(secs))]
 
   # ---- completeness sweep ---------------------------------------------------
   # Every section above names its files, which is what puts them in reading
@@ -1063,8 +1358,15 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
   # Provenance describes the other sections, so it is only worth writing when
   # there are some. A directory holding nothing produces no report rather than
   # a page whose sole content is a note about how to read the content.
+  #
+  # PREPENDED, NOT APPENDED. It answers "what am I looking at" -- which run,
+  # which input, which options, which package versions -- and that is a question
+  # a reader has before the first figure, not after the last one. It is also
+  # short, so putting it first costs nothing in scrolling. Gate placement stays
+  # immediately behind it, because the run log's instruction to inspect the
+  # gating before using any number is still the first thing to DO.
   if (length(Filter(function(s) nzchar(s$html), secs)) || failed)
-  secs <- c(secs, list(report_section(outdir, "s12", "Provenance",
+  secs <- c(list(report_section(outdir, "s0", "Provenance",
     paste("What produced this folder, and what this file is."),
     tables = provenance_tables,
     body = paste0(
@@ -1080,7 +1382,7 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
       if (file.exists(file.path(outdir, "miflowcyt.md")))
         " and <span class='mono'>miflowcyt.md</span>" else "",
       ", which record the package versions, the invocation and every option in",
-      " force.</p>"))))
+      " force.</p>"), open = TRUE)), secs)
 
   secs <- Filter(function(s) nzchar(s$html), secs)
   # A failed run that produced nothing still gets a report: the diagnosis is

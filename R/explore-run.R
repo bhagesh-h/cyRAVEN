@@ -35,7 +35,8 @@
 #' @keywords internal
 run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL,
                         verdicts = NULL, pops = NULL, group_of = NULL,
-                        confounding = NULL, file_paths = character(0)) {
+                        confounding = NULL, file_paths = character(0),
+                        total_counts = NULL) {
   ex_dir <- file.path(outdir, "explore")
   dir.create(ex_dir, showWarnings = FALSE, recursive = TRUE)
   seed <- opt$seed %||% 42L
@@ -143,12 +144,16 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
       if (is.null(reads[[s]]$exprs)) n_reread <- n_reread + 1L
       n <- nrow(rd$exprs)
       take <- withr::with_seed(seed, sort(sample.int(n, min(n, planned[[s]]))))
-      X <- explore_matrix(rd, feats, tr)
+      # `take` is passed in rather than applied to the result: see the note in
+      # explore_matrix(). The draw is identical either way; only the peak memory
+      # differs, and on a full-depth run the difference is what decides whether
+      # the container survives.
+      X <- explore_matrix(rd, feats, tr, rows = take)
       if (is.null(X) || !ncol(X)) next
       # check.names = FALSE throughout: "HLA-DR" and "FSC-A" are legal marker
       # names and R would silently rewrite them to "HLA.DR" and "FSC.A", after
       # which every lookup against `feats` misses and the features vanish.
-      d <- as.data.frame(X[take, , drop = FALSE], check.names = FALSE)
+      d <- as.data.frame(X, check.names = FALSE)
       d$sample_id <- s
       d$event_index <- take
       rows[[s]] <- d
@@ -342,6 +347,31 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
     prof <- cbind(prof, fp, mp)
     wcsv(prof, sprintf("explore_cluster_profile%s.csv", tag))
 
+    # ---- the subset each cluster's marker profile matches --------------------
+    # Written here, from the profile alone, so it exists whether or not a
+    # declared specification was scored: an explore-only run has no populations
+    # to cross-tabulate against, and "which subset is this cluster" is the
+    # question it most needs answered. The declared analysis is not touched --
+    # this labels the CLUSTER, never the cell. See R/subsets.R.
+    subs <- tryCatch(annotate_clusters_with_subsets(prof),
+                     error = function(e) {
+                       log_msg("  WARNING cluster subset annotation failed: ",
+                               conditionMessage(e), ", every other output is ",
+                               "unaffected")
+                       NULL
+                     })
+    if (!is.null(subs) && nrow(subs)) {
+      wcsv(subs, sprintf("explore_cluster_subsets%s.csv", tag))
+      .named <- sum(!is.na(subs$subset_label))
+      log_msg("explore: ", .named, " of ", nrow(subs), " cluster(s) match an ",
+              "immune subset on their marker profile; the rest match none of ",
+              "the definitions this panel can express")
+      for (.u in unreachable_subsets(sub("^frac_pos[.]", "",
+                                         grep("^frac_pos[.]", names(prof),
+                                              value = TRUE))))
+        log_msg("  NOT definable on this panel -- ", .u)
+    }
+
     tab <- table(cells$sample_id, kv)
     ab <- do.call(rbind, lapply(rownames(tab), function(s) {
       n <- sum(tab[s, ])
@@ -358,9 +388,35 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
     if (!is.null(verdicts)) ab$staining_qc_verdict <-
       vapply(ab$sample_id, function(s)
         if (isTRUE(verdicts[[s]]$include)) "pass" else "failed", character(1))
+
+    # --total-counts: re-express each cluster as a cell number. pct_of_gated is
+    # a share and shares sum to 100, so a frequency table cannot separate "this
+    # cluster expanded" from "everything else contracted". Multiplying by the
+    # acquisition's own yield lifts that constraint. Added as extra columns
+    # only -- pct_of_gated above is untouched, because the product carries the
+    # external instrument's error as well as this pipeline's.
+    if (!is.null(total_counts) && nrow(total_counts)) {
+      ab <- attach_absolute_cells(ab, total_counts, share_col = "pct_of_gated")
+      n_cov <- length(intersect(unique(ab$sample_id), total_counts$sample_id))
+      log_msg("explore: --total-counts covers ", n_cov, " of ",
+              length(unique(ab$sample_id)), " embedded sample(s); ",
+              "cells_absolute written alongside pct_of_gated")
+      if (n_cov < length(unique(ab$sample_id)))
+        note("absolute_counts_coverage", "partial",
+             paste0(length(unique(ab$sample_id)) - n_cov, " embedded sample(s) ",
+                    "have no external total; their cells_absolute is NA and they ",
+                    "drop out of the absolute test only"))
+    }
     wcsv(ab, sprintf("explore_cluster_abundance%s.csv", tag))
 
-    if (!is.null(group_of) &&
+    # --no-group-tests is honoured here as well as in the declared path. It is
+    # documented as skipping every between-group test, and a user who set it
+    # because the design cannot carry one does not mean "except on the
+    # clusters" -- explore's tests are the same test on a different partition
+    # of the same cells, and are just as unsupportable when the donors run out.
+    if (isTRUE(opt$no_group_tests)) {
+      note("group_statistics", "not run", "--no-group-tests was set")
+    } else if (!is.null(group_of) &&
         length(unique(stats::na.omit(unname(group_of[sids])))) > 1L) {
       st <- try(stats_group_comparison(ab, group_of,
                                        reference = opt$reference_group,
@@ -383,6 +439,80 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
           log_msg("  NOTE: ", confounding$verdict[1])
           log_msg("  Every one of these is inseparable from acquisition date.")
         }
+      }
+
+      # THE SAME COMPARISON ON CELL NUMBERS RATHER THAN SHARES.
+      # Written as its own file and never merged into the one above. A cluster
+      # that moves on cells_absolute but not on pct_of_gated is the whole
+      # reason the external total was supplied: it is the signature of every
+      # population changing together, which a share cannot represent. The
+      # converse -- significant on the share, not on the number -- says the
+      # composition shifted while the compartment did not, so the result is
+      # about redistribution. Merging the two tables would erase that
+      # distinction, which is the only thing this route adds.
+      if ("cells_absolute" %in% names(ab) && any(is.finite(ab$cells_absolute))) {
+        sa <- try(stats_group_comparison(ab, group_of,
+                                         reference = opt$reference_group,
+                                         value_col = "cells_absolute"), silent = TRUE)
+        if (!inherits(sa, "try-error") && !is.null(sa) && nrow(sa)) {
+          sa$phenotype <- prof$phenotype[match(sa$population, prof$cluster)]
+          sa$count_basis <- "dual-platform: share x external total"
+          if (!is.null(confounding) && nrow(confounding)) {
+            sa$batch_group_cramers_v <- confounding$cramers_v[1]
+            sa$batch_group_verdict <- confounding$verdict[1]
+          }
+          wcsv(sa, sprintf("explore_cluster_stats_absolute%s.csv", tag))
+          nsa <- sum(sa$significant_BH %in% c(TRUE, "TRUE"), na.rm = TRUE)
+          log_msg("explore: ", nrow(sa), " absolute-count test(s), ", nsa,
+                  " surviving BH")
+
+          # The concordance is the readable summary of the paragraph above, so
+          # it is computed rather than left to the reader to join by hand.
+          if (exists("st", inherits = FALSE) && !inherits(st, "try-error") &&
+              !is.null(st) && nrow(st)) {
+            # EVERY cluster, not only the significant ones. On a cohort this
+            # size nothing survives BH, and a table that is written only when
+            # something does would be absent exactly when the comparison is
+            # most worth seeing. Both adjusted p-values sit side by side so the
+            # divergence is readable whether or not either crosses a threshold.
+            best_q <- function(d) {
+              q <- suppressWarnings(as.numeric(d$p_adj_BH))
+              tapply(q, as.character(d$population),
+                     function(v) if (all(is.na(v))) NA_real_ else min(v, na.rm = TRUE))
+            }
+            qa <- best_q(sa); qr <- best_q(st)
+            cl <- union(names(qa), names(qr))
+            q_abs <- unname(qa[cl]); q_shr <- unname(qr[cl])
+            sig_a <- !is.na(q_abs) & q_abs < 0.05
+            sig_r <- !is.na(q_shr) & q_shr < 0.05
+            cc <- data.frame(
+              cluster    = cl,
+              q_share    = round(q_shr, 5),
+              q_absolute = round(q_abs, 5),
+              verdict    = ifelse(sig_a & sig_r, "both",
+                           ifelse(sig_a, "absolute only",
+                           ifelse(sig_r, "share only", "neither"))),
+              stringsAsFactors = FALSE)
+            cc$reading <- c(
+              "absolute only" =
+                "compartment changed size; composition did not. Only an external total can show this",
+              "share only" =
+                "composition shifted without the compartment changing size; a redistribution",
+              "both" = "moved on both measures",
+              "neither" = "no difference resolved on either measure")[cc$verdict]
+            cc$phenotype <- prof$phenotype[match(cc$cluster, prof$cluster)]
+            cc <- cc[order(pmin(cc$q_absolute, cc$q_share, na.rm = TRUE)), , drop = FALSE]
+            wcsv(cc, sprintf("explore_cluster_count_concordance%s.csv", tag))
+            only_abs <- cc$cluster[cc$verdict == "absolute only"]
+            if (length(only_abs))
+              log_msg("  ", length(only_abs), " cluster(s) significant on cell ",
+                      "number but NOT on share -- the case a frequency table ",
+                      "cannot express: ", paste(utils::head(only_abs, 8), collapse = ", "))
+          }
+        }
+      } else if (!is.null(total_counts)) {
+        note("absolute_group_statistics", "not run",
+             "no embedded sample carried an external total")
       }
     } else {
       note("group_statistics", "not run",
@@ -410,11 +540,59 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
         wcsv(ct[order(ct$cluster, -ct$cells), ],
              sprintf("explore_vs_populations%s.csv", tag))
 
-        unl <- c("", "unlabelled", "Unlabelled", "other", "Other", "none", NA)
+        # ---- what each cluster corresponds to --------------------------------
+        # The cross-tab above is the data; on this cohort it is 189 rows of
+        # long-format counts, which answers "cluster 12 is what?" only after the
+        # reader has done the pivot themselves. The identity table scores the
+        # match in both directions and the figure draws the correspondence
+        # matrix. See R/explore-identity.R for why F1 rather than the plurality
+        # label, and why the catch-all is ranked apart.
+        ident <- cluster_identity_table(ct)
+        if (!is.null(ident)) {
+          # The subset label answers a different question from the declared
+          # correspondence beside it: correspondence is measured by which cells
+          # overlap, the subset by what the cluster EXPRESSES. They can
+          # disagree, and a disagreement is informative -- a cluster that
+          # corresponds to no declared population can still have a clean subset
+          # phenotype, which is precisely the gap explore mode exists to find.
+          if (!is.null(subs) && nrow(subs)) {
+            .m <- match(ident$cluster, subs$cluster)
+            ident$subset_label   <- subs$subset_label[.m]
+            ident$subset_markers <- subs$subset_markers[.m]
+            ident$subset_margin  <- subs$margin[.m]
+          }
+          wcsv(ident, sprintf("explore_cluster_identity%s.csv", tag))
+          fi <- file.path(ex_dir, sprintf("explore_cluster_identity%s.png", tag))
+          ok <- tryCatch({
+            fig_cluster_identity(ct, ident, fi, panel_label = p$name); TRUE
+          }, error = function(e) {
+            log_msg("  WARNING explore cluster identity figure failed: ",
+                    conditionMessage(e), ", every other output is unaffected")
+            FALSE
+          })
+          if (ok && file.exists(fi)) written <- c(written, basename(fi))
+          .nd <- sum(ident$call == "undescribed by the specification")
+          .nc <- sum(ident$call == "confident")
+          log_msg("explore: cluster identity -- ", .nc, " of ", nrow(ident),
+                  " cluster(s) match a declared population confidently (F1 >= ",
+                  "0.5), ", .nd, " are >=70% catch-all and describe cells the ",
+                  "specification does not name")
+        }
+
+        # THE CATCH-ALL COUNTS AS UNLABELLED. This list used to be spelled out
+        # here and did not contain "Other CD45+" -- the name this package
+        # actually assigns to cells inside the parent gate that match no
+        # declared population. Every cluster therefore scored 0% unlabelled and
+        # every verdict read "covered by the declared specification", including
+        # clusters that were 100% remainder, on runs whose specification
+        # described under a tenth of the cells. This table exists to report what
+        # the specification is MISSING, so that failure inverted its only
+        # output. is_catch_all_label() is now the single definition, shared with
+        # the scoring step that assigns the label.
         undecl <- vapply(ks, function(k) {
           sub <- ct[ct$cluster == k, , drop = FALSE]
           if (!nrow(sub)) return(100)
-          100 * sum(sub$cells[sub$population %in% unl]) / sum(sub$cells)
+          100 * sum(sub$cells[is_catch_all_label(sub$population)]) / sum(sub$cells)
         }, numeric(1))
         fnd <- data.frame(
           cluster = ks, phenotype = unname(pheno[ks]),
@@ -425,7 +603,13 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
           stringsAsFactors = FALSE)
         wcsv(fnd[order(-fnd$pct_unlabelled), ], sprintf("explore_findings%s.csv", tag))
 
-        real <- ct[!ct$population %in% unl, , drop = FALSE]
+        # Blank labels only. The catch-all is deliberately KEPT here: the note
+        # below explains that its spread across clusters is worth seeing in
+        # explore_population_split.csv, and it is filtered out one step later
+        # where it would masquerade as a finding. Dropping it at this point
+        # would remove the row that table is partly written for.
+        real <- ct[!is.na(ct$population) & nzchar(trimws(ct$population)), ,
+                   drop = FALSE]
         if (nrow(real)) {
           # Counting DISTINCT clusters is nearly useless as a flag: a coarse
           # label like "Lymphocytes" legitimately touches most clusters, so a
@@ -460,7 +644,18 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
           # shape the declared side can use. Written back into the run
           # directory as spec_gaps.csv, but ONLY under --maybe-learn; the
           # caller decides, this only assembles it.
-          g1 <- sp[sp$pct_in_dominant_cluster < 50, , drop = FALSE]
+          # "Other CD45+" is excluded from the SPLIT verdict. It is not a
+          # population, it is the complement of the specification -- the cells
+          # no definition matched -- so "it spans several clusters" is true by
+          # construction and says nothing a reader can act on. Left in, it
+          # appears beside the real findings as though it were one of them, and
+          # on a specification with poor coverage it is the single largest
+          # label, so it is the row most likely to be read first.
+          #
+          # It stays in explore_population_split.csv, where the per-population
+          # numbers are the point and the catch-all's spread is worth seeing.
+          g1 <- sp[sp$pct_in_dominant_cluster < 50 &
+                     !is_catch_all_label(sp$population), , drop = FALSE]
           if (nrow(g1)) gaps[[length(gaps) + 1L]] <- data.frame(
             panel = p$name,
             issue = "population spans several clusters",
@@ -492,6 +687,39 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
                  explore_figures(cells, fcols, prof, ex_dir, tag = tag,
                                  group_col = if ("group" %in% colnames(cells))
                                    "group" else NULL))
+
+    # --total-counts figures. The QC one is drawn whenever a total was supplied,
+    # including when no group exists to compare across: checking that the
+    # external numbers are sane is not conditional on wanting a test.
+    if (!is.null(total_counts) && nrow(total_counts)) {
+      # Subset to THIS panel. The figure is written per panel, so drawing every
+      # acquisition in the study on it puts samples that are not in this
+      # embedding beside the ones that are, and the reader cannot tell which
+      # bar belongs to the table underneath.
+      tc_panel <- total_counts[total_counts$sample_id %in% sids, , drop = FALSE]
+      # Both figures are drawn with the RNG stream restored afterwards. Without
+      # that, drawing panel 1's figures re-rolls panel 2's embedding, and a run
+      # with --total-counts would stop matching one without it.
+      without_spending_draws({
+        # tag is "" on a single-panel run and "_panel_1" otherwise; the label is
+        # that, minus the leading underscore, so the panel reaches the image and
+        # not only the filename.
+        plab <- if (nzchar(tag)) sub("^_", "", tag) else ""
+        fq <- file.path(ex_dir, sprintf("explore_total_counts_qc%s.png", tag))
+        if (nrow(tc_panel) &&
+            !is.null(try(fig_total_counts_qc(tc_panel, fq, group_of = group_of,
+                                             all_samples = sids,
+                                             panel_label = plab), silent = TRUE)))
+          written <<- c(written, basename(fq))
+        if ("cells_absolute" %in% names(ab) && any(is.finite(ab$cells_absolute))) {
+          fa <- file.path(ex_dir, sprintf("explore_absolute_vs_share%s.png", tag))
+          if (!is.null(try(fig_absolute_vs_share(ab, fa, group_of = group_of,
+                                                 panel_label = plab),
+                           silent = TRUE)))
+            written <<- c(written, basename(fa))
+        }
+      })
+    }
   }
 
   if (length(prov)) wcsv(do.call(rbind, prov), "explore_provenance.csv")
@@ -545,8 +773,15 @@ explore_write_spec <- function(pos, prof, ks, ex_dir, tag = "") {
                sprintf("  # %s, %.2f%% of gated cells", k,
                        prof$pct_of_gated[match(k, prof$cluster)]),
                sprintf("  %s:", k),
-               sprintf("    \"%s\": pos", up),
-               if (length(dn)) sprintf("    \"%s\": neg", dn))
+               # "above"/"below", the vocabulary score_populations() actually
+               # reads. This emitted "pos"/"neg" until now, which no parser in
+               # the package accepts -- so the file the header invites you to
+               # curate and pass to --config could never have been run, and
+               # would have reported every population UNAVAILABLE without an
+               # error. The whole point of the file is that it is a starting
+               # specification, so it has to parse.
+               sprintf("    \"%s\": above", up),
+               if (length(dn)) sprintf("    \"%s\": below", dn))
   }
   nm <- sprintf("explore_suggested_spec%s.yaml", tag)
   writeLines(lines, file.path(ex_dir, nm))

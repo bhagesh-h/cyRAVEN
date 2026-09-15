@@ -114,8 +114,25 @@ test_that("explore_write_spec emits a curatable YAML, never a silent adoption", 
   nm <- cyRAVEN:::explore_write_spec(pos, prof, c("k1", "k2"), d)
   txt <- readLines(file.path(d, nm))
   expect_true(any(grepl("^populations:", txt)))
-  expect_true(any(grepl("\"CD19\": pos", txt, fixed = TRUE)))
-  expect_true(any(grepl("\"CD3\": neg", txt, fixed = TRUE)))
+  # "above"/"below", the vocabulary score_populations() reads. This asserted
+  # "pos"/"neg" until the emitter was fixed, which locked in a file that could
+  # never be run: the header invites the reader to curate it and pass it to
+  # --config, and doing so reported every population UNAVAILABLE with no error.
+  expect_true(any(grepl('"CD19": above', txt, fixed = TRUE)))
+  expect_true(any(grepl('"CD3": below', txt, fixed = TRUE)))
   # It must announce that it is a draft, or someone will run it as a spec.
   expect_true(any(grepl("SUGGESTIONS", txt)))
+
+  # THE PROPERTY THAT MATTERS, rather than the spelling: what is written parses
+  # as a specification and scores cells. A test on the string alone is what
+  # allowed the unrunnable vocabulary to survive.
+  y <- yaml::yaml.load_file(file.path(d, nm))
+  expect_true(is.list(y$populations) && length(y$populations) >= 1L)
+  tmat <- cbind(CD19 = c(5, 1, 5), CD3 = c(1, 5, 5))
+  thr  <- c(CD19 = 3, CD3 = 3)
+  got <- score_populations(tmat, thr, parent = rep(TRUE, 3), spec = y$populations)
+  expect_true(length(got$masks) >= 1L)
+  # k1 is CD19-above CD3-below: exactly the first cell.
+  expect_equal(sum(got$masks[["k1"]]), 1L)
+  expect_true(is.null(got$unavailable[["k1"]]))
 })

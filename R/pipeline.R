@@ -301,6 +301,21 @@ run_cyraven_impl <- function(opt) {
   }
   fpr <- fingerprint_panels(reads)
 
+  # THE SUBSET LAYER IS NOT ADDED TO THE DECLARED SPECIFICATION.
+  #
+  # It was, briefly, and that was the wrong place for it. Appending 42 generated
+  # subsets to `spec` changed everything downstream of scoring: the frequency
+  # table grew from 11 populations to 52, the UMAP legend with it, and
+  # marker_state went from 275 panels to 1,275 and could not be rendered. It
+  # also asks a partly circular question -- a subset DEFINED by CD69 positivity
+  # is trivially 100% CD69-positive, so its row in a marker-state figure carries
+  # no information about the marker that named it.
+  #
+  # The subsets belong to explore mode, where the question is "what is this
+  # cluster", and a cluster is named from its own marker profile rather than
+  # from a gate. See annotate_clusters_with_subsets() in R/subsets.R. The
+  # declared specification stays exactly as the user wrote it.
+
   # ---- bead calibration ------------------------------------------------------
   # Applied here, before any cofactor or threshold is derived, because the point
   # is to change the units everything downstream is expressed in. Applying it
@@ -410,7 +425,55 @@ run_cyraven_impl <- function(opt) {
       cf <- opt[["cofactor", exact = TRUE]] %||% derive_cofactor_pooled(reads, p$samples)
       tr_only[[p$name]] <- make_transform("arcsinh", cofactor = cf)
     }
+
+    # THE GROUPING, RESOLVED HERE RATHER THAN BORROWED FROM STEP 6.
+    # This path returns long before the declared run assembles group_of, so
+    # until now --explore-only silently produced no between-group statistics
+    # even when the sheet named a perfectly good group column: the clusters
+    # were found, and then nothing was tested on them. The resolution order is
+    # the same one STEP 6 uses (patient table first, sample map second) so that
+    # the two paths cannot disagree about which column the group lives in.
+    .ex_patients <- if (!is.null(.sheet)) .sheet$patients else NULL
+    .ex_gcol <- opt$group_column %||% "cohort"
+    .ex_group <- NULL
+    if (!is.null(.ex_patients) && .ex_gcol %in% names(.ex_patients) &&
+        !is.null(smap) && "patient_id" %in% names(smap)) {
+      .ex_group <- resolve_group_of(.ex_patients, smap, .ex_gcol)
+    } else if (!is.null(smap) && .ex_gcol %in% names(smap) &&
+               "sample_id" %in% names(smap)) {
+      g <- as.character(smap[[.ex_gcol]])
+      keep <- !is.na(g) & nzchar(g) & !is.na(smap$sample_id)
+      if (any(keep)) .ex_group <- setNames(g[keep], smap$sample_id[keep])
+    }
+    if (!is.null(.ex_group))
+      log_msg("  group column '", .ex_gcol, "' -> ",
+              length(unique(.ex_group)), " group(s) across ",
+              length(.ex_group), " acquisition(s)")
+    else if (!is.null(opt$group_column))
+      log_msg("  NOTE --group-column '", .ex_gcol, "' resolved to nothing; the ",
+              "explore clusters will be described but not tested")
+
+    # --total-counts. Loaded on this path too, because the compositional limit
+    # it lifts applies to explore's clusters exactly as it applies to declared
+    # populations -- arguably more, since a cluster has no external definition
+    # to fall back on.
+    .ex_tc <- NULL
+    if (!is.null(opt[["total_counts", exact = TRUE]])) {
+      log_step("EXPLORE ONLY - external total cell counts")
+      .ex_tc <- tryCatch(
+        load_total_counts(opt[["total_counts", exact = TRUE]], smap, opt$outdir),
+        error = function(e) {
+          log_msg("  WARNING --total-counts failed: ", conditionMessage(e),
+                  ". Every other output is unaffected.")
+          NULL
+        })
+      if (!is.null(.ex_tc))
+        write.csv(.ex_tc, file.path(opt$outdir, "total_counts.csv"),
+                  row.names = FALSE)
+    }
+
     run_explore(reads, fpr, opt, opt$outdir, transforms = tr_only,
+                group_of = .ex_group, total_counts = .ex_tc,
                 file_paths = fcs)
     # No manifest write here: the on.exit handler above already owns that file,
     # writes it to the right path, and flips it to "completed" off .finished_ok.
@@ -482,7 +545,8 @@ run_cyraven_impl <- function(opt) {
                                 singlet_k = mad_k,
                                 viability_name = opt$viability_marker,
                                 transform = transforms[[p$name]],
-                                overrides = cfg_ovr[[s]])
+                                overrides = cfg_ovr[[s]],
+                                autofix = isTRUE(opt$auto_fix_gates))
       v <- staining_verdict(g, declared, min_cd45 * 1,
                             force_include = isTRUE(opt$include_qc_failed))
       log_msg("  ", v$verdict)
@@ -563,6 +627,26 @@ run_cyraven_impl <- function(opt) {
             "sample. Check thresholds_used.csv: a 'source' of control_q995 on ",
             "most markers, with frequencies far below what the panel should ",
             "yield, means the reference is not an unstained tube.")
+  }
+
+  # ---- what --auto-fix-gates changed ----------------------------------------
+  # Written whenever any gate was adjusted, so the change is stated in a file
+  # rather than left to be inferred from a count that moved. A run without the
+  # flag collects nothing here and writes no file.
+  .gadj <- do.call(rbind, lapply(names(gates), function(s) gates[[s]]$gate_adjustments))
+  if (!is.null(.gadj) && nrow(.gadj)) {
+    write.csv(.gadj, file.path(opt$outdir, "gate_adjustments.csv"), row.names = FALSE)
+    .bygate <- table(.gadj$gate)
+    log_msg("wrote gate_adjustments.csv (", nrow(.gadj), " gate(s) skipped across ",
+            length(unique(.gadj$sample_id)), " sample(s): ",
+            paste(sprintf("%s x%d", names(.bygate), as.integer(.bygate)),
+                  collapse = ", "), ")")
+    log_msg("  --auto-fix-gates is ON: every count below differs from a run ",
+            "without it. The gates listed rested on a quantile fallback, which ",
+            "fixes retention by construction rather than measuring it.")
+  } else if (isTRUE(opt$auto_fix_gates)) {
+    log_msg("--auto-fix-gates: every hierarchy gate rested on a density minimum; ",
+            "nothing to adjust")
   }
 
   # ---- QC figure FIRST ------------------------------------------------------
@@ -873,7 +957,7 @@ run_cyraven_impl <- function(opt) {
 
   # ---- embed per panel ------------------------------------------------------
   log_step("STEP 6 - embedding")
-  embeddings <- list(); all_cells <- list()
+  embeddings <- list(); all_cells <- list(); .split_panels <- list()
   for (p in fpr$panels) {
     inc <- p$samples[vapply(p$samples, function(s) isTRUE(verdicts[[s]]$include), TRUE)]
     if (!length(inc)) {
@@ -1124,12 +1208,47 @@ run_cyraven_impl <- function(opt) {
         embeddings[[p$name]]$cells <- .ec[.keep, , drop = FALSE]
       }
     }
+    # Captured for --split-by-timepoint, which re-emits the figure set per visit
+    # AFTER this loop has ended. fcols is defined inside the loop and holds only
+    # the last panel's markers by then, so the split pass cannot reach back for
+    # it; the cell table likewise. Stored per panel so a multi-panel run splits
+    # each panel against its own markers rather than the last panel's.
+    .split_panels[[p$name]] <- list(cells = embeddings[[p$name]]$cells,
+                                    markers = fcols)
     fig_umap_overview(embeddings[[p$name]]$cells,
                       file.path(opt$outdir, paste0("umap_overview", sfx, ".png")),
                       panel_label = p$name, feature_cols = fcols)
     fig_marker_grid(embeddings[[p$name]]$cells, fcols,
                     file.path(opt$outdir, paste0("umap_markers", sfx, ".png")),
                     panel_label = p$name)
+    # ONE GRID PER TIMEPOINT, beside the pooled one.
+    #
+    # The pooled grid answers "where is this marker at all"; it cannot answer
+    # "did it move over the admission", because every visit is drawn into the
+    # same panel and a shift shared by all patients is invisible. A separate
+    # file per day rather than a facet inside each marker panel: the grid is
+    # already markers x rows, and adding a third dimension inside every cell
+    # makes each one too small to read.
+    .ec <- embeddings[[p$name]]$cells
+    if ("timepoint" %in% names(.ec)) {
+      .tps <- sort(unique(stats::na.omit(.ec$timepoint)))
+      .tps <- .tps[nzchar(as.character(.tps))]
+      if (length(.tps) > 1L) for (.tp in .tps) {
+        .sub <- .ec[!is.na(.ec$timepoint) & .ec$timepoint == .tp, , drop = FALSE]
+        if (!nrow(.sub)) next
+        # tryCatch rather than .ext_ok(): that helper is defined with the other
+        # extension analyses several hundred lines below and is not in scope
+        # here. Same contract -- a failed figure warns, the run continues.
+        tryCatch(fig_marker_grid(
+          .sub, fcols,
+          file.path(opt$outdir, paste0("umap_markers", sfx, "_",
+                                       gsub("[^A-Za-z0-9]+", "_", .tp), ".png")),
+          panel_label = paste0(p$name, " - ", .tp)),
+          error = function(e)
+            log_msg("  WARNING umap_markers ", .tp, " failed: ",
+                    conditionMessage(e), ", every other output is unaffected"))
+      }
+    }
     fig_density_by_sample(embeddings[[p$name]]$cells,
                           file.path(opt$outdir, paste0("umap_density", sfx, ".png")),
                           panel_label = p$name)
@@ -1411,12 +1530,42 @@ run_cyraven_impl <- function(opt) {
   freq <- do.call(rbind, lapply(names(pops), function(s) {
     m <- pops[[s]]$scored$masks; par <- sum(gates[[s]]$masks$cd45_pos)
     if (!length(m)) return(NULL)
-    data.frame(sample_id = s, panel = fpr$assignment[[s]], population = names(m),
+    out <- data.frame(sample_id = s, panel = fpr$assignment[[s]], population = names(m),
                count = vapply(m, sum, integer(1)),
                pct_of_cd45_pos = 100 * vapply(m, sum, integer(1)) / max(1L, par),
                is_control = isTRUE(verdicts[[s]]$is_control),
                qc_status = verdicts[[s]]$qc_status %||% "pass",
                row.names = NULL, stringsAsFactors = FALSE)
+
+    # "Other CD45+" AS A ROW, under --other.
+    #
+    # It is the CD45+ cells no definition in the specification matched, and it
+    # is the direct measure of how much of the data the spec does not describe.
+    # Left out, the frequency table and every figure built on it -- the
+    # population marker heatmap, the cohort composition heatmap -- show only the
+    # declared populations, and a specification covering a fifth of the parent
+    # looks indistinguishable from one covering all of it.
+    #
+    # The flag previously promised never to touch tables, and that promise is
+    # why the leftover was invisible in exactly the figures a reader uses to
+    # judge coverage. Under --other it is now a row like any other; without the
+    # flag nothing changes.
+    #
+    # The union, not the sum: population masks overlap by design, because a cell
+    # labelled "CD4 T cells" is also inside "T cells". Summing the counts would
+    # double-count it and make the leftover look smaller than it is.
+    if (isTRUE(opt$include_other)) {
+      covered <- Reduce(`|`, m)
+      oth <- gates[[s]]$masks$cd45_pos & !covered
+      out <- rbind(out, data.frame(
+        sample_id = s, panel = fpr$assignment[[s]], population = "Other CD45+",
+        count = sum(oth),
+        pct_of_cd45_pos = 100 * sum(oth) / max(1L, par),
+        is_control = isTRUE(verdicts[[s]]$is_control),
+        qc_status = verdicts[[s]]$qc_status %||% "pass",
+        row.names = NULL, stringsAsFactors = FALSE))
+    }
+    out
   }))
   # ---- absolute concentrations, when an external blood count is supplied ------
   # `count` in this table is an EVENT count, not a cell number: it counts events
@@ -1508,6 +1657,78 @@ run_cyraven_impl <- function(opt) {
       freq$detection  <- .uf$detection[.k]
     }
   }
+  # ---- external total cell counts -------------------------------------------
+  # One measured yield per acquisition, joined on patient AND timepoint. Loaded
+  # HERE, before the frequency table is written, because that table is where the
+  # number is wanted: an earlier arrangement loaded it several hundred lines
+  # further down and the flag produced total_counts.csv and nothing else, which
+  # is worse than not accepting the flag at all.
+  #
+  # Kept separate from --absolute-counts below: that is a measured number per
+  # population, never multiplied by anything this run computed, whereas this is
+  # a scale factor that is. See R/total-counts.R for why both exist and what the
+  # dual-platform derivation costs.
+  .total_counts <- NULL
+  if (!is.null(opt[["total_counts", exact = TRUE]])) {
+    log_step("STEP 6b - external total cell counts")
+    .total_counts <- tryCatch(
+      load_total_counts(opt[["total_counts", exact = TRUE]], smap, opt$outdir),
+      error = function(e) {
+        log_msg("  WARNING --total-counts failed: ", conditionMessage(e),
+                ". Every other output is unaffected.")
+        NULL
+      })
+    if (!is.null(.total_counts)) {
+      .total_counts <- .total_counts[.total_counts$sample_id %in% names(verdicts),
+                                     , drop = FALSE]
+      if (!nrow(.total_counts)) {
+        log_msg("  NOTE --total-counts: no matched acquisition is part of this run")
+        .total_counts <- NULL
+      } else {
+        write.csv(.total_counts, file.path(opt$outdir, "total_counts.csv"),
+                  row.names = FALSE)
+        log_msg("wrote total_counts.csv (", nrow(.total_counts), " acquisition(s))")
+      }
+    }
+    # The share this multiplies is pct_of_cd45_pos, the declared run's own
+    # abundance measure, not explore's pct_of_gated. Columns are appended, so a
+    # reader who ignores them sees the table they have always seen.
+    if (!is.null(.total_counts) && !is.null(freq) && nrow(freq)) {
+      freq <- attach_absolute_cells(freq, .total_counts,
+                                    share_col = "pct_of_cd45_pos")
+      .ncov <- sum(!is.na(freq$cells_absolute))
+      log_msg("  cells_absolute added to population_frequencies.csv (",
+              .ncov, " of ", nrow(freq), " row(s); the rest are acquisitions ",
+              "with no external total)")
+
+      # PER MILLILITRE OF BLOOD, where the sheet says how much was drawn.
+      #
+      # An external yield is the cells recovered from one draw, and the draws
+      # are not the same size: on this cohort d0 and d3 are 18 mL and d7 is
+      # 27 mL. Comparing raw yields across timepoints therefore confounds the
+      # biology with the phlebotomy -- d7 looks 50% richer before a single cell
+      # has changed. Dividing by the volume removes that, and cells/mL is the
+      # quantity a haemogram reports anyway, so it is also the one that can be
+      # compared against clinical numbers.
+      #
+      # Added as its own column rather than replacing cells_absolute: the raw
+      # yield is what was measured, the per-mL figure is derived from it, and a
+      # reader should be able to see both.
+      if (!is.null(smap) && "blood_volume_ml" %in% names(smap)) {
+        vol <- suppressWarnings(as.numeric(smap$blood_volume_ml))
+        names(vol) <- smap$sample_id
+        v <- unname(vol[freq$sample_id])
+        v[!is.finite(v) | v <= 0] <- NA_real_
+        freq$blood_volume_ml <- v
+        freq$cells_per_ml <- freq$cells_absolute / v
+        log_msg("  cells_per_ml added (", sum(!is.na(freq$cells_per_ml)),
+                " row(s)); draw volumes ",
+                paste(sort(unique(stats::na.omit(v))), collapse = "/"),
+                " mL. Yields are NOT comparable between timepoints without this.")
+      }
+    }
+  }
+
   write.csv(freq, file.path(opt$outdir, "population_frequencies.csv"), row.names = FALSE)
 
   unav <- do.call(rbind, lapply(names(pops), function(s) {
@@ -1733,6 +1954,16 @@ run_cyraven_impl <- function(opt) {
     for (pn in panel_names) {
       sfx    <- if (multi_panel) paste0("_", pn) else ""
       plabel <- if (multi_panel) pn else ""
+      # sample_id -> timepoint, for the by-timepoint twin of each figure below.
+      # NULL when the sheet has no timepoint or only one level, and every
+      # caller is guarded on that, so a cross-sectional study writes exactly
+      # the files it wrote before.
+      .tp_of <- if (!is.null(smap) && "timepoint" %in% names(smap)) {
+        .tv <- as.character(smap$timepoint)
+        .ok <- !is.na(.tv) & nzchar(.tv) & !is.na(smap$sample_id)
+        if (sum(.ok) && length(unique(.tv[.ok])) > 1L)
+          stats::setNames(.tv[.ok], smap$sample_id[.ok]) else NULL
+      } else NULL
       freq_p <- if (multi_panel) freq[freq$panel == pn, , drop = FALSE] else freq
       fx_p   <- if (multi_panel && !is.null(fx)) fx[fx$panel == pn, , drop = FALSE] else fx
       rt_p   <- if (multi_panel && !is.null(rt))
@@ -1776,6 +2007,33 @@ run_cyraven_impl <- function(opt) {
           if (nsig > 0 && nbh == 0)
             log_msg("NOTE no comparison survives multiple-testing correction, treat ",
                     "the raw-p hits as hypotheses to confirm, not findings.")
+
+          # THE SAME COMPARISON ON CELL NUMBERS. Its own file, never merged into
+          # the one above: a population that moves on cells_absolute but not on
+          # pct_of_cd45_pos is a compartment that changed size, which a share
+          # cannot represent because shares are constrained to sum to 100. The
+          # converse is a redistribution at constant size. Merging the two
+          # would erase the only distinction the external total buys.
+          if ("cells_absolute" %in% names(freq_p) &&
+              any(is.finite(freq_p$cells_absolute))) {
+            astats <- tryCatch(
+              stats_group_comparison(freq_p, group_of,
+                                     reference = opt$reference_group,
+                                     min_n = min_group_n,
+                                     value_col = "cells_absolute"),
+              error = function(e) NULL)
+            if (!is.null(astats) && nrow(astats)) {
+              astats$count_basis <- "dual-platform: share x external total"
+              write.csv(astats, file.path(opt$outdir,
+                        paste0("group_comparison_stats_absolute", sfx, ".csv")),
+                        row.names = FALSE)
+              log_msg("wrote group_comparison_stats_absolute", sfx, ".csv (",
+                      nrow(astats), " tests; ",
+                      sum(astats$significant_BH, na.rm = TRUE),
+                      " surviving BH). These are dual-platform numbers and ",
+                      "carry the external instrument's error as well as this run's.")
+            }
+          }
         }
 
         # The parametric equivalents, in their own files. Written beside the
@@ -1816,6 +2074,7 @@ run_cyraven_impl <- function(opt) {
           freq_p, file.path(opt$outdir, paste0("group_comparison", sfx, ".png")),
           group_of = group_of, stats = gstats, reference = opt$reference_group,
           p_source = p_src, panel_label = plabel)
+
         # The same tests as one figure: effect against evidence, every population
         # at once. group_comparison.png is for reading one population, this is for
         # finding which one to read.
@@ -1852,6 +2111,17 @@ run_cyraven_impl <- function(opt) {
           fx_p, file.path(opt$outdir, paste0("functional_markers", sfx, ".png")),
           group_of = if (grouped) group_of else NULL, stats = fxstats,
           reference = opt$reference_group, p_source = p_src, panel_label = plabel)
+        # The same panels with the timepoint on the x axis instead of the study
+        # group. No stats passed: the visits are the same patients, so the
+        # between-group test these figures normally annotate does not apply to
+        # them, and drawing its brackets here would assert independence the
+        # design does not have.
+        if (!is.null(.tp_of))
+          .ext_ok("functional markers by timepoint", fig_functional_markers(
+            fx_p, file.path(opt$outdir,
+                            paste0("functional_markers", sfx, "_by_timepoint.png")),
+            group_of = .tp_of, stats = NULL, reference = NULL,
+            p_source = p_src, panel_label = plabel))
       }
 
       # ---- derived-ratio comparison, same grouping/stats as abundance ------
@@ -1874,8 +2144,98 @@ run_cyraven_impl <- function(opt) {
           rt_p, file.path(opt$outdir, paste0("population_ratios", sfx, ".png")),
           group_of = if (grouped) group_of else NULL, stats = rtstats,
           reference = opt$reference_group, p_source = p_src, panel_label = plabel)
+        if (!is.null(.tp_of))
+          .ext_ok("population ratios by timepoint", fig_population_ratios(
+            rt_p, file.path(opt$outdir,
+                            paste0("population_ratios", sfx, "_by_timepoint.png")),
+            group_of = .tp_of, stats = NULL, reference = NULL,
+            p_source = p_src, panel_label = plabel))
       }
     }
+  }
+
+  # ---- timepoint figures ----------------------------------------------------
+  # Written whenever the sheet carries a timepoint and more than one level of
+  # it. These are the PAIRED views: the samples at d0, d3 and d7 are the same
+  # patients, so the between-group figures elsewhere in this run -- which treat
+  # their groups as independent -- cannot represent them. See
+  # R/figures-timepoint.R for why a per-subject trajectory rather than a
+  # boxplot per visit.
+  if (!is.null(smap) && "timepoint" %in% names(smap) && !is.null(freq) &&
+      length(unique(stats::na.omit(smap$timepoint))) > 1L) {
+    log_step("STEP 7d - timepoint figures")
+    without_spending_draws({
+      # Share first, then the absolute measures where a yield was supplied.
+      # cells_per_ml is the one to read across timepoints: the draws differ in
+      # size, so a raw yield confounds the biology with the phlebotomy.
+      for (.vc in intersect(c("pct_of_cd45_pos", "cells_absolute", "cells_per_ml"),
+                            names(freq))) {
+        .ext_ok(paste0("timepoint trajectories (", .vc, ")"),
+          fig_timepoint_trajectories(freq, smap,
+            file.path(opt$outdir, paste0("timepoint_trajectories_", .vc, ".png")),
+            value_col = .vc))
+      }
+      .ext_ok("subset balance by timepoint",
+        fig_subset_balance(freq, smap,
+          file.path(opt$outdir, "timepoint_subset_balance.png")))
+      # absolute_vs_share with the timepoint on the x axis. The figure takes
+      # whatever grouping it is handed, so this is the same panels read by day
+      # rather than by infection focus.
+      if ("cells_absolute" %in% names(freq) &&
+          any(is.finite(freq$cells_absolute))) {
+        .tpmap <- stats::setNames(as.character(smap$timepoint), smap$sample_id)
+        .tpmap <- .tpmap[!is.na(.tpmap) & nzchar(.tpmap)]
+        .ext_ok("absolute vs share by timepoint", fig_absolute_vs_share(
+          freq, file.path(opt$outdir, "absolute_vs_share_by_timepoint.png"),
+          group_of = .tpmap, panel_label = "by timepoint"))
+      }
+      if (exists("mfi", inherits = FALSE) && !is.null(mfi))
+        .ext_ok("marker intensity by timepoint",
+          fig_marker_by_timepoint(mfi, smap,
+            file.path(opt$outdir, "timepoint_marker_intensity.png")))
+    })
+    log_msg("wrote timepoint figures: trajectories per population, subset ",
+            "balance, marker intensity. These are the PAIRED views -- the same ",
+            "patients at each visit -- and carry no p-value by design.")
+  }
+
+  # ---- external total cell count figures ------------------------------------
+  # Drawn here, OUTSIDE `if (group_tests)`, and following the rule --absolute-
+  # counts already sets below: the QC figure is unconditional, because it is
+  # about whether the externally measured input is sane, and that question does
+  # not depend on wanting a between-group test. Placed inside the test block
+  # first, these vanished entirely under --no-group-tests -- the flag a user
+  # sets precisely when the design cannot carry a test, which is when checking
+  # the inputs matters most.
+  #
+  # The share-vs-absolute figure is descriptive, in the same class as
+  # umap_density_by_group.png, which --no-group-tests also keeps. The absolute
+  # TEST stays suppressed by that flag, as it should.
+  #
+  # without_spending_draws(): a figure that spends RNG draws shifts every later
+  # embedding. See its definition in R/figures-total-counts.R.
+  if (!is.null(.total_counts) && nrow(.total_counts) && !is.null(freq)) {
+    without_spending_draws({
+      .pans <- if (!is.null(freq$panel)) unique(freq$panel) else NA_character_
+      for (.pn in .pans) {
+        .fp <- if (is.na(.pn)) freq else freq[freq$panel == .pn, , drop = FALSE]
+        .sfx <- if (length(.pans) > 1L && !is.na(.pn)) paste0("_", .pn) else ""
+        .tcp <- .total_counts[.total_counts$sample_id %in% .fp$sample_id, ,
+                              drop = FALSE]
+        # The panel name reaches the image, not just the filename: on a
+        # multi-panel run these are otherwise the same picture twice.
+        .plab <- if (length(.pans) > 1L && !is.na(.pn)) .pn else ""
+        if (nrow(.tcp))
+          .ext_ok("total counts QC figure", fig_total_counts_qc(
+            .tcp, file.path(opt$outdir, paste0("total_counts_qc", .sfx, ".png")),
+            group_of = group_of, all_samples = unique(.fp$sample_id),
+            panel_label = .plab))
+        if ("cells_absolute" %in% names(.fp) && any(is.finite(.fp$cells_absolute)))
+          .ext_ok("absolute vs share figure", fig_absolute_vs_share(
+            .fp, file.path(opt$outdir, paste0("absolute_vs_share", .sfx, ".png")),
+            group_of = group_of, panel_label = .plab))
+      }
+    })
   }
 
   # ---- external absolute cell counts ----------------------------------------
@@ -2184,8 +2544,14 @@ run_cyraven_impl <- function(opt) {
             }
             # One picture of the whole cohort: severity, outcome, timepoint and
             # infection focus as strips over the population matrix.
+            # Visit first, then the study group inside it: the two design
+            # variables, so each timepoint is a contiguous block of columns and
+            # the groups line up the same way within every block. Ordering by a
+            # severity score instead scattered the visits and made the gradient
+            # it produces look like a result.
             fig_clinical_landscape(
-              freq, clin, file.path(opt$outdir, "clinical_landscape.png"))
+              freq, clin, file.path(opt$outdir, "clinical_landscape.png"),
+              order_by = intersect(c("timepoint", opt$group_column), names(clin)))
           }
           if (!is.null(ca$markers)) {
             write.csv(ca$markers,
@@ -2344,7 +2710,19 @@ run_cyraven_impl <- function(opt) {
         }
       }
       if (!is.null(bcol)) {
-        br <- batch_mixing_report(bcells, bcol, group_col = gcol, seed = opt$seed)
+        # The timepoint is attached BEFORE the report, not just before the
+        # figure: it is now one of the variables batch is tested against, and on
+        # a repeated-measures design it is the primary comparison. Whether the
+        # embedded cell table already carries it depends on which covariates
+        # resolved, so a missing column is filled from the sample sheet rather
+        # than assumed.
+        if (!"timepoint" %in% names(bcells) && !is.null(smap) &&
+            all(c("sample_id", "timepoint") %in% names(smap)))
+          bcells$timepoint <- unname(setNames(
+            as.character(smap$timepoint), smap$sample_id)[bcells$sample_id])
+        br <- batch_mixing_report(bcells, bcol,
+                                  group_col = c(gcol, "timepoint"),
+                                  seed = opt$seed)
         if (!is.null(br)) {
           write.csv(br$summary, file.path(opt$outdir, "batch_mixing_stats.csv"),
                     row.names = FALSE)
@@ -2353,13 +2731,27 @@ run_cyraven_impl <- function(opt) {
                       file.path(opt$outdir, "batch_group_confounding.csv"),
                       row.names = FALSE)
           log_msg("wrote batch_mixing_stats.csv, ", br$summary$verdict)
-          if (!is.null(br$confounding) && br$confounding$cramers_v >= 0.5)
-            log_msg("  NOTE batch and ", gcol, " overlap strongly (Cramer's V = ",
-                    br$confounding$cramers_v, "). No batch correction can ",
-                    "separate them, which is why this pipeline reports the ",
-                    "effect rather than removing it.")
+          # Every variable that is at least moderately entangled with batch, not
+          # only the one that crosses the "no correction is safe" line. A
+          # moderate association still means a difference along that variable is
+          # partly an acquisition difference, and the reader has to be told
+          # which variable it is.
+          if (!is.null(br$confounding)) {
+            .cf <- br$confounding[br$confounding$cramers_v >= 0.3, , drop = FALSE]
+            for (.i in seq_len(nrow(.cf)))
+              log_msg("  NOTE batch overlaps ", .cf$group_column[.i],
+                      " (Cramer's V = ", .cf$cramers_v[.i], ", ",
+                      .cf$verdict[.i], "). A difference along ",
+                      .cf$group_column[.i], " is partly an acquisition ",
+                      "difference; this pipeline reports the overlap rather ",
+                      "than correcting it away.")
+          }
+          # Split by visit: a batch effect repeats inside every facet, whereas a
+          # visit effect is one facet differing from its neighbours. Pooled,
+          # the two are the same picture.
           fig_batch_diagnostic(bcells, br,
-                               file.path(opt$outdir, "batch_diagnostic.png"), bcol)
+                               file.path(opt$outdir, "batch_diagnostic.png"), bcol,
+                               facet_col = "timepoint")
         }
 
         # WHICH channel moved, not merely whether the batches mix. iLISI above is
@@ -2692,6 +3084,7 @@ run_cyraven_impl <- function(opt) {
                            verdicts = if (.learn) verdicts else NULL,
                            pops = if (.learn) pops else NULL,
                            group_of = group_of, confounding = .conf,
+                           total_counts = .total_counts,
                            file_paths = fcs)
 
         # The other direction, and the only thing explore is allowed to add to
@@ -2707,6 +3100,59 @@ run_cyraven_impl <- function(opt) {
                   "several clusters, ", nmiss, " cluster(s) nothing covers). ",
                   "This is what unsupervised clustering says about the ",
                   "specification, and it exists only because --maybe-learn is set.")
+
+          # THE NEXT SPECIFICATION, ASSEMBLED RATHER THAN DESCRIBED.
+          #
+          # spec_gaps.csv says which clusters nothing covers; the explore
+          # suggested spec says what those clusters are. Until now the user had
+          # to read one, find the entry in the other, and paste it into a third
+          # file by hand -- and the suggested spec could not be run even then,
+          # because it was written in a vocabulary no parser accepts.
+          #
+          # This writes the declared specification with the uncovered clusters
+          # appended as further populations, in the config's own format, ready
+          # to pass straight back as --config. It is still a DRAFT: a cluster is
+          # not a population, the names are placeholders, and the entries want
+          # merging and naming before anyone reports a frequency from them.
+          # Nothing in this run uses it.
+          .nextcfg <- try(write_suggested_config(
+            cfg, .ex, file.path(opt$outdir, "suggested_config_next_run.yaml")),
+            silent = TRUE)
+          if (!inherits(.nextcfg, "try-error") && !is.null(.nextcfg))
+            log_msg("wrote suggested_config_next_run.yaml (", .nextcfg$n_declared,
+                    " declared population(s) + ", .nextcfg$n_added,
+                    " draft population(s) for the clusters nothing covered). ",
+                    "Curate it, then pass it as --config; nothing in THIS run ",
+                    "used it.")
+        }
+      })
+    }
+
+    # ---- the whole figure set, once per timepoint ---------------------------
+    # Placed here, before the report, so the split figures exist when the report
+    # sweeps the directory. See R/split-by.R for why this is a second pass over
+    # the computed artefacts rather than a pipeline run per visit.
+    if (isTRUE(opt$split_by_timepoint)) {
+      .ext_ok("split figures by timepoint", {
+        log_step("STEP 7e - figures split by timepoint")
+        .mp <- length(fpr$panels) > 1L
+        for (.pn in names(.split_panels)) {
+          .bypanel <- function(x) if (.mp && !is.null(x) && "panel" %in% names(x))
+            x[!is.na(x$panel) & x$panel == .pn, , drop = FALSE] else x
+          split_figures_by_timepoint(list(
+            smap         = smap,
+            freq         = .bypanel(freq),
+            mfi          = .bypanel(mfi),
+            fx           = .bypanel(fx),
+            rt           = .bypanel(rt),
+            tc           = .total_counts,
+            ufreq        = if (!is.null(unc)) unc$frequencies else NULL,
+            cells        = .split_panels[[.pn]]$cells,
+            markers      = .split_panels[[.pn]]$markers,
+            feature_cols = .split_panels[[.pn]]$markers,
+            panel_label  = if (.mp) .pn else "",
+            colors       = fcs_colors()),
+            opt$outdir)
         }
       })
     }

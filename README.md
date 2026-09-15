@@ -237,6 +237,29 @@ sequence for every task, in Docker and in R, with the situation each option is
 for, is in
 [Running cyRAVEN](https://bhagesh-h.github.io/cyRAVEN/articles/usage.html).
 
+### A repeated-measures study
+
+If the sample sheet carries a `timepoint` column, `--split-by-timepoint` writes
+the whole figure set once per visit into `by_timepoint/<level>/`, beside the
+pooled figures:
+
+```bash
+docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
+  --dir /data/fcs --recursive --samples /data/samples.csv \
+  --config /data/analysis.yaml --split-by-timepoint --outdir /data/results
+```
+
+The embedding, the gating thresholds and the statistics are **not** recomputed
+per visit — only the rows drawn are restricted. A position on one visit's UMAP
+is therefore the same position on another's, and a threshold is the same cut.
+Running the pipeline separately per visit would give three embeddings computed
+from different cells, which cannot be compared with each other at all.
+
+Paired views that need every visit at once — per-patient trajectories, subset
+balance, marker intensity by visit — are written to the run directory as
+`timepoint_*.png` whether or not the flag is set, because splitting them by
+visit is what destroys them.
+
 ## Documentation
 
 Every page below is also available as a single PDF, one chapter per page, with a
@@ -279,7 +302,7 @@ why, so the same arguments do not get relitigated.
 |---|---|
 | [How it works](https://bhagesh-h.github.io/cyRAVEN/articles/pipeline.html) | The ten pipeline stages with the function implementing each, and executable examples of cofactor estimation, density minimum detection and group comparison |
 | [Diagnostics](https://bhagesh-h.github.io/cyRAVEN/articles/diagnostics.html) | The checks in reading order, from validating inputs before the run through gate inspection, staining QC, threshold drift, gate uncertainty, batch structure and conformance |
-| [Explore mode](https://bhagesh-h.github.io/cyRAVEN/articles/explore.html) | Unsupervised discovery over every channel, run beside the declared analysis or standalone; the cluster-level QC gate, and what `--maybe-learn` lets the two sides tell each other |
+| [Explore mode](https://bhagesh-h.github.io/cyRAVEN/articles/explore.html) | Unsupervised discovery over every channel, run beside the declared analysis or standalone; the cluster-level QC gate; which declared population each cluster corresponds to and the immune subset its marker profile matches; and what `--maybe-learn` lets the two sides tell each other |
 | [Output files](https://bhagesh-h.github.io/cyRAVEN/articles/outputs.html) | Every file the pipeline writes, its columns, the flag producing it, and why event counts are not cell counts |
 | [Statistics](https://bhagesh-h.github.io/cyRAVEN/articles/statistics.html) | Sample-level aggregation; rank tests against moderated *t*; the compositional constraint; covariate diagnosis against adjustment; clinical variables as the question rather than a nuisance; multiplicity; differences expressed in units of uncertainty |
 | [Worked example](https://bhagesh-h.github.io/cyRAVEN/articles/figures.html) | Every figure from a run on public data, each with what it measures and what that run shows |

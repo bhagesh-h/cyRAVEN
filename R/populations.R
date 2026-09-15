@@ -65,7 +65,8 @@ monocyte_populations <- function() c("CD14 pos", "CD16 pos", "CD14 int CD16 int"
 #' @keywords internal
 derive_intermediate_bounds <- function(tmat, thr, parent, spec) {
   want <- unique(unlist(lapply(spec, function(d)
-    names(d)[vapply(d, function(x) identical(x, "intermediate"), logical(1))])))
+    names(d)[vapply(d, function(x)
+      identical(x, "intermediate") || identical(x, "bright"), logical(1))])))
   want <- intersect(want, colnames(tmat))
   out <- setNames(rep(NA_real_, length(want)), want)
   for (mk in want) {
@@ -142,8 +143,16 @@ resolve_block_populations <- function(block, spec, available) {
 #'   "intermediate" without an upper bound makes its population UNAVAILABLE
 #'   rather than silently collapsing to "above".
 #' @export
+#' @param quiet Suppress the per-population NOTEs about `any_of` groups losing a
+#'   member. The gate-uncertainty bootstrap re-scores every population once per
+#'   replicate, and the note is a property of the SPECIFICATION against the
+#'   PANEL -- identical on every replicate, because neither changes. Emitted
+#'   from there it produced 2,120 of 2,399 log lines on a 20-sample run, 88% of
+#'   the log saying one of two things, which buries the NOTEs that do differ
+#'   between samples. Callers that score once leave it FALSE and see it once per
+#'   sample; callers that score in a loop pass TRUE.
 score_populations <- function(tmat, thr, parent, spec = default_population_spec(),
-                              hi_thr = NULL) {
+                              hi_thr = NULL, quiet = FALSE) {
   avail <- colnames(tmat)
   masks <- list(); unavailable <- list()
   for (nm in names(spec)) {
@@ -186,13 +195,19 @@ score_populations <- function(tmat, thr, parent, spec = default_population_spec(
                                    paste(unique(amiss), collapse = ", "))
         next
       }
-      if (length(amiss))
+      if (length(amiss) && !isTRUE(quiet))
         log_msg("  NOTE ", nm, ": any_of reduced to ",
                 paste(names(any_req), collapse = "/"), " (missing ",
                 paste(unique(amiss), collapse = ", "), ")")
     }
     req <- req_simple
-    int_mk <- names(req)[vapply(req, function(d) identical(d, "intermediate"), logical(1))]
+    # "bright" needs the same upper bound as "intermediate" -- it is the band
+    # ABOVE it. Both are checked together, or a bright requirement with no
+    # derivable bound would fall through and be scored as if it were "above",
+    # silently returning the whole positive population under a name that claims
+    # only its upper mode.
+    int_mk <- names(req)[vapply(req, function(d)
+      identical(d, "intermediate") || identical(d, "bright"), logical(1))]
     no_hi <- int_mk[!vapply(int_mk, function(mk)
       is.finite((hi_thr %||% list())[[mk]] %||% NA_real_), logical(1))]
     if (length(no_hi)) {
@@ -206,8 +221,12 @@ score_populations <- function(tmat, thr, parent, spec = default_population_spec(
         above        = tmat[, mk] > thr[[mk]],
         below        = tmat[, mk] < thr[[mk]],
         intermediate = tmat[, mk] > thr[[mk]] & tmat[, mk] < hi_thr[[mk]],
+        # The band above the intermediate one: CD56-bright NK cells and the
+        # like, where the canonical subset is the upper mode of a bimodal
+        # positive population rather than the whole of it.
+        bright       = tmat[, mk] > hi_thr[[mk]],
         stop("unknown direction '", req[[mk]], "' for marker ", mk,
-             " (use above/below/intermediate)"))
+             " (use above/below/intermediate/bright)"))
     }
     if (!is.null(any_req)) {
       any_m <- rep(FALSE, nrow(tmat))
@@ -229,10 +248,46 @@ score_populations <- function(tmat, thr, parent, spec = default_population_spec(
   ord <- names(masks)[order(depth, decreasing = TRUE)]
   labels <- rep(NA_character_, nrow(tmat))
   for (nm in ord) labels[is.na(labels) & masks[[nm]]] <- nm
-  labels[is.na(labels) & parent] <- "Other CD45+"
+  labels[is.na(labels) & parent] <- catch_all_label()
   if (length(unavailable))
     log_msg("  UNAVAILABLE populations: ", paste(names(unavailable), collapse = "; "))
   list(masks = masks, labels = labels, unavailable = unavailable)
 }
 
 # =============================================================================
+
+# =============================================================================
+# THE CATCH-ALL LABEL
+# =============================================================================
+#
+# WHY THIS IS ONE DEFINITION AND NOT A STRING REPEATED AROUND THE PACKAGE. The
+# label given to cells inside the parent gate that match no declared population
+# is not a population -- it is the remainder, and every consumer that reasons
+# about coverage has to be able to tell it apart from a real lineage. That test
+# was written out by hand in several places and, in one of them, the list of
+# names to treat as "not a real population" simply did not contain the name this
+# package actually assigns. The consequence was silent and total: explore mode's
+# findings table, whose entire purpose is to report the clusters the
+# specification fails to describe, scored every cluster as 0% unlabelled and
+# declared all of them covered -- including clusters that were 100% remainder --
+# on a run whose specification described under a tenth of the cells.
+
+#' The label assigned to cells inside the parent gate matching no population
+#' @return A single string.
+#' @keywords internal
+catch_all_label <- function() "Other CD45+"
+
+#' Is this population label the catch-all remainder rather than a real lineage?
+#'
+#' Matches the label this package assigns plus the conventional spellings an
+#' imported or hand-edited table may carry, so a caller reasoning about coverage
+#' cannot miss the remainder on a technicality of spelling.
+#' @param x Character vector of population labels.
+#' @return Logical vector, `TRUE` where the label is a catch-all.
+#' @keywords internal
+is_catch_all_label <- function(x) {
+  x <- as.character(x)
+  is.na(x) | !nzchar(trimws(x)) |
+    grepl("^[[:space:]]*(other|unclassified|unlabelled|unlabeled|unassigned|none|ungated)([[:space:]]|$|[+-])",
+          x, ignore.case = TRUE)
+}

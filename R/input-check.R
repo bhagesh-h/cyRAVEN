@@ -90,9 +90,25 @@ report_input_check <- function(fcs, smap, sheet, spec, opt) {
   # gives a false all-clear is worse than no check, so it compares against both
   # spellings and distinguishes the two failures.
   scorable <- make.names(markers)
-  # In the panel but spelled the way the run cannot match: fixable, and the fix
-  # is mechanical.
-  mis_spelled <- need_direct[!need_direct %in% scorable & need_direct %in% markers]
+  # WHICH SPELLING THE RUN ACTUALLY MATCHES, established from the run path
+  # rather than assumed: score_populations() compares the specification's names
+  # against colnames(tmat), and pipeline.R sets those with
+  # `colnames(tmat) <- avail`, where avail comes from names(rd$marker_cols) --
+  # the resolved marker symbols, hyphens and all. make.names() is applied
+  # nowhere on the run path; it appears only in this file.
+  #
+  # So a hyphenated name in the config is CORRECT, and this check previously had
+  # the comparison the wrong way round: it flagged TCR-Vd1 and HLA-DR as
+  # unmatchable and told the user to write TCR.Vd1 and HLA.DR, which is the
+  # spelling that genuinely matches nothing. Following that advice would have
+  # broken a working configuration and reported every affected population
+  # UNAVAILABLE without raising an error -- the exact failure the message warns
+  # about, caused by the message. Verified against a reference run whose config
+  # uses TCR-Vd1 and which scores 10,783 Vd1 T cells.
+  #
+  # The real failure is the opposite one: a config written in R's syntactic
+  # form, which the run cannot match against the raw symbol.
+  mis_spelled <- need_direct[!need_direct %in% markers & need_direct %in% scorable]
   # In neither spelling: genuinely not in these files.
   absent <- setdiff(need_direct, union(markers, scorable))
   # A disjunction is only fatal when EVERY member is gone, so report those
@@ -104,15 +120,18 @@ report_input_check <- function(fcs, smap, sheet, spec, opt) {
   }, logical(1))]
   log_msg("population specification: ", length(spec), " population(s) needing ",
           length(need), " marker(s)")
-  if (length(mis_spelled))
-    note(length(mis_spelled), " channel name(s) in the specification are in this ",
-         "panel but spelled the way the run CANNOT match: ",
-         paste(mis_spelled, collapse = ", "), ". Write them as ",
-         paste(make.names(mis_spelled), collapse = ", "),
-         ". Channel names are made syntactically valid when the files are read, ",
-         "so a hyphen, a slash or a space becomes a dot; --list-channels prints ",
-         "the original. Left as they are, every population using them is ",
-         "reported UNAVAILABLE and no error is raised.")
+  if (length(mis_spelled)) {
+    orig <- setNames(markers, scorable)[mis_spelled]
+    note(length(mis_spelled), " channel name(s) in the specification are written ",
+         "in R's syntactic form, which the run does not use: ",
+         paste(mis_spelled, collapse = ", "), ". Write them exactly as the files ",
+         "spell them: ", paste(unname(orig), collapse = ", "),
+         ". Marker symbols are matched verbatim against $PnS, so a hyphen, a ",
+         "slash or a space is kept and must appear in the config too (quote the ",
+         "value in YAML if it starts with a character YAML reserves); ",
+         "--list-channels prints the exact string. Left as they are, every ",
+         "population using them is reported UNAVAILABLE and no error is raised.")
+  }
   if (length(absent)) {
     note("the specification names ", length(absent),
          " marker(s) no file contains: ", paste(absent, collapse = ", "),
@@ -353,14 +372,18 @@ list_channels <- function(fcs) {
   # error. Panels labelled CD3, CD4, CD14 are unaffected, which is why this was
   # not obvious; a panel with no $PnS labels, where every name is a detector, is
   # affected throughout.
-  .scorable <- make.names(usable)
-  if (any(.scorable != usable)) {
-    .i <- which(.scorable != usable)
-    log_msg("  NOTE ", length(.i), " of those name(s) must be written differently ",
-            "in the config, because a hyphen, slash or space is not valid in a ",
-            "name:")
-    for (k in .i)
-      log_msg("    ", usable[k], "   ->   write it as   ", .scorable[k])
+  # Names carrying a hyphen, slash or space are matched VERBATIM by the run
+  # (see the note beside mis_spelled above), so the only thing to say about
+  # them is that they must be copied exactly and may need quoting in YAML.
+  # This previously told the user to rewrite them in R's syntactic form, which
+  # is the one spelling that matches nothing.
+  .needs_quote <- usable[make.names(usable) != usable]
+  if (length(.needs_quote)) {
+    log_msg("  NOTE ", length(.needs_quote), " of those name(s) contain a hyphen, ",
+            "slash or space. Copy them into the config exactly as printed above ",
+            "-- they are matched verbatim -- and quote the value in YAML where ",
+            "it would otherwise be ambiguous:")
+    for (k in .needs_quote) log_msg("    \"", k, "\"")
   }
 
   # ---- does every file carry the same panel ---------------------------------

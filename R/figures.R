@@ -451,13 +451,20 @@ fig_umap_overview <- function(cells, outfile, panel_label = "",
     # The cap sits above the cohorts this package is routinely run on (24 and 12
     # samples), so their figures take the same path as before and do not change.
     .smp_cap <- 40L
+    # AND BELOW THE CAP THE KEY STILL HAS TO FIT THE PANEL. Left to grow down a
+    # single column, twenty sample IDs made a legend taller than the UMAP beside
+    # it; patchwork centres a legend against its panel, so the surplus went off
+    # BOTH edges of the canvas and the outermost IDs were clipped away entirely.
+    # Capping the rows spends the surplus sideways instead -- ten samples make
+    # one column, twenty make two, forty make four -- and every key stays inside
+    # the image.
     .p <- umap_discrete(
       cells, "sample_id", title = "Sample",
       subtitle = if (nsmp > .smp_cap)
         paste0(format(nsmp, big.mark = ","), " samples, equal cells each; ",
                "key omitted at this count, see cells_umap.csv")
       else "equal cells per sample",
-      colors = colors)
+      legend_rows = min(10L, nsmp), colors = colors)
     if (nsmp > .smp_cap) .p <- .p + theme(legend.position = "none")
     plots[["sample"]] <- .p
   }
@@ -469,7 +476,16 @@ fig_umap_overview <- function(cells, outfile, panel_label = "",
       umap_continuous(cells, cv, title = pretty_label(cv), legend_name = pretty_label(cv),
                       colors = colors)
     } else {
-      umap_discrete(cells, cv, title = pretty_label(cv), colors = colors)
+      # THE LEGEND IS CAPPED AT TEN ROWS, so anything longer wraps into further
+      # columns instead of growing past the panel it belongs to. A cohort with
+      # twenty acquisitions gave the Sample panel a twenty-key legend, taller
+      # than the panel beside it; patchwork centres it, so it overflowed both
+      # the top and the bottom of the figure and the first keys were clipped
+      # off the canvas entirely. Ten is the most that fits a panel of this
+      # height at this font size.
+      umap_discrete(cells, cv, title = pretty_label(cv), colors = colors,
+                    legend_rows = min(10L,
+                      length(unique(stats::na.omit(cells[[cv]])))))
     }
   }
   if (!length(plots)) { warning("[fig] nothing to plot"); return(invisible(NULL)) }
