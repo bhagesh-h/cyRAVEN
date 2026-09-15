@@ -334,6 +334,49 @@ arrives as arguments to it. Use `--entrypoint Rscript` or `--entrypoint bash`.
 every `-v` mount. `/results` is a declared `VOLUME`, so an unmounted path writes
 into an anonymous volume that vanishes with `--rm`.
 
+**Output files owned by root**: the container runs as root by default, so on
+Linux everything it writes lands root-owned. Add
+`--user "$(id -u):$(id -g)" -e HOME=/tmp` to the `docker run`. The `HOME`
+override matters because a uid with no passwd entry otherwise gets a home
+directory it cannot write.
+
+## `long flag "x" is invalid`
+
+optparse rejecting a flag means the **code being run** does not define it. Which
+code that is depends on how the container was started:
+
+- **No `CYRAVEN_SOURCE`**: the installed 1.0.0 copy inside the image. A flag added
+  to the source tree after 1.0.0 (`--total-counts`, `--auto-fix-gates`,
+  `--split-by-timepoint`) is not there. Mount the checkout:
+  `-v "$REPO:/src:ro" -e CYRAVEN_SOURCE=/src`.
+- **With `CYRAVEN_SOURCE` set**: the mounted tree, which can be *newer* than the
+  command line. A flag the source has since **removed** fails here, and a stale
+  `run_manifest.txt` is the usual way one survives.
+
+`--add-subsets` is the removed one. Drop it from any command line carrying it.
+The subset layer now annotates explore clusters automatically and needs no flag;
+an old run that used it produced a declared frequency table inflated with the
+generated subsets (11 populations became 52), so the previous output is not
+comparable to a current run. Confirm what a given command line can accept with:
+
+```bash
+docker run --rm -v "$REPO:/src:ro" -e CYRAVEN_SOURCE=/src cyraven:1.0.0 --help
+```
+
+## A population reports UNAVAILABLE and nothing errored
+
+Marker symbols are matched **verbatim** against the resolved `$PnS` names, so
+`TCR-Vd1` and `HLA-DR` are what belong in the config, hyphens intact. Rewriting
+them into R's syntactic form (`TCR.Vd1`, `HLA.DR`) is what causes this, and it
+raises no error -- every population using the marker simply reports UNAVAILABLE.
+`make.names()` is applied nowhere on the run path.
+
+The other cause is a genuine panel split: the marker is present in some files and
+absent from others. `--check` distinguishes the two. Where one reagent carries two
+spellings across a cohort, fix it upstream by rewriting `$PnS` rather than
+declaring both, or declare them with `any_of:` so each file scores on whichever
+spelling it uses.
+
 ## When the numbers look wrong but nothing errored
 
 Work through `interpretation.md` in order. The common cause is a stage that was

@@ -25,25 +25,16 @@
 # chapter.
 
 CHAPTERS <- c(
-  # Reading order, matching the navbar. Not alphabetical and not the order
-  # list.files() returns: the site tells a reader to read diagnostics before
-  # results, and a manual that reversed them would contradict it.
-  "cyRAVEN"                    = "Get started",
-  "flow-cytometry-for-dummies" = "Flow cytometry for dummies",
-  "usage"                      = "Commands and every option",
-  "inputs"                     = "Inputs, the sample sheet and config",
-  "gating"                     = "Gating specification",
-  "claude-skill"               = "Driving it from Claude Code",
-  "with-cycondor"              = "Using it with cyCONDOR",
-  "pipeline"                   = "How it works, the ten stages",
-  "diagnostics"                = "Diagnostics, in reading order",
-  "explore"                    = "Explore mode, unsupervised discovery",
-  "design-explore"             = "Why explore mode is built that way",
-  "outputs"                    = "Every output file",
-  "statistics"                 = "Statistics",
-  "figures"                    = "Worked example, every figure",
-  "scope"                      = "Scope and boundaries",
-  "known-limitations"          = "Known limitations")
+  # Reading order, matching the navbar. The six chapters are a book: what the
+  # thing is, the background it assumes, how to run it, what to do beyond a
+  # first run, what the output looks like, and what not to claim from it. Not
+  # alphabetical and not the order list.files() returns.
+  "about"           = "About cyRAVEN",
+  "flow-cytometry"  = "About flow cytometry",
+  "cyRAVEN"         = "Get started",
+  "advanced"        = "Advanced",
+  "gallery"         = "Gallery",
+  "limitations"     = "Limitations")
 
 pkg_root <- normalizePath(".", winslash = "/")
 vig_dir  <- file.path(pkg_root, "vignettes")
@@ -78,8 +69,8 @@ demote <- function(lines) {
 }
 
 # CROSS-REFERENCES BECOME INTERNAL LINKS. The articles link to each other by
-# file name -- "see the [Diagnostics article](diagnostics.html)" -- which is
-# correct on the site and dead in a PDF, where diagnostics.html does not exist.
+# file name -- "see the [Advanced chapter](advanced.html)" -- which is
+# correct on the site and dead in a PDF, where advanced.html does not exist.
 # There are around sixty of them. Each is rewritten to the anchor pandoc will
 # generate for that chapter's heading, so the link jumps to the chapter instead
 # of failing.

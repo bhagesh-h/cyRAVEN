@@ -526,8 +526,24 @@ report_css <- function() {
   "code,kbd,.mono,.fn,.dim{font-family:var(--mono)}",
   # Layout: fixed sidebar, scrolling main.
   ".wrap{display:flex;align-items:flex-start;min-height:100vh}",
-  "nav.side{position:sticky;top:0;flex:0 0 268px;height:100vh;overflow-y:auto;",
-  "border-right:1px solid var(--line);background:var(--panel);padding:1rem .75rem}",
+  # The width is a custom property so the drag handle can set it on :root and
+  # every rule that depends on it follows. 268px stays the default, so a
+  # reader who never touches the handle sees what they always saw.
+  "nav.side{position:sticky;top:0;flex:0 0 var(--side-w,268px);height:100vh;",
+  "overflow-y:auto;background:var(--panel);padding:1rem .75rem}",
+  # The divider between sidebar and content IS the drag handle, rather than a
+  # separate hairline beside one: two vertical lines a few pixels apart read as
+  # a rendering fault. It is a flex sibling of the nav rather than absolutely
+  # positioned inside it, so it cannot drift from the edge it belongs to and
+  # cannot cover the nav's own scrollbar.
+  ".side-grip{position:sticky;top:0;flex:0 0 5px;height:100vh;cursor:col-resize;",
+  "background:var(--panel);border-right:1px solid var(--line);",
+  "transition:background .12s ease}",
+  ".side-grip:hover,.side-grip.drag{background:var(--accent);",
+  "border-right-color:var(--accent)}",
+  # While dragging, the pointer crosses text and iframes; without this the
+  # browser starts a text selection and the drag turns into a highlight.
+  "body.resizing{user-select:none;cursor:col-resize}",
   "nav.side h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;",
   "color:var(--mut);margin:.2rem 0 .6rem .4rem}",
   ".nav-sec{margin-bottom:.35rem}",
@@ -610,6 +626,24 @@ report_css <- function() {
   "border:1px solid var(--accent);border-radius:5px;padding:.16rem .5rem;",
   "background:none;cursor:pointer;white-space:nowrap}",
   "a.dl:hover,button.dl:hover{background:var(--accent);color:#fff}",
+  # Back to top. A run report is tens of screens long and the section a
+  # reader wants next is reached from the masthead, so the return trip is
+  # otherwise a long scroll or a keyboard shortcut not everyone knows.
+  # z-index sits below the lightbox (99/100) so it cannot float over an
+  # opened figure, and it is hidden until there is something to go back up to.
+  "#cytop{position:fixed;right:1.15rem;bottom:1.15rem;z-index:90;",
+  "width:2.6rem;height:2.6rem;border-radius:50%;cursor:pointer;",
+  "border:1px solid var(--line);background:var(--bg);color:var(--mut);",
+  "font-size:1.1rem;line-height:1;display:grid;place-items:center;",
+  "box-shadow:0 2px 8px rgba(12,14,18,.16);",
+  "opacity:0;visibility:hidden;transform:translateY(.4rem);",
+  "transition:opacity .16s ease,transform .16s ease,visibility .16s}",
+  "#cytop.on{opacity:1;visibility:visible;transform:none}",
+  "#cytop:hover{background:var(--accent);color:#fff;border-color:var(--accent)}",
+  "#cytop:focus-visible{outline:2px solid var(--accent);outline-offset:2px}",
+  # A reader who asked the system for less motion gets the state change
+  # without the slide, and cyTop() checks the same query before smooth-scrolling.
+  "@media(prefers-reduced-motion:reduce){#cytop{transition:none;transform:none}}",
   # Lightbox.
   # --lbbar-h is shared by the toolbar's height and the image's top margin, so
   # the two cannot drift apart.
@@ -710,11 +744,14 @@ report_css <- function() {
   ".ok{background:#eefaf0;border:1px solid #b6e3c2}",
   ".warn{background:#fff6e5;border:1px solid #f0d9a8}",
   ".stop{background:#fdecea;border:1px solid #f5b5ae}",
-  "@media print{nav.side{display:none}details{open:true}}",
+  "@media print{nav.side,.side-grip,#cytop{display:none}details{open:true}}",
   # The report is read on laptops and projected in meetings; below 900px the
   # sidebar becomes a normal block above the content rather than disappearing.
+  # Below 900px the sidebar is a block above the content, so there is no
+  # vertical edge to drag and the handle is removed rather than left inert.
   "@media(max-width:900px){.wrap{display:block}nav.side{position:static;height:auto;",
-  "width:auto;border-right:none;border-bottom:1px solid var(--line)}",
+  "flex-basis:auto;width:auto;border-right:none;border-bottom:1px solid var(--line)}",
+  ".side-grip{display:none}",
   "main{padding:1rem}.figbox{height:300px}}")
 }
 
@@ -890,7 +927,48 @@ report_js <- function() {
   "if(e.target.open){var b=e.target.parentNode;",
   "if(b&&b.classList&&b.classList.contains('tab'))cyShow(b.id);}",
   "cySync();cyCur();},true);\n",
-  "document.addEventListener('DOMContentLoaded',cyInit);\n")
+  # BACK TO TOP. Shown once the reader is a screen and a half down, which is
+  # far enough that the masthead is gone and the button is worth its corner.
+  "function cyTopSync(){var b=document.getElementById('cytop');if(!b)return;",
+  "b.classList.toggle('on',(window.pageYOffset||document.documentElement.scrollTop)>600);}\n",
+  "function cyTop(){var m=window.matchMedia('(prefers-reduced-motion:reduce)').matches;",
+  "window.scrollTo({top:0,behavior:m?'auto':'smooth'});}\n",
+  "window.addEventListener('scroll',cyTopSync,{passive:true});\n",
+  # RESIZEABLE SIDEBAR. The nav lists every figure and table, so its entries are
+  # the longest strings in the document and the default 268px ellipsises many of
+  # them. Dragging sets --side-w on :root; the width is clamped so the sidebar
+  # can neither vanish nor crowd out the content it indexes, and it is remembered
+  # per report so the adjustment survives a reload.
+  "var SIDE_MIN=180,SIDE_MAX=620;\n",
+  "function cySideSet(w,save){w=Math.max(SIDE_MIN,Math.min(SIDE_MAX,Math.round(w)));",
+  "document.documentElement.style.setProperty('--side-w',w+'px');",
+  "if(save){try{localStorage.setItem('cyraven-side-w',w);}catch(e){}}",
+  "return w;}\n",
+  "function cySideInit(){var g=document.querySelector('.side-grip');if(!g)return;",
+  "try{var v=parseInt(localStorage.getItem('cyraven-side-w'),10);",
+  "if(v)cySideSet(v,false);}catch(e){}\n",
+  "g.addEventListener('pointerdown',function(e){e.preventDefault();",
+  "g.setPointerCapture(e.pointerId);g.classList.add('drag');",
+  "document.body.classList.add('resizing');});\n",
+  "g.addEventListener('pointermove',function(e){",
+  "if(!g.hasPointerCapture(e.pointerId))return;",
+  "cySideSet(e.clientX,false);});\n",
+  "function cySideEnd(e){if(!g.hasPointerCapture(e.pointerId))return;",
+  "g.releasePointerCapture(e.pointerId);g.classList.remove('drag');",
+  "document.body.classList.remove('resizing');",
+  "cySideSet(parseInt(getComputedStyle(document.documentElement)",
+  ".getPropertyValue('--side-w'),10)||268,true);cyCur();}\n",
+  "g.addEventListener('pointerup',cySideEnd);",
+  "g.addEventListener('pointercancel',cySideEnd);\n",
+  "g.setAttribute('tabindex','0');g.setAttribute('role','separator');",
+  "g.setAttribute('aria-orientation','vertical');",
+  "g.setAttribute('aria-label','Resize contents sidebar');\n",
+  "g.addEventListener('keydown',function(e){",
+  "var d=e.key==='ArrowLeft'?-16:e.key==='ArrowRight'?16:0;if(!d)return;",
+  "e.preventDefault();var w=parseInt(getComputedStyle(document.documentElement)",
+  ".getPropertyValue('--side-w'),10)||268;cySideSet(w+d,true);cyCur();});}\n",
+  "document.addEventListener('DOMContentLoaded',function(){",
+  "cyInit();cySideInit();cyTopSync();});\n")
 }
 
 #' Write a single self-contained HTML report of everything a run produced
@@ -1410,7 +1488,9 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
     "<div class='wrap'>",
     "<nav class='side'><h2>Contents</h2>",
     paste(vapply(secs, `[[`, character(1), "nav"), collapse = "\n"),
-    "</nav><main>",
+    # The grip is a sibling of the nav, not a child: as a child of a scrolling
+    # sticky column it would scroll away from the edge it resizes.
+    "</nav><div class='side-grip'></div><main>",
     # The masthead is a flex row: mark, identity, actions. The two buttons used
     # to be a float:right span INSIDE the note below, which is why they hung off
     # its bottom-right corner and overlapped its border -- a float is taken out
@@ -1436,16 +1516,17 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
                 html_escape(tryCatch(as.character(utils::packageVersion("cyRAVEN")),
                                      error = function(e) "unknown")),
                 nfig, ntab),
-        sprintf("<div class='banner warn mast-note'>%s</div>",
-          if (failed)
+        # Only the failed run carries a masthead note. A completed one used to
+        # carry a reading-order instruction here; it said nothing the section
+        # order does not already say, and it sat above every report whether or
+        # not the reader had asked for guidance.
+        if (failed)
+          sprintf("<div class='banner warn mast-note'>%s</div>",
             paste("What follows is everything the run wrote before it stopped,",
                   "in the order a completed run is read in. Stages after the",
                   "failure are absent, so a section missing here did not run",
-                  "rather than finding nothing.")
-          else
-            paste("Read the sections in the order given. Each one can invalidate",
-                  "the sections after it, so a result taken from the bottom",
-                  "without the top is not supported by this run.")),
+                  "rather than finding nothing."))
+        else "",
         "</div>",
         "<div class='mast-actions'>",
         "<button class='dl' onclick='cyAll(true)'>Expand all</button>",
@@ -1455,7 +1536,10 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
     banner)
 
   writeLines(c(head, vapply(secs, `[[`, character(1), "html"),
-               "</main></div>", sprintf("<script>%s</script>", report_js()),
+               "</main></div>",
+               paste0("<button id='cytop' type='button' onclick='cyTop()' ",
+                      "title='Back to top' aria-label='Back to top'>&uarr;</button>"),
+               sprintf("<script>%s</script>", report_js()),
                "</body></html>"), path)
   sz <- file.size(path)
   log_msg("wrote report.html (", if (failed) "FAILED run, " else "",

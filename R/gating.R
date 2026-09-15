@@ -112,6 +112,12 @@ detect_viability_marker <- function(markers, explicit = NULL) {
 #'   returned by indexing the config's `sample_overrides` block by sample id.
 #'   See [sample_override()]. Absent by default, in which case every threshold is
 #'   derived exactly as before.
+#' @param autofix Skip a hierarchy gate whose threshold came from
+#'   `quantile_fallback`, carrying its parent through unchanged. Such a gate
+#'   has its retention decided by the fallback constant rather than by the
+#'   data, so it keeps a fixed share of the parent whatever the sample holds.
+#'   `FALSE` by default, because skipping a gate changes every count in an
+#'   affected file. See `gate_needs_autofix()`.
 #' @return list of masks, derived geometry, thresholds, and a tidy counts table
 #' @export
 apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,

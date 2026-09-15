@@ -104,5 +104,12 @@ utils::globalVariables(c(
   # are handed.
   ".a", ".absr", ".b", ".hi", ".lo", ".n", ".out", ".pid", ".pop", ".r",
   ".fly", ".hj", ".samp", ".sig", ".t", ".ty", ".val", ".z",
-  "comparison_group", "estimate", "n_comparison", "n_reference"
+  "comparison_group", "estimate", "n_comparison", "n_reference",
+  # Per-timepoint figures and the total-count QC. Same rule again: each is a
+  # column of the frame the figure is handed or assigns just above its plot
+  # call. `timepoint` and `patient_id` carry the repeated-measures design
+  # through the trajectory, subset-balance and marker-by-visit figures;
+  # `ratio` is the subset share those figures plot; `total_cells` is the
+  # measured yield drawn by fig_total_counts_qc().
+  "patient_id", "ratio", "timepoint", "total_cells"
 ))

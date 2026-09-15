@@ -9,7 +9,8 @@ score_populations(
   thr,
   parent,
   spec = default_population_spec(),
-  hi_thr = NULL
+  hi_thr = NULL,
+  quiet = FALSE
 )
 }
 \arguments{
@@ -25,6 +26,15 @@ score_populations(
 Derived by derive_intermediate_bounds(); a marker requested as
 "intermediate" without an upper bound makes its population UNAVAILABLE
 rather than silently collapsing to "above".}
+
+\item{quiet}{Suppress the per-population NOTEs about \code{any_of} groups losing a
+member. The gate-uncertainty bootstrap re-scores every population once per
+replicate, and the note is a property of the SPECIFICATION against the
+PANEL -- identical on every replicate, because neither changes. Emitted
+from there it produced 2,120 of 2,399 log lines on a 20-sample run, 88\% of
+the log saying one of two things, which buries the NOTEs that do differ
+between samples. Callers that score once leave it FALSE and see it once per
+sample; callers that score in a loop pass TRUE.}
 }
 \value{
 list(masks, labels, unavailable)

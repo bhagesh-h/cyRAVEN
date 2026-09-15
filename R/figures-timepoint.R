@@ -4,7 +4,7 @@
 # WHY THESE ARE NOT JUST "THE GROUP FIGURES WITH A DIFFERENT COLUMN". A
 # timepoint column is not a grouping in the sense the between-group figures
 # mean. d0, d3 and d7 come from the SAME patients, so the samples are paired,
-# not independent, and a boxplot per timepoint throws away the pairing — the
+# not independent, and a boxplot per timepoint throws away the pairing -- the
 # only structure a longitudinal design has. Two cohorts can have identical
 # boxplots while every individual rises in one and falls in the other.
 #

@@ -193,7 +193,7 @@ cap_wrap <- function(txt, width_in) {
 
 #' Well-separated colours for a small set of categories
 #'
-#' WHY NOT [population_colours()]. That spreads the population palette by index,
+#' WHY NOT `population_colours()`. That spreads the population palette by index,
 #' and the population palette holds two greens: at three levels it returns red,
 #' green and spring-green, whose last two pair is the closest in the whole
 #' palette. `study_palette` is the set chosen for exactly this job -- few
@@ -363,6 +363,9 @@ clin_associate <- function(d, key_col, value_col, clin, patient_of = NULL,
 #' @param freq population_frequencies table.
 #' @param mfi population_marker_mfi table, optional.
 #' @param clin named list of clinical variables, sample_id -> value.
+#' @param patient_of named vector sample_id -> patient_id, used to report an
+#'   association at the donor level where a variable is a property of the donor
+#'   rather than of the acquisition. NULL treats every row as its own subject.
 #' @param value_col the frequency column to use.
 #' @param min_n fewest samples for a test.
 #' @return list(populations, markers)

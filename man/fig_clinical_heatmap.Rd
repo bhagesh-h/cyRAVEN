@@ -14,8 +14,7 @@ fig_clinical_heatmap(
 )
 }
 \arguments{
-\item{assoc}{data frame of associations, as returned inside
-\code{\link{stats_clinical_association}}.}
+\item{assoc}{data frame from \code{\link[=clin_associate]{clin_associate()}}.}
 
 \item{key_col}{"population" or "marker".}
 
@@ -25,19 +24,16 @@ fig_clinical_heatmap(
 
 \item{dpi}{resolution.}
 
-\item{colors}{Named list of colours; defaults to the package palette. See
-\code{\link{fcs_colors}}.}
-}
-\value{
-The ggplot object, invisibly.
+\item{colors}{palette.}
 }
 \description{
-The signed effect on each tile -- Spearman's rho, or Cliff's delta -- so the
-colour carries direction as well as strength. A Kruskal-Wallis row has no signed
-effect and is drawn grey with its p-value, because a three-level variable has no
-single direction to show.
-
-Significance is marked on the tile rather than encoded in the colour, so a large
-effect that did not survive correction still reads as large. On a small cohort
-that distinction is most of the message.
+WHAT IS ON THE TILE. The signed effect where one exists -- Spearman's rho, or
+Cliff's delta -- so the colour carries direction as well as strength. A
+Kruskal-Wallis row has no signed effect and is drawn grey with its p-value,
+because a three-level variable has no single direction to show.
+}
+\details{
+Significance is marked on the tile rather than encoded in the colour, so a
+large effect that did not survive correction still reads as large. On a cohort
+this size that distinction is most of the message.
 }

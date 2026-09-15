@@ -111,7 +111,10 @@ total_counts_to_csv <- function(path, outdir) {
 #' @return list(scale, label)
 #' @keywords internal
 total_counts_scale <- function(txt) {
-  t1 <- gsub("×", "x", tolower(txt %||% ""))
+  # The multiplication sign is written as an escape rather than literally:
+  # R CMD check requires package R code to be ASCII, and a spreadsheet header
+  # reading "PBMC count x 10^6" may use either character for the x.
+  t1 <- gsub("\u00d7", "x", tolower(txt %||% ""))
   exp10 <- if (grepl("10\\s*\\^?\\s*12|e12", t1)) 12L
     else if (grepl("10\\s*\\^?\\s*9|e9|billion", t1)) 9L
     else if (grepl("10\\s*\\^?\\s*6|e6|million|mio", t1)) 6L

@@ -14,7 +14,7 @@ fig_clinical_forest(
 )
 }
 \arguments{
-\item{assoc}{data frame from \code{\link{stats_clinical_association}}.}
+\item{assoc}{data frame from \code{\link[=stats_clinical_association]{stats_clinical_association()}}.}
 
 \item{key_col}{"population" or "marker".}
 
@@ -24,29 +24,21 @@ fig_clinical_forest(
 
 \item{dpi}{resolution.}
 
-\item{colors}{Named list of colours; defaults to the package palette. See
-\code{\link{fcs_colors}}.}
-}
-\value{
-The ggplot object, invisibly.
+\item{colors}{palette.}
 }
 \description{
-One row per population (or marker), ordered by effect: the point is Spearman's
-rho or Cliff's delta, the bar is its 95\% percentile bootstrap interval, and the
-dashed line is no effect. Rows whose interval clears the line are the ones a
-follow-up cohort should be powered on.
-
-A three-level variable is drawn on epsilon-squared instead, which is unsigned, so
-its axis starts at zero and no interval is drawn: there is no direction to put an
-interval around.
+WHAT IS ON IT. One row per population (or marker), ordered by effect: the
+point is Spearman's rho or Cliff's delta, the bar is its 95\% percentile
+bootstrap interval, and the dashed line is no effect. Rows whose interval
+clears the line are the ones a follow-up cohort should be powered on.
 }
 \details{
-Ordered by effect and not by p-value. At these sample sizes the two orderings are
-close but not identical, and where they disagree the effect is the one worth
-reading: a p-value carries how many samples there were as much as how large the
-difference is.
-}
-\seealso{
-\code{\link{fig_clinical_heatmap}} for every variable at once,
-\code{\link{fig_clinical_detail}} for the points behind one variable.
+A three-level variable is drawn on epsilon-squared instead, which is unsigned,
+so its axis starts at zero and no interval is drawn: there is no direction to
+put an interval around.
+
+WHY IT IS ORDERED BY EFFECT AND NOT BY p. At these sample sizes the p-value
+ordering is close to the effect ordering but not identical, and where they
+disagree the effect is the one worth reading: p carries how many samples there
+were as much as how large the difference is.
 }

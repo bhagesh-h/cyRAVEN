@@ -38,6 +38,20 @@ here and **in no downstream table**. Nothing else in the run can tell you.
 
 Stop here if the gates are wrong. Every number below inherits them.
 
+**`gate_adjustments.csv`**: written under `--auto-fix-gates`, and empty
+otherwise. One row per hierarchy gate that was skipped because its threshold came
+from `quantile_fallback`, carrying the threshold that was *not* applied and the
+reason. Read it as the list of places the data did not support a cut.
+
+The artefact it exists to remove has a signature you can check for without the
+flag: a hierarchy gate retaining **exactly 90.00% (or exactly 10%) of its parent
+in every sample** is reporting the constant `fallback_q`, not a measurement. The
+direction of the comparison decides which of the two you get.
+
+Population markers are deliberately left alone by that flag, so it repairs the
+hierarchy and does not touch the reason a specification may describe very few
+cells.
+
 ## 2. Is the staining usable?
 
 **`staining_qc.csv`**: one verdict per sample. A sample with no resolvable CD45⁺
@@ -145,6 +159,35 @@ the specification, then cross-tabulated. Four configurations are diagnostic:
 | Label holds far fewer cells than the cluster it dominates | **Misplaced threshold.** If CD4 T cells score 0.3% while a 20% cluster is CD4-bright and unassigned, the population is there and the Boolean rule is rejecting it |
 
 The last one is the diagnosis a frequency table structurally cannot deliver.
+
+#### Under `--explore`, the same question with better instruments
+
+**`explore_cluster_identity.csv` / `.png`**: clusters as rows, declared
+populations as columns, grouped by the population each cluster best matches. The
+match is scored by **F1, not by the largest overlap**. A cluster of 500 cells
+holding 300 CD4 T cells has CD4 as its plurality even when those are 5% of every
+CD4 T cell in the run -- the label describes the cluster, but the cluster does not
+describe the label. F1 is high only when both hold, with precision and recall
+beside it so a disagreement is legible (Weber & Robinson, Cytometry A
+2016;89:1084-1096).
+
+**`explore_cluster_subsets.csv`**: each cluster named from its own marker
+profile, restricted to the subsets the panel can actually resolve. The
+annotation attaches to the cluster, never to the cell, and changes no declared
+output.
+
+**`explore_findings.csv` / `spec_gaps.csv`**: which clusters no declared
+population covers. Under `--maybe-learn`, `suggested_config_next_run.yaml` is the
+declared spec plus a draft entry per uncovered cluster, runnable but
+uncurated -- placeholder names, and nothing in the run that writes it uses it.
+
+**The two heatmaps disagree on purpose.** `explore_cluster_heatmap.png` is the
+share of each cluster above *that sample's own threshold*;
+`explore_cluster_median_heatmap.png` is scaled median expression. Where
+thresholds are weak a cluster can read uniformly negative on the first and be
+cleanly separated on the second, and that difference is a statement about the
+gate rather than about the cells. The median view needs no threshold, so it is
+the one to compare against a tool with no gating step.
 
 ### 4.4 Gate geometry and transferability
 
@@ -282,7 +325,29 @@ each result is classified:
 The log-ratio does not recover absolute abundance. Proportional expansion of
 every population leaves the composition invariant and is undetectable in
 frequency data by construction. Distinguishing expansion from relative expansion
-needs cells per microlitre.
+needs a measured cell number.
+
+**The escapes, in order of preference.** `wbc_per_ul` from a haemogram gives
+`cells_per_ul`, but it is keyed by patient and therefore cannot change between
+that patient's timepoints. `--total-counts` gives `cells_absolute`, keyed by
+patient **and** timepoint, and is the one that works on a repeated-measures
+design.
+
+**`total_counts_qc.png`** is read first, on its log axis -- everything derived
+inherits those totals' errors, and a yield in the wrong unit lands decades off
+the median there while staying invisible in the derived table.
+**`total_counts_raw.csv`** is the sheet as flattened, so you can see what was
+read; **`total_counts.csv`** is what matched an acquisition. Unmatched yields are
+reported rather than broadcast.
+
+**`absolute_vs_share.png`** puts the two measures side by side per population,
+and is where a global depletion becomes visible as the thing a share cannot
+express. `count_basis` on every row records the route.
+
+Treat `cells_absolute` as **dual-platform**: one number from this run multiplied
+by one from an instrument it never saw. Published interlaboratory CVs for that
+route are roughly 20-33%, against 10-16% for single-platform bead counting, so
+any difference smaller than that is unresolved. Shares are never overwritten.
 
 ### 5.3 Marker expression
 

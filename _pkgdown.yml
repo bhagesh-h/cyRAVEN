@@ -269,57 +269,25 @@ reference:
   - set_reference_group
 
 articles:
-# The navbar is overridden below, so these sections group the /articles/ index
-# page only. cyRAVEN.Rmd is also the "Get started" navbar entry; it is listed
-# here so every vignette appears in the index.
-- title: Start here
+# Six chapters read in order, like a book. The navbar below mirrors this, so the
+# articles index and the menu cannot disagree about what comes next. cyRAVEN.Rmd
+# is the "Get started" chapter and is also pkgdown's intro entry.
+- title: The manual, in reading order
   navbar: ~
   desc: >
-    What the pipeline is for and a complete run on the demonstration cohort.
+    What cyRAVEN is, the background it assumes, how to run it, what to do beyond
+    a first run, what every figure means, and what not to claim from a result.
   contents:
+  - about
+  - flow-cytometry
   - cyRAVEN
+  - advanced
+  - gallery
+  - limitations
 
-- title: Code and setup
-  navbar: ~
-  desc: >
-    Everything needed to run it: the commands, the two input files, the gating
-    specification, and the function reference.
-  contents:
-  - usage
-  - inputs
-  - gating
-  - claude-skill
-  - with-cycondor
-
-- title: Science and output
-  navbar: ~
-  desc: >
-    What the pipeline does and how to read what it produces: the stages, the
-    checks that can invalidate a result, every output file, the statistics, and
-    a worked example.
-  contents:
-  - flow-cytometry-for-dummies
-  - pipeline
-  - diagnostics
-  - explore
-  - design-explore
-  - outputs
-  - statistics
-  - figures
-  - known-limitations
-  - scope
-
-# "Flow cytometry for dummies" moved out of the top level and into Science and
-# output. It is background reading rather than a section of its own, and a
-# top-level entry gave it the same weight as the whole function reference.
-#
-# "Running cyRAVEN" was renamed. It sat beside "Get started" and the two names
-# described the same thing, so a reader had no way to tell which page to open.
-# They are not the same page: intro is the tour and this is the reference for
-# every command and all 116 options, which is what the label now says.
 navbar:
   structure:
-    left:  [intro, code, science, news]
+    left:  [about, flowcyt, intro, advanced, gallery, limitations, news]
     right: [manual, search, github, lightswitch]
   components:
     # The entire site as one PDF, one chapter per page, built by
@@ -330,45 +298,21 @@ navbar:
       icon: fa-file-pdf
       href: cyRAVEN-manual.pdf
       aria-label: Download the documentation as a PDF
-    code:
-      text: Code and setup
-      menu:
-      - text: Commands and every option
-        href: articles/usage.html
-      - text: Inputs, the sample sheet and config
-        href: articles/inputs.html
-      - text: Gating specification
-        href: articles/gating.html
-      - text: ---------
-      - text: Driving it from Claude Code
-        href: articles/claude-skill.html
-      - text: Using it with cyCONDOR
-        href: articles/with-cycondor.html
-      - text: ---------
-      - text: Function reference
-        href: reference/index.html
-    science:
-      text: Science and output
-      menu:
-      - text: Flow cytometry for dummies
-        href: articles/flow-cytometry-for-dummies.html
-      - text: ---------
-      - text: How it works, the ten stages
-        href: articles/pipeline.html
-      - text: Diagnostics, in reading order
-        href: articles/diagnostics.html
-      - text: Explore mode, unsupervised discovery
-        href: articles/explore.html
-      - text: Why explore mode is built that way
-        href: articles/design-explore.html
-      - text: Every output file
-        href: articles/outputs.html
-      - text: Statistics
-        href: articles/statistics.html
-      - text: ---------
-      - text: Worked example, every figure
-        href: articles/figures.html
-      - text: Scope and boundaries
-        href: articles/scope.html
-      - text: Known limitations
-        href: articles/known-limitations.html
+    # One entry per chapter, in reading order, rather than two dropdown menus
+    # grouping fifteen pages. A dropdown hides the order, and the order is the
+    # point: each chapter assumes the one before it.
+    about:
+      text: About
+      href: articles/about.html
+    flowcyt:
+      text: Flow cytometry
+      href: articles/flow-cytometry.html
+    advanced:
+      text: Advanced
+      href: articles/advanced.html
+    gallery:
+      text: Gallery
+      href: articles/gallery.html
+    limitations:
+      text: Limitations
+      href: articles/limitations.html

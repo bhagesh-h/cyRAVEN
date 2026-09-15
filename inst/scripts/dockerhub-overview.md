@@ -173,7 +173,7 @@ On Windows PowerShell use `${PWD}` for `$PWD`; on Git Bash prefix the command
 with `MSYS_NO_PATHCONV=1`.
 
 Full command reference, with the situation each option is for:
-https://bhagesh-h.github.io/cyRAVEN/articles/usage.html
+https://bhagesh-h.github.io/cyRAVEN/articles/cyRAVEN.html#commands-and-every-option
 
 ## Clinical variables
 

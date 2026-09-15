@@ -6,7 +6,7 @@
 #      does every acquisition in the run actually have one? Everything derived
 #      from a total inherits that total's errors, so a mistyped yield is
 #      invisible in the derived table and obvious here. This mirrors the rule
-#      --absolute-counts already follows with absolute_counts_qc.png: inspect
+# --absolute-counts already follows with absolute_counts_qc.png: inspect
 #      the external numbers before quoting anything computed from them.
 #
 #   2. the derived figure, which is about the RESULT: each cluster as a cell
@@ -92,7 +92,7 @@ fig_total_counts_qc <- function(tc, outfile, group_of = NULL,
       format(x, big.mark = ",", scientific = FALSE, trim = TRUE)) +
     ggplot2::labs(title = paste0("External total cell counts, as supplied",
                                  if (nzchar(panel_label))
-                                   paste0(" — ", panel_label) else ""),
+                                   paste0(" - ", panel_label) else ""),
                   subtitle = sub,
                   caption = paste("Read this before any cells_absolute number.",
                                   "A yield in the wrong unit sits decades off the",
@@ -196,7 +196,7 @@ fig_absolute_vs_share <- function(ab, outfile, group_of = NULL, max_clusters = 1
       # populations clusters invites the reader to treat a curated gate as an
       # unsupervised guess, which is the one distinction the package is built on.
       title = paste0(unit_lab, ": share against absolute cell number",
-                     if (nzchar(panel_label)) paste0(" — ", panel_label) else ""),
+                     if (nzchar(panel_label)) paste0(" - ", panel_label) else ""),
       # The sample count goes in the subtitle for the same reason the panel goes
       # in the title: on a multi-panel run these figures are otherwise identical
       # furniture, and "12 samples" versus "8 samples" is the quickest way to

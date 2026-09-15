@@ -1,10 +1,95 @@
 # cyRAVEN (development)
 
+## The documentation is six chapters read in order
+
+Fifteen articles became six, and the navbar lists them in the order they are
+meant to be read rather than grouping them into two dropdown menus.
+
+| Chapter | Absorbed |
+|---|---|
+| About cyRAVEN | the ten stages, and why explore mode is built the way it is |
+| About flow cytometry | the background article, unchanged |
+| Get started | the first run, the inputs, the gating specification, every option |
+| Advanced | explore mode, the diagnostics, every output file, the statistics, cyCONDOR, the Claude skill |
+| Gallery | the worked example |
+| Limitations | the caveats and the excluded methods |
+
+Two dropdown menus hid the order, and the order is the argument: each chapter
+assumes the one before it. A reader landing on the diagnostics page had no way to
+tell it came after the gating specification and before the statistics.
+
+**No prose was dropped.** The merge was checked line by line against the fifteen
+sources: every content line appears in the new chapters. The only removals are
+the old "Where to go next" list, which pointed at pages that no longer exist, and
+two `opts_chunk` lines replaced so the chunks that evaluate still evaluate under
+a chapter whose default is not to.
+
+Each former article is now a section with its own heading, so the numbered
+subsections those pages refer to in their own prose (`section 6`, `§4`) keep
+their numbering and gain a named parent. Every internal link was rewritten to the
+chapter and the anchor, rather than to the top of a chapter thousands of lines
+long, and every link and anchor in the repository was checked to resolve.
+
+The PDF manual follows the same six chapters.
+
+## `--write-config` needs `--outdir`, and now says so
+
+Deriving the parameters means reading the files, so the early stages run and
+write their QC output. Without `--outdir` the flag stopped with `cannot open the
+connection` and the documentation did not mention it. `--write-samples` and
+`--write-sample-map` are unaffected: both return before the pipeline starts.
+
+## R CMD check is clean again
+
+Three warnings, each enough to fail the build on its own.
+
+`R/total-counts.R` carried a literal multiplication sign. Package R code has to
+be ASCII, so it is written `\u00d7` now; it still matches a spreadsheet header
+that spells the multiplier either way.
+
+`man/` had not been regenerated since the last release, which left six exported
+functions undocumented and five help files describing argument lists their
+functions no longer had. Regenerating also documented `autofix` and
+`patient_of`, added the 71 help files the internal functions were missing, and
+sorted NAMESPACE. The set of exports is unchanged.
+
+Four roxygen blocks wrote a numeric range as `[0, 100]`, which roxygen markdown
+reads as a link. Written as code spans they are ranges again.
+
+The NSE columns the per-timepoint figures plot are declared alongside the rest,
+so `R CMD check` stops reporting them as undefined globals.
+
+## The report navigates better on a long run
+
+Three changes to `report.html` and `explore_report.html`, which share their
+stylesheet and behaviour.
+
+**The sidebar resizes.** It indexes every section, figure and table, so its
+entries are the longest strings in the document and the fixed 268px width
+ellipsised many of them. Drag the divider, or focus it and use the arrow keys.
+The width is clamped between 180px and 620px, so the sidebar can neither vanish
+nor crowd out what it indexes, and it is remembered per report. A report opened
+where browser storage is unavailable falls back to the default width rather than
+failing.
+
+**A back-to-top button** appears at the bottom right once the reader is a screen
+and a half down. It sits below the lightbox in the stacking order, so it cannot
+float over an opened figure, and it honours `prefers-reduced-motion` for both its
+own transition and the scroll.
+
+**The reading-order note above the first section is gone.** It told the reader to
+work top to bottom because each section can invalidate the ones after it. The
+section order already says that, the sections themselves repeat it where it
+matters, and the note appeared on every report whether or not anyone needed it.
+The equivalent note on a failed run is kept: that one says something the layout
+does not, which is that a section missing from the report did not run rather than
+finding nothing.
+
 ## `explore_findings.csv` was reporting the opposite of what it found
 
 The table exists to name the clusters no declared population covers. The list of
 labels it treated as unlabelled was written out by hand and did not contain
-`Other CD45+` — the name this package itself assigns to cells inside the parent
+`Other CD45+` -- the name this package itself assigns to cells inside the parent
 gate that match no definition. So `pct_unlabelled` was **0 for every cluster**
 and every verdict read "covered by the declared specification", including
 clusters that were 100% remainder, on runs whose specification described under a
@@ -23,10 +108,10 @@ populations as columns, grouped by the population each cluster best matches.
 
 The match is scored by **F1**, not by the largest overlap. A cluster of 500 cells
 holding 300 CD4 T cells has CD4 as its plurality even when those are 5% of all
-the CD4 T cells in the run — the label describes the cluster, but the cluster
+the CD4 T cells in the run -- the label describes the cluster, but the cluster
 does not describe the label. F1 is high only when both hold, and precision and
 recall are written beside it so a disagreement is legible. After Weber &
-Robinson, Cytometry A 2016;89:1084–1096.
+Robinson, Cytometry A 2016;89:1084-1096.
 
 The catch-all is ranked apart and keeps its own column: a cluster at or above 70%
 remainder is reported as **undescribed** rather than named after whichever
@@ -35,7 +120,7 @@ remainder is never called confident, however clean its F1.
 
 ## Immune subsets, attached to explore clusters
 
-`explore_cluster_subsets.csv` names each cluster from its own marker profile —
+`explore_cluster_subsets.csv` names each cluster from its own marker profile --
 activated, exhausted and homing T cell subsets, NK CD56 bright/dim, HLA-DR low
 and CD38+ monocytes, and the rest that a given panel can express. The subsets a
 panel can define are a property of the panel, so only definitions whose every
@@ -48,8 +133,8 @@ from 275 panels to 1,275, and asks a circular question of a subset named after
 the marker that defines it. The annotation attaches to the cluster, never to the
 cell, and no declared output changes.
 
-`score_populations()` gains a `bright` direction — the band above the
-intermediate one — because CD56 bright is the upper mode of a bimodal positive
+`score_populations()` gains a `bright` direction -- the band above the
+intermediate one -- because CD56 bright is the upper mode of a bimodal positive
 population and `above` would have returned the whole NK gate under a narrower
 name.
 
@@ -73,8 +158,8 @@ V ≥ 0.3 rather than only at the "no correction is safe" threshold.
 
 It draws one panel per population × marker pair, so its cost is the product of
 two numbers that grow independently. `max_panels` (default 400) drops
-populations rarest-first — on abundance alone, before any test is read, whole
-populations rather than individual pairs — and names what it dropped. This is a
+populations rarest-first -- on abundance alone, before any test is read, whole
+populations rather than individual pairs -- and names what it dropped. This is a
 size bound, not selection by result: truncating by p-value remains ruled out.
 
 ## Figures separated by timepoint, and read in execution order
@@ -87,7 +172,7 @@ discovery ahead of the declared analysis it should be read against. Figures and
 tables are separate tab strips within each section.
 
 `clinical_landscape` orders its columns by timepoint then study group rather
-than by a severity score — ordering columns by a measurement guarantees a
+than by a severity score -- ordering columns by a measurement guarantees a
 gradient that reads as a result. `marker_state` groups its panels by cell type.
 `batch_diagnostic` draws one embedding per timepoint, which is what separates a
 batch that sits apart in the embedding from a batch acquired at one visit.
@@ -96,7 +181,7 @@ batch that sits apart in the embedding from a batch acquired at one visit.
 ## `--auto-fix-gates` acts on a gate the data did not support
 
 A hierarchy gate whose threshold came from `quantile_fallback` has its retention
-decided by the constant `fallback_q = 0.90`, not by the data — and the direction
+decided by the constant `fallback_q = 0.90`, not by the data -- and the direction
 of the comparison decides which artefact you get:
 
 ```
@@ -105,8 +190,8 @@ cd45_pos     cd45 <- live   & x >  threshold     keeps exactly 10%
 ```
 
 One constant, two opposite meanings. On the cohort that surfaced this,
-`live_cells` was 90.00% of its parent in 12 of 12 samples — range 90.00 to
-90.00 — and on the extended cohort 19 of 20.
+`live_cells` was 90.00% of its parent in 12 of 12 samples -- range 90.00 to
+90.00 -- and on the extended cohort 19 of 20.
 
 Under the flag such a gate is **skipped** and its parent carried through, on the
 grounds that a density minimum is absent when the data show one population
@@ -120,7 +205,7 @@ poor threshold, but "no threshold" does not mean "every cell is a B cell".
 
 ## `explore_suggested_spec.yaml` is a file you can actually run
 
-It was written in `pos`/`neg`. No parser in this package reads either word —
+It was written in `pos`/`neg`. No parser in this package reads either word --
 `score_populations()` takes `above`/`below`. So the file whose header invites
 you to curate it and pass it to `--config` could never have been run, and doing
 so reported every population UNAVAILABLE without raising an error. Now emitted
@@ -160,8 +245,8 @@ Every abundance this package reported was a share of the events acquired, and
 shares sum to 100. That constraint is not a rounding detail: it means a
 frequency table cannot, even in principle, distinguish one population expanding
 from every other population contracting, because the composition is identical
-either way. `stats-compositional.R` already said so in its own header — the
-centred log-ratio fixes the geometry of the test and not this — and the only
+either way. `stats-compositional.R` already said so in its own header -- the
+centred log-ratio fixes the geometry of the test and not this -- and the only
 escape was `wbc_per_ul`, which is keyed by patient and therefore cannot change
 between that patient's timepoints.
 
@@ -186,16 +271,16 @@ represent it.
   `explore_cluster_abundance.csv`, a second test in
   `explore_cluster_stats_absolute.csv`, and
   `explore_cluster_count_concordance.csv`, which names the clusters that move on
-  cell number but not on share — the case a frequency table cannot express — and
+  cell number but not on share -- the case a frequency table cannot express -- and
   the reverse, which is a redistribution at constant size.
 * `explore_total_counts_qc.png` is drawn whenever a total is supplied, on a log
   axis, and is meant to be read first: everything derived inherits those totals'
   errors, and a yield in the wrong unit lands decades off the median there while
   staying invisible in the derived table.
-* Shares are never overwritten. The derived numbers are dual-platform — one
-  measurement from this run multiplied by one from an instrument it never saw —
-  and the published interlaboratory CVs for that route are roughly 20–33%
-  against 10–16% for single-platform bead counting. `count_basis` records the
+* Shares are never overwritten. The derived numbers are dual-platform -- one
+  measurement from this run multiplied by one from an instrument it never saw --
+  and the published interlaboratory CVs for that route are roughly 20-33%
+  against 10-16% for single-platform bead counting. `count_basis` records the
   route on every table carrying them.
 
 ## `--explore-only` resolves the grouping it was given
@@ -212,7 +297,7 @@ Explore transformed **every event in a file** and let the caller subset the
 result afterwards, so the cell cap limited how large the output was and not the
 peak memory reached producing it. Under `--max-events-per-file 0` a single
 4-million-event acquisition materialises a 4e6 x 24 double matrix, roughly
-770 MB, before one cell is discarded — on top of the declared run's own event
+770 MB, before one cell is discarded -- on top of the declared run's own event
 matrices, still resident. The symptom was a container killed with SIGKILL
 partway through explore on a run whose declared half had completed comfortably,
 and lowering the cap did not help, because the cap was never what governed it.
@@ -229,7 +314,7 @@ of silently changing results.
 ## `--total-counts` reaches the declared analysis, not only explore
 
 The flag was accepted on the declared path, loaded the sheet, wrote
-`total_counts.csv` — and then did nothing with it, because the load sat several
+`total_counts.csv` -- and then did nothing with it, because the load sat several
 hundred lines below the point where `population_frequencies.csv` is written. A
 flag that produces one bookkeeping file and no derived number is worse than one
 that is refused.
@@ -256,7 +341,7 @@ reported UNAVAILABLE, with no error raised.
 
 The run matches marker symbols **verbatim**. `score_populations()` compares the
 specification against `colnames(tmat)`, and `pipeline.R` sets those from
-`names(rd$marker_cols)` — the resolved `$PnS` symbols, hyphens intact.
+`names(rd$marker_cols)` -- the resolved `$PnS` symbols, hyphens intact.
 `make.names()` is applied nowhere on the run path; it occurred only inside the
 check itself.
 
@@ -264,8 +349,8 @@ Established against a reference run rather than by reading: a configuration
 declaring `TCR-Vd1: above` scores 10,783 Vd1 T cells, which is impossible if the
 hyphenated form matched nothing.
 
-The check now flags the opposite and genuinely broken case — a name written in
-R's syntactic form — and names the exact string to copy instead. On the cohort
+The check now flags the opposite and genuinely broken case -- a name written in
+R's syntactic form -- and names the exact string to copy instead. On the cohort
 that surfaced this it turned one spurious PROBLEM into "every named marker is
 present" plus the note that actually mattered: `TCR-Vd1` and `TCR-Vd2` are
 present in some files but not all.
@@ -273,7 +358,7 @@ present in some files but not all.
 ## The count figures cannot move an embedding
 
 `geom_jitter()` draws from the RNG, and `run_cyraven()` seeds once so every
-later draw — the embedding's cell selection, the clustering, the bootstraps —
+later draw -- the embedding's cell selection, the clustering, the bootstraps --
 comes from that one stream. A figure that spends draws therefore shifts
 everything after it: on a two-panel explore run, drawing panel 1's figure
 re-rolled panel 2's embedding, so a run with `--total-counts` would no longer

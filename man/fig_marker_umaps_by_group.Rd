@@ -2,7 +2,7 @@
 % Please edit documentation in R/figures.R
 \name{fig_marker_umaps_by_group}
 \alias{fig_marker_umaps_by_group}
-\title{One UMAP per marker, faceted by study group}
+\title{One UMAP per marker, pooled and split by every category present}
 \usage{
 fig_marker_umaps_by_group(
   cells,
@@ -15,15 +15,16 @@ fig_marker_umaps_by_group(
 )
 }
 \arguments{
-\item{cells}{Data frame of embedded cells with \code{umap_1}, \code{umap_2} and the
-marker columns, plus the group column when there is one.}
+\item{cells}{Data frame of embedded cells with \code{umap_1}, \code{umap_2}, the marker
+columns and any category columns.}
 
 \item{markers}{Character vector of marker columns to draw.}
 
 \item{outdir}{Directory to write into; created if absent.}
 
-\item{group_col}{Name of the column to facet by, or NULL for one unfaceted
-panel per marker. A column resolving to a single level is treated as NULL.}
+\item{group_col}{Category column to draw first, normally the run's
+\code{--group-column}. Further categories are detected automatically. NULL is
+fine: detection still runs. A column resolving to one level is skipped.}
 
 \item{panel_label}{Marker-panel name added to each title; empty for none. Default \code{""}.}
 
@@ -42,26 +43,32 @@ a shift that happens in one group only is averaged away.
 or covariate, never by intensity. Neither answers "is this marker
 brighter, or somewhere else, in one group", which is the comparison a
 case-control or longitudinal design is usually about.
+}
+\details{
+\if{html}{\out{<div class="sourceCode">}}\preformatted{ ONE FILE PER MARKER rather than one markers x groups grid. A grid is
+ unreadable past a handful of each, and a single marker's comparison is
+ the unit that goes into a slide or a figure panel.
 
-ONE FILE PER MARKER rather than one markers x groups grid. A grid is
-unreadable past a handful of each, and a single marker's comparison is
-the unit that goes into a slide or a figure panel.
+ The colour scale is SHARED across the facets within a file, and clipped
+ to the 1st-99th percentile of the cells drawn, so a colour difference
+ between two panels of one file is a real intensity difference. It is not
+ shared between files, for the reason given in [fig_marker_grid()].
 
-The colour scale is SHARED across the facets within a file, and clipped
-to the 1st-99th percentile of the cells drawn, so a colour difference
-between two panels of one file is a real intensity difference. It is not
-shared between files, for the reason given in \code{\link[=fig_marker_grid]{fig_marker_grid()}}.
+ Panel density is comparable only because the embedding draws the same
+ number of cells from every sample; see [plan_subsample()].
 
-Panel density is comparable only because the embedding draws the same
-number of cells from every sample; see \code{\link[=plan_subsample]{plan_subsample()}}.
+ ONE POOLED FILE PLUS ONE PER CATEGORY. `umap_<marker>.png` pools every
+ sample; `umap_<marker>_by_<category>.png` splits it. They answer
+ different questions -- where the marker is at all, against whether it
+ sits differently between categories -- and the pooled one has no other
+ home, because each facet of a split figure holds only a subset of the
+ cells and `umap_markers.png` shrinks every marker into one cell of a
+ grid.
 
-TWO FILES PER MARKER ON A GROUPED RUN, not one. \code{umap_<marker>.png}
-pools every sample; \code{umap_<marker>_by_<group>.png} splits by group. They
-answer different questions -- where the marker is at all, against whether
-it sits differently in one group -- and the first has no other home.
-Each facet of the split figure holds only a subset of the cells, and
-\code{umap_markers.png} shrinks every marker into one cell of a grid, so
-without the pooled panel no figure shows one marker over the whole
-cohort at full size. With no group column resolved, only the pooled
-panel is written.
+ EVERY category present is drawn, not only the statistical group column.
+ A cohort usually carries several -- timepoint, infection focus,
+ phenotype -- and naming one of them as `--group-column` says nothing
+ about which are worth seeing. See [marker_facet_cols()] for what counts
+ as a category and what is excluded.
+}\if{html}{\out{</div>}}
 }

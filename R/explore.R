@@ -170,7 +170,7 @@ two_mode_split <- function(v, seed = 42L) {
 #' @param sample_id Character sample id per cell.
 #' @param thr_by_sample Named list: sample id -> named numeric vector of
 #'   thresholds on the transformed scale. May be empty.
-#' @return Numeric matrix, clusters x features, values in [0, 1], with attribute
+#' @return Numeric matrix, clusters x features, values in `[0, 1]`, with attribute
 #'   "source" naming how each feature was called.
 #' @keywords internal
 explore_positivity <- function(X, cluster, sample_id, thr_by_sample = list()) {

@@ -232,7 +232,9 @@ write_explore_report <- function(ex_dir, opt = NULL) {
     "<div class='wrap'>",
     "<nav class='side'><h2>Contents</h2>",
     paste(vapply(secs, `[[`, character(1), "nav"), collapse = "\n"),
-    "</nav><main>",
+    # Sibling of the nav, matching the run report: a child of the sticky
+    # scrolling column would scroll away from the edge it resizes.
+    "</nav><div class='side-grip'></div><main>",
     "<h1>cyRAVEN explore report</h1>",
     sprintf("<p class='q'>%s &middot; cyRAVEN %s &middot; %d figures, %d tables, all embedded</p>",
             html_escape(format(Sys.time(), tz = "UTC", usetz = TRUE)),
@@ -258,6 +260,8 @@ write_explore_report <- function(ex_dir, opt = NULL) {
                    "</span></div>")),
     paste(vapply(secs, `[[`, character(1), "html"), collapse = "\n"),
     "</main></div>",
+    paste0("<button id='cytop' type='button' onclick='cyTop()' ",
+           "title='Back to top' aria-label='Back to top'>&uarr;</button>"),
     sprintf("<script>%s</script>", report_js()),
     "</body></html>")
 
