@@ -19,7 +19,10 @@ batch_mixing_report(
 
 \item{batch_col}{column naming the batch (acquisition date, run, operator)}
 
-\item{group_col}{biological grouping, used for the confounding check}
+\item{group_col}{one or more columns to test batch against; one row of the
+confounding table per column. Pass the study group AND the timepoint on a
+repeated-measures design: the visit is the primary comparison there, and
+checking only the study group leaves it unexamined.}
 
 \item{k}{neighbourhood size}
 

@@ -45,6 +45,17 @@ checking that batch and biological group are separable enough for that to be
 meaningful.
 }
 \details{
+TWO METHODS. \code{"quantile"} fits one map per marker over the whole file.
+\code{"cluster"} fits one map per marker per cell type, which is what CytoNorm
+does and what a whole-file map cannot do; see
+\code{\link[=align_quantiles_by_cluster]{align_quantiles_by_cluster()}}. \code{"cytonorm"} is accepted as a synonym for
+\code{"cluster"}, because that is the name the method is known by.
+
+THE METHOD IS CHOSEN AFTER THE REFUSAL, NEVER BEFORE IT. A better alignment
+algorithm does not make a confounded design correctable. Where Cramer's V
+says batch and group are close to the same variable, both methods are refused
+identically, and \code{force = TRUE} remains the only way past.
+
 WHAT IT REFUSES TO DO: correct when Cramer's V between batch and group
 exceeds \code{max_cramers_v}. At that point the two are close to the same
 variable, and any correction removes the effect being looked for. Passing
@@ -53,14 +64,4 @@ reaches the run manifest.
 
 This is descriptive of intensity only. It does not touch the gate hierarchy,
 which is derived per sample and is already batch-local by construction.
-
-TWO METHODS. \code{"quantile"} fits one map per marker over the whole file.
-\code{"cluster"} fits one map per marker per cell type, which is what CytoNorm
-does and what a whole-file map cannot do. \code{"cytonorm"} is accepted as a
-synonym for \code{"cluster"}, because that is the name the method is known by.
-
-THE METHOD IS CHOSEN AFTER THE REFUSAL, NEVER BEFORE IT. A better alignment
-algorithm does not make a confounded design correctable. Where Cramer's V
-says batch and group are close to the same variable, both methods are refused
-identically, and \code{force = TRUE} remains the only way past.
 }

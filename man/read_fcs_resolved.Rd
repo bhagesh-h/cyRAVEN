@@ -4,7 +4,12 @@
 \alias{read_fcs_resolved}
 \title{Read one FCS file and resolve marker symbols}
 \usage{
-read_fcs_resolved(path, sample_id = NULL, max_events = 0L, ignore_channels = NULL)
+read_fcs_resolved(
+  path,
+  sample_id = NULL,
+  max_events = 0L,
+  ignore_channels = NULL
+)
 }
 \arguments{
 \item{path}{File path.}

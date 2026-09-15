@@ -517,7 +517,7 @@ rank_sum_p_floor <- function(n1, n2) {
 #' WHY CLIFF'S DELTA AND NOT A FOLD CHANGE by default. A fold change of medians is
 #' unbounded and, at these group sizes, dominated by whichever sample sits at the
 #' median; a population whose reference median is near zero produces a fold change
-#' of 40 that means nothing. Cliff's delta is bounded [-1, 1], is the effect size
+#' of 40 that means nothing. Cliff's delta is bounded `[-1, 1]`, is the effect size
 #' the rank test actually corresponds to, and is directly readable: 0.5 means that
 #' in three quarters of the cross-sample pairs the comparison group was higher.
 #' `effect = "log2fc"` gives the conventional axis for anyone who wants it.

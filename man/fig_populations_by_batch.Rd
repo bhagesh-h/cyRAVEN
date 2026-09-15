@@ -2,7 +2,7 @@
 % Please edit documentation in R/clinical.R
 \name{fig_populations_by_batch}
 \alias{fig_populations_by_batch}
-\title{Population abundance per acquisition batch}
+\title{Population abundance per batch}
 \usage{
 fig_populations_by_batch(
   freq,
@@ -17,32 +17,22 @@ fig_populations_by_batch(
 \arguments{
 \item{freq}{population_frequencies table.}
 
-\item{batch_of}{named vector, sample_id -> batch.}
+\item{batch_of}{named vector sample_id -> batch.}
 
 \item{outfile}{path.}
 
-\item{value_col}{frequency column; defaults to the run's abundance measure.}
+\item{value_col}{frequency column.}
 
 \item{ncol}{panels per row.}
 
 \item{dpi}{resolution.}
 
-\item{colors}{Named list of colours; defaults to the package palette. See
-\code{\link{fcs_colors}}.}
-}
-\value{
-The ggplot object, invisibly.
+\item{colors}{palette.}
 }
 \description{
-One box per batch per population, with a point per sample.
-
-Separate from the batch diagnostics on purpose. Those ask whether the
-\emph{embedding} separates by batch, which is a question about the cells. This
-asks whether the \emph{reported numbers} differ by batch, which is a question
-about the result: a population that steps with acquisition batch is one whose
+WHY THIS EXISTS SEPARATELY from the batch diagnostics. Those ask whether the
+EMBEDDING separates by batch, which is a question about the cells. This asks
+whether the reported numbers differ by batch, which is a question about the
+result: a population that shifts with acquisition batch is a population whose
 between-group difference may be an acquisition difference.
-
-Descriptive only. \code{batch_group_confounding.csv} reports whether batch and
-study group can be told apart at all; where they cannot, no correction here or
-elsewhere can separate them.
 }

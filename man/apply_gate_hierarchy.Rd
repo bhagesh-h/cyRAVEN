@@ -13,7 +13,8 @@ apply_gate_hierarchy(
   viability_name = NULL,
   cd45_name = "CD45",
   transform = NULL,
-  overrides = NULL
+  overrides = NULL,
+  autofix = FALSE
 )
 }
 \arguments{
@@ -39,6 +40,13 @@ transform became selectable.}
 returned by indexing the config's \code{sample_overrides} block by sample id.
 See \code{\link[=sample_override]{sample_override()}}. Absent by default, in which case every threshold is
 derived exactly as before.}
+
+\item{autofix}{Skip a hierarchy gate whose threshold came from
+\code{quantile_fallback}, carrying its parent through unchanged. Such a gate
+has its retention decided by the fallback constant rather than by the
+data, so it keeps a fixed share of the parent whatever the sample holds.
+\code{FALSE} by default, because skipping a gate changes every count in an
+affected file. See \code{gate_needs_autofix()}.}
 }
 \value{
 list of masks, derived geometry, thresholds, and a tidy counts table

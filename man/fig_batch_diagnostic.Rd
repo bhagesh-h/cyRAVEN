@@ -10,6 +10,7 @@ fig_batch_diagnostic(
   report,
   outfile,
   batch_col,
+  facet_col = NULL,
   panel_label = "",
   dpi = 200,
   colors = fcs_colors()
@@ -23,6 +24,10 @@ fig_batch_diagnostic(
 \item{outfile}{Path to write the figure to.}
 
 \item{batch_col}{Column naming the acquisition batch.}
+
+\item{facet_col}{Column of \code{cells} splitting the embedding panel into one
+UMAP per level -- the timepoint, typically. NULL, or a column with fewer
+than two levels, draws the single pooled embedding. Default \code{NULL}.}
 
 \item{panel_label}{Marker-panel name added to the figure title; empty for none. Default \code{""}.}
 

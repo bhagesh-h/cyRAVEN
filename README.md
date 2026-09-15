@@ -28,7 +28,7 @@ in advance and then tries to falsify the declaration. **Explore mode**
 channel, ignoring the specification and the parent gate, which is the only way to
 find a population nobody declared. Explore writes to its own directory and
 changes no existing output, and `--explore-only` needs no specification at all.
-See [Explore mode](https://bhagesh-h.github.io/cyRAVEN/articles/explore.html).
+See [Explore mode](https://bhagesh-h.github.io/cyRAVEN/articles/advanced.html#explore-mode-unsupervised-discovery).
 
 ## Why
 
@@ -134,7 +134,7 @@ mkdir -p demo results
 
 ```bash
 docker run --rm -v "$PWD/demo:/demo" \
-  --entrypoint Rscript cyraven:1.0.0 \
+ --entrypoint Rscript cyraven:1.0.0 \
   /opt/cyraven/src/inst/scripts/demo_data.R /demo
 ```
 
@@ -150,9 +150,9 @@ cohort: GvHD grade 1 n=7; GvHD grade 3 n=28
 ```bash
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
   cyraven:1.0.0 --dir /data/fcs \
-  --samples /data/samples.csv --config /data/panel.yaml \
-  --group-column cohort --reference-group "GvHD grade 1" \
-  --batch-column visit --outdir /results --check
+ --samples /data/samples.csv --config /data/panel.yaml \
+ --group-column cohort --reference-group "GvHD grade 1" \
+ --batch-column visit --outdir /results --check
 ```
 
 It should report 35 files, four resolved markers, that every marker the
@@ -165,9 +165,9 @@ running step 4, which costs minutes rather than seconds.
 ```bash
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
   cyraven:1.0.0 --dir /data/fcs \
-  --samples /data/samples.csv --config /data/panel.yaml \
-  --group-column cohort --reference-group "GvHD grade 1" \
-  --batch-column visit --cluster --outdir /results
+ --samples /data/samples.csv --config /data/panel.yaml \
+ --group-column cohort --reference-group "GvHD grade 1" \
+ --batch-column visit --cluster --outdir /results
 ```
 
 Every path inside a flag is a path inside the container, and `--outdir` must fall
@@ -221,7 +221,7 @@ declaring what to score.
 
 ```bash
 docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
-  --dir /data/fcs --recursive --write-samples /data/samples.csv
+ --dir /data/fcs --recursive --write-samples /data/samples.csv
 ```
 
 **The annotated config template.**
@@ -235,7 +235,7 @@ docker run --rm --entrypoint sh cyraven:1.0.0 -c \
 Edit both, run `--check` until it reports no problems, then run. The complete
 sequence for every task, in Docker and in R, with the situation each option is
 for, is in
-[Running cyRAVEN](https://bhagesh-h.github.io/cyRAVEN/articles/usage.html).
+[Running cyRAVEN](https://bhagesh-h.github.io/cyRAVEN/articles/cyRAVEN.html#commands-and-every-option).
 
 ### A repeated-measures study
 
@@ -245,18 +245,18 @@ pooled figures:
 
 ```bash
 docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
-  --dir /data/fcs --recursive --samples /data/samples.csv \
-  --config /data/analysis.yaml --split-by-timepoint --outdir /data/results
+ --dir /data/fcs --recursive --samples /data/samples.csv \
+ --config /data/analysis.yaml --split-by-timepoint --outdir /data/results
 ```
 
 The embedding, the gating thresholds and the statistics are **not** recomputed
-per visit — only the rows drawn are restricted. A position on one visit's UMAP
+per visit -- only the rows drawn are restricted. A position on one visit's UMAP
 is therefore the same position on another's, and a threshold is the same cut.
 Running the pipeline separately per visit would give three embeddings computed
 from different cells, which cannot be compared with each other at all.
 
-Paired views that need every visit at once — per-patient trajectories, subset
-balance, marker intensity by visit — are written to the run directory as
+Paired views that need every visit at once -- per-patient trajectories, subset
+balance, marker intensity by visit -- are written to the run directory as
 `timepoint_*.png` whether or not the flag is set, because splitting them by
 visit is what destroys them.
 
@@ -271,45 +271,34 @@ ones read upright rather than being squeezed until the columns touch, and each
 table and figure stays on the same page as the heading above it.
 
 New to flow cytometry?
-[Flow cytometry for dummies](https://bhagesh-h.github.io/cyRAVEN/articles/flow-cytometry-for-dummies.html)
+[Flow cytometry for dummies](https://bhagesh-h.github.io/cyRAVEN/articles/flow-cytometry.html)
 explains what an event is, what a cut is, why `SSC-A` sits in a population
 definition next to two antibodies, and what the `-A` on a channel name means.
 Every other page assumes it.
 
 Before you trust a result,
-[Known limitations](https://bhagesh-h.github.io/cyRAVEN/articles/known-limitations.html)
+[Known limitations](https://bhagesh-h.github.io/cyRAVEN/articles/limitations.html#known-limitations)
 collects every caveat in one place: what the 1.0.0 control fix means for results
 produced by an earlier version and how to tell whether yours were affected,
 where the automated gates have and have not been validated, and which comparisons
 this package will not make. It also records what was deliberately left out and
 why, so the same arguments do not get relitigated.
 
-**Code and setup**
+The documentation is six chapters, read in order. Each one assumes the chapter
+before it.
 
-| Page | Content |
+| Chapter | What it covers |
 |---|---|
-| [Running cyRAVEN](https://bhagesh-h.github.io/cyRAVEN/articles/usage.html) | Every command in Docker and R, which variation to use in which situation, and the complete reference for all 116 options |
-| [Inputs](https://bhagesh-h.github.io/cyRAVEN/articles/inputs.html) | The sample sheet and the config: every column, the templates, and the errors the format can raise |
-| [Gating specification](https://bhagesh-h.github.io/cyRAVEN/articles/gating.html) | Declaring populations, functional blocks and ratios; per-sample thresholding and the `source` column; arcsinh against logicle |
-| [Claude skill](https://bhagesh-h.github.io/cyRAVEN/articles/claude-skill.html) | Installing and using the bundled Claude Code skill, which executes through Docker by default |
-| [Interoperability](https://bhagesh-h.github.io/cyRAVEN/articles/with-cycondor.html) | Method selection by question type, and handing a cyCONDOR clustering to cyRAVEN to obtain an executable gate |
-| [Known limitations](https://bhagesh-h.github.io/cyRAVEN/articles/known-limitations.html) | Every caveat in one place, how to tell whether an older result was affected by the 1.0.0 control fix, and what was deliberately left out with the reason |
+| [About cyRAVEN](https://bhagesh-h.github.io/cyRAVEN/articles/about.html) | What the pipeline does and why it is built this way: the variance manual gating introduces, the ten stages a run moves through, and why unsupervised discovery is kept at arm's length from the specification it checks |
+| [About flow cytometry](https://bhagesh-h.github.io/cyRAVEN/articles/flow-cytometry.html) | What an event is, what a cut is, why `SSC-A` sits in a population definition beside two antibodies, and what the `-A` on a channel name means. Nothing in it is specific to cyRAVEN |
+| [Get started](https://bhagesh-h.github.io/cyRAVEN/articles/cyRAVEN.html) | Install it, run the demonstration cohort, then build your own two input files. Carries the sample sheet and config reference, the gating specification, and every one of the 116 options |
+| [Advanced](https://bhagesh-h.github.io/cyRAVEN/articles/advanced.html) | Beyond a first run: unsupervised discovery, the diagnostics in the order they have to be read, every output file, the statistics and their assumptions, and using cyRAVEN with cyCONDOR or from Claude Code |
+| [Gallery](https://bhagesh-h.github.io/cyRAVEN/articles/gallery.html) | Every figure a run produces, as unmodified output, with what each one measures and what that run shows |
+| [Limitations](https://bhagesh-h.github.io/cyRAVEN/articles/limitations.html) | Every caveat in one place, and nine excluded methods with the reasoning and the condition under which each becomes appropriate |
 | [Function reference](https://bhagesh-h.github.io/cyRAVEN/reference/index.html) | Every exported function, grouped by stage |
 
-**Science and output**
-
-| Page | Content |
-|---|---|
-| [How it works](https://bhagesh-h.github.io/cyRAVEN/articles/pipeline.html) | The ten pipeline stages with the function implementing each, and executable examples of cofactor estimation, density minimum detection and group comparison |
-| [Diagnostics](https://bhagesh-h.github.io/cyRAVEN/articles/diagnostics.html) | The checks in reading order, from validating inputs before the run through gate inspection, staining QC, threshold drift, gate uncertainty, batch structure and conformance |
-| [Explore mode](https://bhagesh-h.github.io/cyRAVEN/articles/explore.html) | Unsupervised discovery over every channel, run beside the declared analysis or standalone; the cluster-level QC gate; which declared population each cluster corresponds to and the immune subset its marker profile matches; and what `--maybe-learn` lets the two sides tell each other |
-| [Output files](https://bhagesh-h.github.io/cyRAVEN/articles/outputs.html) | Every file the pipeline writes, its columns, the flag producing it, and why event counts are not cell counts |
-| [Statistics](https://bhagesh-h.github.io/cyRAVEN/articles/statistics.html) | Sample-level aggregation; rank tests against moderated *t*; the compositional constraint; covariate diagnosis against adjustment; clinical variables as the question rather than a nuisance; multiplicity; differences expressed in units of uncertainty |
-| [Worked example](https://bhagesh-h.github.io/cyRAVEN/articles/figures.html) | Every figure from a run on public data, each with what it measures and what that run shows |
-| [Scope](https://bhagesh-h.github.io/cyRAVEN/articles/scope.html) | Nine excluded methods with the reasoning and the condition under which each becomes appropriate |
-
 **These pages are the website, not the install.** The package sources carry all
-fifteen vignettes, but they are not built into the installed copy, so
+six chapters, but they are not built into the installed copy, so
 `browseVignettes("cyRAVEN")` returns nothing inside the image and on a plain
 install. Building them would add several megabytes of rendered HTML and figures
 to a package whose footprint is already deliberate, and the site is always

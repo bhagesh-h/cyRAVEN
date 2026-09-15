@@ -14,6 +14,7 @@ fig_marker_state(
   min_cells = 20L,
   ncol = NULL,
   panel_label = "",
+  max_panels = 400L,
   dpi = 300,
   colors = fcs_colors()
 )
@@ -36,6 +37,13 @@ fig_marker_state(
 \item{ncol}{Number of panel columns; NULL computes one that keeps the canvas roughly square.}
 
 \item{panel_label}{Marker-panel name added to the figure title; empty for none. Default \code{""}.}
+
+\item{max_panels}{Ceiling on the population x marker panel count. Populations
+over it are dropped rarest-first -- on abundance alone, before any test is
+consulted, and whole populations rather than individual pairs -- and named
+in the log. Without a bound this figure grows as the product of two
+independently growing numbers and can exceed what the renderer can build.
+Default \code{400L}.}
 
 \item{dpi}{Resolution in dots per inch. May be reduced automatically to respect the raster ceiling; see \code{\link[=safe_ggsave]{safe_ggsave()}}. Default \code{300}.}
 

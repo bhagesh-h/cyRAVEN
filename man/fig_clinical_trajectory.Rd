@@ -27,8 +27,8 @@ fig_clinical_trajectory(
 
 \item{outfile}{path.}
 
-\item{outcome_of}{optional named vector sample_id -> outcome, used to colour the
-lines and to split the median.}
+\item{outcome_of}{optional named vector sample_id -> outcome, used to colour
+the lines and to split the mean.}
 
 \item{outcome_name}{label for the outcome in the key.}
 
@@ -40,27 +40,18 @@ lines and to split the median.}
 
 \item{dpi}{resolution.}
 
-\item{colors}{Named list of colours; defaults to the package palette. See
-\code{\link{fcs_colors}}.}
-}
-\value{
-The ggplot object, invisibly.
+\item{colors}{palette.}
 }
 \description{
-Thin lines are patients, the thick line is the median at each timepoint within
-each outcome group.
+WHY LINES AND NOT A BOX PER TIMEPOINT. In a repeated-measures cohort the signal
+is usually the DIRECTION each patient moves, and a box per timepoint averages
+exactly that away: two patients rising and two falling look like a flat cohort.
+In the sepsis literature this is the figure that separates survivors from
+non-survivors, because they differ in trajectory rather than at any one
+timepoint.
 }
 \details{
-Lines rather than a box per timepoint, because in a repeated-measures cohort the
-signal is usually the direction each patient moves, and a box per timepoint
-averages exactly that away: two patients rising and two falling look like a flat
-cohort. In the sepsis literature this is the figure that separates survivors from
-non-survivors, which differ in trajectory rather than at any one timepoint.
-
-Descriptive. The test for this design is the paired comparison in
-\code{paired_comparison_stats.csv}, which uses only patients present at both
-timepoints. A line that stops early is a patient who was not sampled again.
-}
-\seealso{
-\code{\link{stats_paired_comparison}} for the test on the same design.
+WHAT IT IS NOT. Descriptive. The test for a repeated-measures design is the
+paired comparison in \code{paired_comparison_stats.csv}; a trajectory figure shows
+the shape of the data that test was run on.
 }
