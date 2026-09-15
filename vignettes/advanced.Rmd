@@ -1238,6 +1238,109 @@ is what cyRAVEN resolves from `$PnS`.
 | `flowjo/` | UMAP-annotated FCS, written by `--flowjo-export` |
 | `config_derived.yaml` | Derived parameters, written by `--write-config` |
 | `sample_map_template.csv` | Written by `--write-sample-map` |
+| `gate_adjustments.csv` | One row per hierarchy gate `--auto-fix-gates` skipped, with `threshold_not_applied`, `pct_of_parent_kept` and the reason. Empty without the flag |
+
+#### Gate adjustments
+
+Written only under `--auto-fix-gates`, and the one table to read before any
+frequency from a run that used it, because a skipped gate changes every count
+beneath it.
+
+| Column | Meaning |
+|---|---|
+| `sample_id`, `gate`, `marker` | Which cut, in which sample |
+| `threshold_source` | Why it was eligible. `quantile_fallback` means no density minimum was found, so the cut came from a percentile |
+| `threshold_not_applied` | The number that would have been used. Kept so the decision is auditable rather than merely reported |
+| `action` | `skipped`, with the parent carried through unchanged |
+| `pct_of_parent_kept` | What the gate retains after the decision. 100 when it was skipped |
+| `reason` | The rule that fired, in words |
+
+Two rules put a gate here. A threshold that came from `quantile_fallback` has its
+retention fixed by the fallback constant rather than by the data, so it keeps the
+same share of the parent whatever the sample holds. And a gate retaining less
+than 5% of its parent is misplaced whatever its source says, because a viability
+or CD45 gate that discards nineteen cells in twenty is not measuring what it
+claims to.
+
+Population markers are deliberately untouched. A quantile fallback on CD19 is a
+poor threshold, but "no threshold" does not mean "every cell is a B cell", so
+this repairs the hierarchy and leaves the reason a specification may describe few
+cells exactly where it was.
+
+### 10d. Externally measured cell counts
+
+Written by `--total-counts`. A share is constrained to sum to 100, so a frequency
+table cannot distinguish one population expanding from every other contracting.
+A measured yield per acquisition is what separates the two.
+
+| File | Content |
+|---|---|
+| `total_counts.csv` | The yields as parsed and matched: `patient_raw`, `timepoint`, `total_cells`, `sample_id`. One row per acquisition that matched |
+| `total_counts_raw.csv` | The sheet flattened exactly as read, before any header or block interpretation. Open this first when a number looks wrong: it separates a reading problem from a matching one |
+| `total_counts_qc.png` | **Read this before anything derived from it.** The yields on a log axis. Everything downstream inherits their error, and a yield in the wrong unit lands decades off the median here while staying invisible in the derived table |
+| `absolute_vs_share.png` | The two measures side by side per population. Where a global depletion is visible as the thing a share cannot express |
+| `absolute_vs_share_by_timepoint.png` | The same, once per visit, under `--split-by-timepoint` |
+| `explore_total_counts_qc.png`, `explore_absolute_vs_share.png` | The twins of those two inside `explore/` |
+
+`population_frequencies.csv` gains `total_cells`, `cells_absolute` and
+`count_basis`; where the sheet carries `blood_volume_ml` it gains `cells_per_ml`
+as well, which is the column to read across timepoints because the draws differ
+in volume.
+
+`count_basis` records the route on every row that carries one. Treat
+`cells_absolute` as **dual-platform**: one measurement from this run multiplied
+by one from an instrument it never saw. Published interlaboratory CVs for that
+route are roughly 20-33%, against 10-16% for single-platform bead counting, so a
+difference smaller than that is unresolved. Shares are never overwritten.
+
+### 10e. Clinical variables
+
+Written by `--clinical-columns`. One figure per variable, plus the effects across
+populations.
+
+| File | Content |
+|---|---|
+| `clinical_<variable>.png` | One figure per variable named to the flag, showing the association with every population |
+| `clinical_effects_<variable>.png` | The effect sizes for that variable with their bootstrap intervals, populations ordered by effect |
+| `clinical_association.csv` | Every variable against every population: the test chosen from the column's type, `estimate`, `effect`, `ci_low`, `ci_high`, `p_value`, `p_adj_BH`, and `underpowered` |
+| `clinical_association_markers.csv`, `.png` | The same against marker expression rather than abundance |
+| `clinical_variables_correlation.png` | **Read this first.** p-values are adjusted within each variable on the assumption that the variables are separate questions, and this is where you see whether they are |
+| `clinical_landscape.png` | Every clinical variable and population on one grid, columns ordered by timepoint then study group |
+| `clinical_timepoint.png`, `clinical_infection_focus.png` | A categorical clinical column gets the same treatment as a numeric one, with the test following the type |
+
+`n_patients` and `repeated_measures` on every row say what the test actually had:
+a variable that is a property of the donor is tested at the donor level even when
+several acquisitions carry it, because the unit of replication is the donor.
+
+### 10f. The figure set per visit
+
+Written by `--split-by-timepoint` into `by_timepoint/<level>/`, plus the paired
+views that need every visit at once and so stay in the run directory.
+
+| File | Content |
+|---|---|
+| `by_timepoint/<level>/` | The whole figure set again, restricted to that visit |
+| `timepoint_trajectories_pct_of_cd45_pos.png` | One line per patient across visits, on share |
+| `timepoint_trajectories_cells_absolute.png` | The same on absolute cell number, with `--total-counts` |
+| `timepoint_trajectories_cells_per_ml.png` | The same per millilitre, where `blood_volume_ml` is supplied. This is the one to read across visits, because the draws differ in volume |
+| `timepoint_subset_balance.png` | Subset composition by visit |
+| `timepoint_marker_intensity.png` | Marker expression by visit |
+| `functional_markers_by_timepoint.png`, `population_ratios_by_timepoint.png` | Per-visit twins of the pooled figures |
+| `umap_markers_<level>.png` | The marker grid restricted to one visit, on the same embedding |
+
+The embedding, the thresholds and the statistics are **not** recomputed per
+visit: only the rows drawn are restricted, so a position on one visit's UMAP is
+the same position on another's and a threshold is the same cut.
+
+### 10g. What explore writes back
+
+| File | Content |
+|---|---|
+| `explore_cluster_identity.csv`, `.png` | Which declared population each cluster corresponds to, scored by F1 with `precision` and `recall` beside it, plus `pct_catch_all` and a `call` |
+| `explore_cluster_subsets.csv` | The immune subset each cluster's own marker profile matches, with the markers that decided it and the margin over the runner-up |
+| `explore_cluster_median_heatmap.png` | Scaled median expression per cluster, the direct equivalent of what a tool with no gating step produces |
+| `spec_gaps.csv` | Under `--maybe-learn`: what the specification does not cover, one row per issue with `subject`, `detail` and `action` |
+| `suggested_config_next_run.yaml` | The declared specification plus a draft entry per uncovered cluster, in runnable config format. A draft: the names are placeholders and nothing in the run that writes it uses it |
 
 #### The `--absolute-counts` input
 

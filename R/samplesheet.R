@@ -46,8 +46,13 @@
 samplesheet_columns <- function() {
   list(
     required    = "file",
+    # blood_volume_ml is per ACQUISITION rather than per subject: the same
+    # patient's d0 and d7 draws are different volumes, and declaring it a
+    # subject attribute would make that difference a conflict and stop the run.
+    # pipeline.R divides cells_absolute by it to get cells_per_ml.
     acquisition = c("file", "well", "sample_id", "patient_id", "panel",
-                    "timepoint", "is_control", "fmo_for", "control_group"),
+                    "timepoint", "is_control", "fmo_for", "control_group",
+                    "blood_volume_ml"),
     # Recognised by name here so that the sheet needs no translation step. A
     # German header still works: it is resolved through default_column_map()
     # exactly as in a standalone patient table.
@@ -259,9 +264,22 @@ read_samplesheet <- function(path, fcs_files, column_map = default_column_map(),
 
 #' Write a sample-sheet template covering every input file
 #'
-#' Emits the reserved columns with the filename-derived identifiers filled in
+#' Emits EVERY reserved column, with the filename-derived identifiers filled in
 #' and the rest blank, so the user edits a sheet that already accounts for every
 #' file rather than assembling one and discovering an omission at run time.
+#'
+#' WHY EVERY COLUMN AND NOT A USEFUL SUBSET. The template used to carry nine of
+#' the reserved columns. The rest are read by the pipeline exactly the same way,
+#' but a user only learns they exist by reading the Inputs chapter, so a run
+#' that could have reported cells per millilitre or used an FMO control instead
+#' silently did neither. A blank column costs one empty field and is deleted in
+#' a second; an absent column costs a re-run. Blank columns are ignored, so a
+#' sheet returned untouched behaves exactly as the nine-column one did.
+#'
+#' `count.<Population>` columns are emitted only for populations the caller
+#' names, because the column is keyed by a population that has to exist. With
+#' none supplied one commented example header is written instead, so the format
+#' is visible without inventing a population.
 #'
 #' @param fcs_files The fcs files.
 #' @param path File path to write.
@@ -272,17 +290,49 @@ write_samplesheet_template <- function(fcs_files, path, sample_ids = NULL,
                                        populations = character(0)) {
   S <- samplesheet_columns()
   ids <- sample_ids %||% vapply(basename(fcs_files), derive_sample_id, "", kw = NULL)
+  n <- length(fcs_files)
+  blank <- rep("", n)
+
+  # Acquisition columns: a property of this tube. They may differ between two
+  # acquisitions of one patient.
   tmpl <- data.frame(
-    file = basename(fcs_files), sample_id = ids, patient_id = ids,
-    is_control = "FALSE", timepoint = "", panel = "",
-    cohort = "", sex = "", age_years = "",
+    file = basename(fcs_files), sample_id = ids, well = blank,
+    patient_id = ids, panel = blank, timepoint = blank,
+    is_control = "FALSE", fmo_for = blank, control_group = blank,
+    blood_volume_ml = blank,
     stringsAsFactors = FALSE)
-  for (p in populations) tmpl[[paste0(S$count_prefix, p)]] <- ""
+
+  # Subject columns: a property of the donor, repeated on each of that donor's
+  # rows. cyRAVEN stops rather than choosing when two rows disagree.
+  for (cn in c("cohort", "sex", "age_years", "date_of_birth",
+               "height_cm", "weight_kg", "infection_focus", "wbc_per_ul"))
+    tmpl[[cn]] <- blank
+
+  if (length(populations)) {
+    for (p in populations) tmpl[[paste0(S$count_prefix, p)]] <- blank
+  } else {
+    tmpl[[paste0(S$count_prefix, "YourPopulation")]] <- blank
+  }
+
   write.csv(tmpl, path, row.names = FALSE, na = "")
-  log_msg("wrote sample sheet template: ", path, " (", nrow(tmpl), " row(s))")
+  log_msg("wrote sample sheet template: ", path, " (", nrow(tmpl), " row(s), ",
+          ncol(tmpl), " column(s))")
+  log_msg("  every reserved column is present and blank. Blank is ignored, so ",
+          "delete what you do not have rather than filling it in")
+  log_msg("  acquisition: sample_id, well, patient_id, panel, timepoint, ",
+          "is_control, fmo_for, control_group, blood_volume_ml")
+  log_msg("  subject: cohort, sex, age_years, date_of_birth, height_cm, ",
+          "weight_kg, infection_focus, wbc_per_ul")
+  log_msg("  count.<Population>: an externally measured count for that ",
+          "population. Rename the example to a population your config declares")
+  log_msg("  a clinical measurement (a severity score, a laboratory value, an ",
+          "outcome) is NOT reserved: add it under its own name and pass it to ",
+          "--clinical-columns")
+  log_msg("  a whole-sample cell yield is a separate file, --total-counts, ",
+          "because it is keyed by patient and timepoint rather than by file")
   log_msg("  fill in patient_id, cohort and any study variable, then re-run ",
           "with --samples ", path)
-  log_msg("  every column is documented in the Inputs article; ",
+  log_msg("  every column is documented in the Get started chapter; ",
           "--check validates the sheet without running the analysis")
   invisible(tmpl)
 }

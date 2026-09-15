@@ -63,6 +63,26 @@ run_cyraven_impl <- function(opt) {
   opt <- fill_option_defaults(opt)
   set.seed(opt$seed)
   fcs <- resolve_input_files(opt)
+
+  # ---- modes that write one file and analyse nothing ------------------------
+  # These return before the output directory is touched, because none of them
+  # needs one. Registering the manifest first meant its exit handler fired on
+  # the way out and tried to write into the default `results`, which is a
+  # relative path that does not exist in a container whose working directory is
+  # read-only -- so a successful `--write-samples` ended with a WARNING about a
+  # file the user never asked for. --list-channels runs before the config is
+  # parsed, deliberately: it answers "what do I write in the config", so
+  # requiring one would be circular.
+  if (!is.null(opt$write_sample_map)) {
+    write_sample_map_template(fcs, opt$write_sample_map); return(invisible(NULL))
+  }
+  if (!is.null(opt[["write_samples", exact = TRUE]])) {
+    write_samplesheet_template(fcs, opt$write_samples); return(invisible(NULL))
+  }
+  if (isTRUE(opt$list_channels)) {
+    list_channels(fcs); return(invisible(NULL))
+  }
+
   dir.create(opt$outdir, showWarnings = FALSE, recursive = TRUE)
   log_step("INPUT: ", length(fcs), " FCS file(s) -> ", opt$outdir)
 
@@ -106,18 +126,6 @@ run_cyraven_impl <- function(opt) {
             status = if (.finished_ok) "completed" else "failed",
             started = .run_started), silent = TRUE)
   }, add = TRUE)
-
-  if (!is.null(opt$write_sample_map)) {
-    write_sample_map_template(fcs, opt$write_sample_map); return(invisible(NULL))
-  }
-  if (!is.null(opt[["write_samples", exact = TRUE]])) {
-    write_samplesheet_template(fcs, opt$write_samples); return(invisible(NULL))
-  }
-  # Before the config is parsed, deliberately: --list-channels answers "what do I
-  # write in the config", so requiring one to run it would be circular.
-  if (isTRUE(opt$list_channels)) {
-    list_channels(fcs); return(invisible(NULL))
-  }
 
   cfg <- if (!is.null(opt$config)) yaml::read_yaml(opt$config) else list()
   spec   <- cfg$populations       %||% default_population_spec()

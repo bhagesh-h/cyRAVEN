@@ -536,11 +536,23 @@ report_css <- function() {
   # a rendering fault. It is a flex sibling of the nav rather than absolutely
   # positioned inside it, so it cannot drift from the edge it belongs to and
   # cannot cover the nav's own scrollbar.
-  ".side-grip{position:sticky;top:0;flex:0 0 5px;height:100vh;cursor:col-resize;",
+  ".side-grip{position:sticky;top:0;flex:0 0 9px;height:100vh;cursor:col-resize;",
   "background:var(--panel);border-right:1px solid var(--line);",
   "transition:background .12s ease}",
-  ".side-grip:hover,.side-grip.drag{background:var(--accent);",
+  # A DRAG HANDLE HAS TO LOOK LIKE ONE. Styled as the divider alone it was
+  # indistinguishable from the border it replaced, so the sidebar was resizeable
+  # and nobody could tell. The grip bar is drawn at all times rather than on
+  # hover, because hover is not discoverable: you have to already suspect the
+  # thing is draggable to find out that it is.
+  ".side-grip:after{content:\"\";position:absolute;top:50%;left:50%;",
+  "transform:translate(-50%,-50%);width:3px;height:34px;border-radius:2px;",
+  "background:var(--line);filter:brightness(.82);",
+  "transition:background .12s ease,height .12s ease}",
+  ".side-grip:hover,.side-grip.drag{background:#e8ebf0;",
   "border-right-color:var(--accent)}",
+  ".side-grip:hover:after,.side-grip.drag:after{background:var(--accent);",
+  "filter:none;height:56px}",
+  ".side-grip:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}",
   # While dragging, the pointer crosses text and iframes; without this the
   # browser starts a text selection and the drag turns into a highlight.
   "body.resizing{user-select:none;cursor:col-resize}",
@@ -632,10 +644,10 @@ report_css <- function() {
   # z-index sits below the lightbox (99/100) so it cannot float over an
   # opened figure, and it is hidden until there is something to go back up to.
   "#cytop{position:fixed;right:1.15rem;bottom:1.15rem;z-index:90;",
-  "width:2.6rem;height:2.6rem;border-radius:50%;cursor:pointer;",
-  "border:1px solid var(--line);background:var(--bg);color:var(--mut);",
+  "width:2.9rem;height:2.9rem;border-radius:50%;cursor:pointer;",
+  "border:1px solid var(--accent);background:var(--bg);color:var(--accent);",
   "font-size:1.1rem;line-height:1;display:grid;place-items:center;",
-  "box-shadow:0 2px 8px rgba(12,14,18,.16);",
+  "box-shadow:0 2px 10px rgba(12,14,18,.22);font-weight:700;",
   "opacity:0;visibility:hidden;transform:translateY(.4rem);",
   "transition:opacity .16s ease,transform .16s ease,visibility .16s}",
   "#cytop.on{opacity:1;visibility:visible;transform:none}",
@@ -927,10 +939,13 @@ report_js <- function() {
   "if(e.target.open){var b=e.target.parentNode;",
   "if(b&&b.classList&&b.classList.contains('tab'))cyShow(b.id);}",
   "cySync();cyCur();},true);\n",
-  # BACK TO TOP. Shown once the reader is a screen and a half down, which is
-  # far enough that the masthead is gone and the button is worth its corner.
+  # BACK TO TOP. Shown once the masthead has scrolled away, which is the point
+  # at which there is something to go back to. The threshold was a screen and a
+  # half; but a report whose sections are all collapsed is only a couple of
+  # screens tall in total, so on the page a reader actually opens the button
+  # appeared a third of the way down and not before.
   "function cyTopSync(){var b=document.getElementById('cytop');if(!b)return;",
-  "b.classList.toggle('on',(window.pageYOffset||document.documentElement.scrollTop)>600);}\n",
+  "b.classList.toggle('on',(window.pageYOffset||document.documentElement.scrollTop)>300);}\n",
   "function cyTop(){var m=window.matchMedia('(prefers-reduced-motion:reduce)').matches;",
   "window.scrollTo({top:0,behavior:m?'auto':'smooth'});}\n",
   "window.addEventListener('scroll',cyTopSync,{passive:true});\n",
