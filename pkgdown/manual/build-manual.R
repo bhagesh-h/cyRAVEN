@@ -2,10 +2,10 @@
 # THE WHOLE DOCUMENTATION SITE AS ONE PDF
 # =============================================================================
 #
-# WHY THIS EXISTS. The site is fifteen articles that are read in an order, and a
+# WHY THIS EXISTS. The site is six chapters that are read in an order, and a
 # reader who wants the whole thing -- to read offline, to hand to a collaborator,
-# to attach to a submission -- has no way to get it. Fifteen browser prints
-# produce fifteen files with fifteen sets of page numbers and no cross-references.
+# to attach to a submission -- has no way to get it. Six browser prints
+# produce six files with six sets of page numbers and no cross-references.
 #
 # WHAT IT PRODUCES. `cyRAVEN-manual.pdf` in docs/, one chapter per site page, in
 # the reading order the navbar uses rather than alphabetically. The site links to
@@ -19,7 +19,7 @@
 # contents, which are the two reasons to want one file.
 #
 # WHY THE HEADINGS ARE SHIFTED. Each vignette starts its own headings at `#`.
-# Concatenated unchanged that yields fifteen level-one headings and no chapter
+# Concatenated unchanged that yields six level-one headings and no chapter
 # structure, so every `#` in a vignette body is pushed down one level and the
 # chapter title is inserted above it. The article's own title becomes the
 # chapter.
