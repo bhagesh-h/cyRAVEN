@@ -3,6 +3,28 @@ url: https://bhagesh-h.github.io/cyRAVEN
 template:
   bootstrap: 5
   light-switch: true
+  # WHY A TYPEFACE AT ALL. The default is whatever sans the reader's operating
+  # system supplies, which is legible and says nothing. These pages are long-form
+  # technical prose carrying tables of option names, marker symbols and file
+  # names, so the two things that matter are a comfortable reading measure and a
+  # monospace that distinguishes 1/l/I and 0/O. Source Sans 3 and JetBrains Mono
+  # are both open licensed, and `local: true` bundles them into the site rather
+  # than fetching them from a third party on every page view.
+  bslib:
+    base_font: {google: {family: "Source Sans 3", wght: [400, 600], local: true}}
+    heading_font: {google: {family: "Source Sans 3", wght: [600, 700], local: true}}
+    code_font: {google: {family: "JetBrains Mono", wght: [400, 500], local: true}}
+    primary: "#B4530C"
+    link-color: "#B4530C"
+    font-size-base: "1.0rem"
+    line-height-base: 1.65
+    headings-font-weight: 600
+    border-radius: "0.4rem"
+    # The hex sticker's orange at full strength fails WCAG AA on white for body
+    # text, so `primary` above is the darkened form that passes, and the bright
+    # original is kept for the wordmark and rules where it is decoration rather
+    # than something to be read.
+    bs-body-color: "#1f2328"
 
 # The licence in the sidebar is the GPLv3 BADGE, not a string and not a text
 # link. pkgdown prints the DESCRIPTION License field verbatim, and "GPL (>= 3)"
