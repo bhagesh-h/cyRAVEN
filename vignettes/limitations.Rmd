@@ -194,7 +194,7 @@ change, the reason is what has to change first.
 Nine methods available in comparable toolboxes are absent from cyRAVEN. Each
 section states the omission, the reasoning, and the condition under which it
 should be revisited. Where a method is required now, the
-[interoperability article](advanced.html#using-cyraven-with-cycondor) covers combined use with cyCONDOR.
+[Using cyRAVEN with cyCONDOR](advanced.html#using-cyraven-with-cycondor) covers combined use with cyCONDOR.
 
 ### 1. Harmony and CytoNorm
 
@@ -283,8 +283,7 @@ is not something to reimplement.
 
 ### 8. Cell-level testing
 
-Absent for the reason in section 1 of the [statistics
-article](advanced.html#statistics): event counts are set by acquisition duration, so a
+Absent for the reason in section 1 of the [Statistics](advanced.html#statistics): event counts are set by acquisition duration, so a
 test over pooled events derives its degrees of freedom from instrument time.
 Toolboxes providing a cell-level Wilcoxon distribute it with a warning against
 its use.

@@ -336,3 +336,57 @@ main .figure img, main p > img {
 [data-bs-theme="dark"] main p > code,
 [data-bs-theme="dark"] main li > code,
 [data-bs-theme="dark"] main td > code { background: rgba(255,255,255,0.07); }
+
+/* ===========================================================================
+   BREATHING ROOM
+   ---------------------------------------------------------------------------
+   The chapters alternate prose, tables and command blocks every few lines. At
+   the template's default spacing those three run together into one grey block:
+   the eye cannot tell where a paragraph ends and the command it introduces
+   begins, so the page reads as dense even though each individual element is
+   fine. The fix is space between elements, not smaller type.
+   =========================================================================== */
+
+main p { margin-bottom: 1.15rem; }
+main ul, main ol { margin-bottom: 1.25rem; }
+main li { margin-bottom: 0.4rem; }
+main li > p { margin-bottom: 0.55rem; }
+
+/* A command block is a different kind of object from the sentence above it, and
+   needs enough room that the reader sees it as one. */
+main div.sourceCode, main pre { margin: 1.25rem 0 1.5rem; }
+
+/* Consecutive command blocks -- the pull, then the tag, then the run -- are
+   steps in one sequence, so they sit closer to each other than to the prose. */
+main div.sourceCode + div.sourceCode { margin-top: -0.35rem; }
+
+/* A table and the sentence introducing it were running together. */
+main table { margin-top: 1.4rem; margin-bottom: 1.9rem; }
+main table th, main table td { line-height: 1.5; }
+
+/* Tighter inside a table than in prose: a cell is read on its own, and the
+   page-wide leading makes a 12-row reference table unnecessarily tall. */
+main table td { padding-top: 0.55rem; padding-bottom: 0.55rem; }
+
+/* A worked figure under the three claims. The first claim -- that a threshold
+   belongs to the sample it was derived from -- is the one a reader is most
+   likely to take on faith, and the one most easily shown: two samples, the same
+   marker, two different cuts. The caption is prose rather than a label, because
+   what matters is how to read the panel, not what it is called. */
+.cy-figure { margin: 2.25rem 0 2.5rem; }
+.cy-figure img {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--bs-border-color, #e5e7eb);
+  border-radius: 4px;
+}
+.cy-figure figcaption {
+  margin-top: 1rem;
+  font-size: 0.92rem;
+  line-height: 1.65;
+  color: var(--bs-secondary-color, #5b6470);
+  max-width: 76ch;
+}
+.cy-figure figcaption p { margin-bottom: 0.75rem; }
+.cy-figure figcaption p:last-child { margin-bottom: 0; }
+.cy-figure figcaption strong { color: var(--bs-body-color); }

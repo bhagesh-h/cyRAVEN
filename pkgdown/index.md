@@ -21,24 +21,50 @@ CRAN snapshot and Bioconductor 3.20
 
 <div class="cy-cards">
 <div class="cy-card">
-<h3>Gates derived, not transferred</h3>
-<p>Each threshold is placed at a density minimum inside its own sample. Copying
-one set of coordinates between samples does not remove operator variance, it
-converts it into a bias that tracks staining intensity.</p>
+<h3>Gates are derived, not transferred</h3>
+<p>Every threshold is placed at a density minimum inside the sample it applies
+to. Copying one set of coordinates between samples does not remove operator
+variance. It converts that variance into a bias that tracks staining
+intensity, which is harder to see because every sample then carries the same
+apparent boundary.</p>
 </div>
 <div class="cy-card">
-<h3>Uncertainty that propagates</h3>
-<p>Every cut is resampled from the events it came from and re-derived over the
-settings that placed it. A frequency separated by a clean gap and one sitting on
-a shoulder are not reported to the same precision.</p>
+<h3>Uncertainty is propagated, not discarded</h3>
+<p>Each cut is resampled from the events it was derived from and re-derived
+across the settings that placed it. The resulting spread reaches every
+frequency that reads it, so a population separated by a clean gap and one
+sitting on a shoulder are not reported to the same precision.</p>
 </div>
 <div class="cy-card">
-<h3>A specification that can be refuted</h3>
+<h3>The specification can be refuted</h3>
 <p>Explore mode clusters every eligible channel without reference to what you
 declared, which is the only way to find a population nobody named. Six
-diagnostics exist to contradict the specification.</p>
+diagnostics exist for the sole purpose of contradicting the specification.</p>
 </div>
 </div>
+
+<figure class="cy-figure">
+<img src="reference/figures/demo_gating_qc_example.png" alt="Two samples from the demonstration cohort, five markers each, with the derived threshold drawn on the distribution it came from">
+<figcaption>
+
+**What the first claim looks like in practice.** Two samples from the
+demonstration cohort, five markers each. The dashed line is the cut applied to
+that sample, drawn on the distribution it was derived from.
+
+Read it column by column. `CD45` in the top row sits just right of the peak,
+separating leukocytes from everything below them: a real density minimum, marked
+`valley`. The second row has three cuts marked `quantile_fallback (REVIEW)`,
+where no minimum was found and the cut came from a percentile instead. Those
+populations are still reported, with the fallback recorded in
+`thresholds_used.csv`, and they are the ones to check before quoting a number.
+
+Comparing the two rows is the point. The `CD14` cut is in a different place in
+each, because these are different samples with different staining and the
+correct cut genuinely differs. A fixed coordinate copied between them would be
+right for at most one.
+
+</figcaption>
+</figure>
 
 <div class="cy-quote">
 The unit of replication is the donor, not the event.
