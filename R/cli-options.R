@@ -285,6 +285,33 @@ build_option_list <- function() list(
   # study it is the view you want; on a cross-sectional one that happens to
   # record a collection date it is noise. The pooled figures are written either
   # way, so this adds a view rather than replacing one.
+  # WHY THIS IS OPT-IN. It changes where thresholds sit, and a threshold that
+  # moves moves every frequency beneath it. On the cohort it was written for it
+  # took quantile fallbacks from 65% of all cuts to under 1%, which is a large
+  # improvement and still a change to every number the run reports.
+  # WHY THIS IS NOT JUST --ignore-channels. Ignoring a channel drops it before
+  # anything sees it, so a population needing it becomes impossible everywhere.
+  # This keeps the marker for scoring and only removes it from the panel
+  # fingerprint, so one reagent added partway through a cohort does not split
+  # the run into two embeddings.
+  optparse::make_option("--panel-optional-markers", type = "character",
+              default = NULL, dest = "panel_optional_markers",
+              help = paste("comma-separated markers that do NOT define the",
+                           "panel. A marker stained in only some files normally",
+                           "splits the cohort into separate panels, each with",
+                           "its own embedding and figure set. Named here, the",
+                           "files stay one panel and one embedding, and a",
+                           "population needing the marker scores where it",
+                           "exists and is UNAVAILABLE where it does not.")),
+  optparse::make_option("--adaptive-gates", action = "store_true",
+              default = FALSE, dest = "adaptive_gates",
+              help = paste("choose each threshold by sweeping the kernel",
+                           "bandwidth and trying the tail and Otsu rules,",
+                           "scoring every candidate by how deep a density gap",
+                           "it sits in, instead of one fixed smoothing with a",
+                           "quantile fallback. Cuts are reported under the",
+                           "method that won, so thresholds_used.csv says how",
+                           "each one was placed.")),
   optparse::make_option("--split-by-timepoint", action = "store_true",
               default = FALSE, dest = "split_by_timepoint",
               help = paste("also write the whole figure set once per timepoint",

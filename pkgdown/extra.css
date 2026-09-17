@@ -74,287 +74,265 @@
   display: none;
 }
 
+
 /* ===========================================================================
-   READING A LONG TECHNICAL PAGE
+   THE READING SURFACE
    ---------------------------------------------------------------------------
-   The chapters run to a few thousand lines each, and they are read rather than
-   skimmed: someone is looking up what a column means or why a threshold moved.
-   Everything below serves that, and nothing below is decoration for its own
-   sake. The Bootstrap variables in _pkgdown.yml do type and colour; these are
-   the parts the variables cannot reach.
+   These chapters are looked things up in, not read through: someone wants to
+   know what a column means or why a threshold moved. Three rules follow from
+   that, and everything below is one of them.
+
+   1. SPACE AND TYPE CARRY THE STRUCTURE. Not rules, tints or boxes. A reader
+      scanning for a heading finds it by size and the air around it.
+   2. COLOUR IS A SIGNAL, NOT DECORATION. The accent marks things you can act
+      on -- a link, the current section -- and appears nowhere else. A tinted
+      panel that means nothing costs attention and returns none.
+   3. EVERY RULE EARNS ITS PIXELS. A border is drawn where content would
+      otherwise run together, and not to make a shape.
    =========================================================================== */
 
 /* MEASURE. Unconstrained, body text on a 1440px display runs past 120
-   characters a line and the eye loses the start of the next one. 72ch is the
+   characters and the eye loses the start of the next line. 72ch sits in the
    middle of the range typographic practice settles on. Tables, figures and code
    are exempt: those are scanned in two dimensions and a narrow column forces a
-   horizontal scrollbar onto content that would otherwise fit. */
-main > p,
-main > ul,
-main > ol,
-main > blockquote,
-main .section > p,
-main .section > ul,
-main .section > ol,
-main .section > blockquote {
+   scrollbar onto content that would otherwise fit. */
+main > p, main > ul, main > ol, main > blockquote,
+main .section > p, main .section > ul, main .section > ol, main .section > blockquote {
   max-width: 72ch;
 }
 
 /* HEADINGS. The default scale separates h2 from h3 by about two pixels, so a
-   chapter with four heading levels reads as one flat run of bold text. These
-   give each level a job: h2 opens a section and carries a rule, h3 is a topic
-   inside it, h4 is a labelled paragraph. */
+   chapter with four levels reads as one flat run of bold text. Size and space
+   do the separating; only h2 takes a rule, because a chapter section is the one
+   division worth drawing. */
 main h2 {
-  margin-top: 2.75rem;
-  padding-bottom: 0.35rem;
-  border-bottom: 2px solid var(--bs-border-color, #dee2e6);
-  font-size: 1.6rem;
-  letter-spacing: -0.01em;
+  margin-top: 3.25rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--bs-border-color, #e5e7eb);
+  font-size: 1.55rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
 }
 main h3 {
-  margin-top: 2rem;
-  font-size: 1.22rem;
+  margin-top: 2.25rem;
+  margin-bottom: 0.6rem;
+  font-size: 1.18rem;
+  font-weight: 600;
 }
 main h4 {
-  margin-top: 1.5rem;
-  font-size: 1.02rem;
+  margin-top: 1.75rem;
+  margin-bottom: 0.4rem;
+  font-size: 1rem;
+  font-weight: 600;
   color: var(--bs-secondary-color, #5b6470);
-  text-transform: none;
-  letter-spacing: 0.01em;
 }
 
-/* TABLES. These pages are mostly reference tables -- every option, every output
-   file, every column -- and the default is an unruled block of text where the
-   eye cannot follow a row across. A header rule, hairlines between rows and a
-   hover tint are the minimum that makes one scannable. `display: block` with
-   overflow is what stops a wide option table from widening the whole page. */
+/* TABLES. Most of this documentation is reference tables -- every option, every
+   output file, every column -- and the default is an unruled block where the eye
+   cannot follow a row across. A header rule and hairlines between rows are the
+   minimum that makes one scannable; there is no zebra striping, which adds ink
+   per row without adding information. `display: block` with overflow is what
+   stops a wide option table widening the whole page. */
 main table {
   display: block;
   overflow-x: auto;
   width: 100%;
-  margin: 1.1rem 0 1.4rem;
-  font-size: 0.93rem;
+  margin: 1.25rem 0 1.75rem;
+  font-size: 0.92rem;
   border-collapse: collapse;
 }
 main table thead th {
   position: sticky;
   top: 0;
-  background: var(--bs-tertiary-bg, #f8f9fa);
-  border-bottom: 2px solid var(--bs-border-color, #dee2e6);
+  background: var(--bs-body-bg, #fff);
+  border-bottom: 1.5px solid var(--bs-border-color, #d8dbe0);
   font-weight: 600;
   text-align: left;
   white-space: nowrap;
+  padding: 0.5rem 0.85rem;
 }
-main table th,
 main table td {
-  padding: 0.44rem 0.7rem;
-  border-bottom: 1px solid var(--bs-border-color-translucent, #e9ecef);
+  padding: 0.5rem 0.85rem;
+  border-bottom: 1px solid var(--bs-border-color-translucent, #eef0f2);
   vertical-align: top;
 }
-main table tbody tr:hover {
-  background: var(--bs-tertiary-bg, #f8f9fa);
-}
-/* The first column of a reference table is the thing being defined -- an option
-   name, a file name, a column name -- so it is the one a reader scans down. */
-main table td:first-child {
-  white-space: nowrap;
-  font-weight: 600;
-}
-main table td:first-child code {
-  font-weight: 500;
-}
+/* The first column is the thing being defined -- an option, a file, a column --
+   and is what a reader scans down, so it does not wrap mid-name. */
+main table td:first-child { white-space: nowrap; font-weight: 600; }
+main table td:first-child code { font-weight: 500; }
 
-/* CODE. A command block is meant to be copied, so it gets a quiet dark ground
-   that marks it as a thing to run rather than a thing to read. Inline code is
-   tinted instead of boxed: boxed inline code in a paragraph of marker names
-   turns the paragraph into a row of buttons. */
-main div.sourceCode,
-main pre {
-  border-radius: 0.4rem;
-  border: 1px solid var(--bs-border-color, #dee2e6);
+/* CODE. A command block is meant to be copied, so it is set apart by a quiet
+   ground rather than a border: one less line on the page for the same job.
+   Inline code is tinted rather than boxed, because boxed inline code turns a
+   paragraph of marker names into a row of buttons. */
+main div.sourceCode, main pre {
+  border: 0;
+  border-radius: 6px;
+  background: var(--bs-tertiary-bg, #f6f7f9);
 }
 main pre {
-  padding: 0.85rem 1rem;
-  font-size: 0.86rem;
-  line-height: 1.5;
+  padding: 0.9rem 1.05rem;
+  font-size: 0.85rem;
+  line-height: 1.55;
 }
-main p > code,
-main li > code,
-main td > code {
-  background: rgba(180, 83, 12, 0.07);
-  color: #8a3f09;
-  padding: 0.1em 0.34em;
-  border-radius: 0.25rem;
+main p > code, main li > code, main td > code {
+  background: var(--bs-tertiary-bg, #f1f3f5);
+  color: inherit;
+  padding: 0.1em 0.32em;
+  border-radius: 4px;
   font-size: 0.88em;
 }
 
-/* BLOCKQUOTE. Used in these chapters for the one-line claims that govern the
-   design ("The unit of replication is the donor"), so it should read as a
-   pull quote and not as an indent. */
+/* BLOCKQUOTE. Used here for the one-line claims that govern the design ("The
+   unit of replication is the donor"). A single rule and the space around it are
+   enough to mark it as a claim; a tinted panel would say it twice. */
 main blockquote {
-  border-left: 3px solid var(--cyraven-orange);
-  background: rgba(236, 116, 20, 0.05);
-  padding: 0.75rem 1.1rem;
-  margin: 1.4rem 0;
+  border-left: 2px solid var(--bs-border-color, #d8dbe0);
+  padding: 0.15rem 0 0.15rem 1.15rem;
+  margin: 1.75rem 0;
   font-size: 1.05rem;
+  color: var(--bs-body-color);
 }
 main blockquote p:last-child { margin-bottom: 0; }
 
-/* THE PAGE'S OWN CONTENTS. It is the only way around a chapter of this length,
-   so it is worth more than an unstyled list: the current section is marked and
-   the whole thing stays in view while the page scrolls under it. */
+/* THE PAGE'S CONTENTS. The only way around a chapter this long, so the current
+   section is marked -- and that mark is the one place the accent appears in the
+   body of the page. */
 #toc .nav-link {
-  padding: 0.2rem 0 0.2rem 0.75rem;
+  padding: 0.22rem 0 0.22rem 0.8rem;
   border-left: 2px solid transparent;
-  font-size: 0.9rem;
-  line-height: 1.4;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--bs-secondary-color, #5b6470);
 }
+#toc .nav-link:hover { color: var(--bs-body-color); }
 #toc .nav-link.active {
   border-left-color: var(--cyraven-orange);
+  color: var(--bs-body-color);
   font-weight: 600;
 }
 
-/* FIGURES. Gallery images are full-resolution output; a border keeps a figure
-   with a white ground from bleeding into the page. */
-main .figure img,
-main p > img {
-  border: 1px solid var(--bs-border-color, #dee2e6);
-  border-radius: 0.3rem;
-}
-
-/* DARK MODE. The tints above are mixed for a light ground and turn muddy on a
-   dark one, so they are restated rather than inherited. */
-[data-bs-theme="dark"] main p > code,
-[data-bs-theme="dark"] main li > code,
-[data-bs-theme="dark"] main td > code {
-  background: rgba(236, 116, 20, 0.16);
-  color: #f0a666;
-}
-[data-bs-theme="dark"] main blockquote {
-  background: rgba(236, 116, 20, 0.09);
+/* FIGURES. Gallery images are full-resolution output on a white ground, which
+   would otherwise bleed into the page. */
+main .figure img, main p > img {
+  border: 1px solid var(--bs-border-color, #e5e7eb);
+  border-radius: 4px;
 }
 
 /* ===========================================================================
    THE LANDING PAGE
    ---------------------------------------------------------------------------
-   Built from pkgdown/index.md rather than README.md, so the repository keeps a
-   README that reads correctly on GitHub while the site gets an opening that
-   orients someone who has just arrived. Three questions in order: what is this,
-   what does its output look like, and why is it built this way.
+   Built from pkgdown/index.md so the repository keeps a README that reads
+   correctly on GitHub. It answers three questions in order: what is this, what
+   does its output look like, why is it built this way.
+
+   The earlier version put the three claims in bordered cards with an orange top
+   rule and set the constraint in a tinted panel. Both were decoration standing
+   in for hierarchy: the cards said "these three things belong together", which
+   the grid already said, and the tint said "this is important", which the words
+   already said. They are columns and a rule now.
    =========================================================================== */
 
-.cy-hero {
-  padding: 1.25rem 0 2.25rem;
-  margin-bottom: 0.5rem;
-  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+.cy-hero { padding: 0.5rem 0 1.5rem; }
+
+/* pkgdown finds the first h1 on the home page and wraps it, with the package
+   logo, into its own .page-header INSIDE whatever markup that h1 sits in. So the
+   hero cannot supply its own logo without showing two; it supplies the layout
+   and lets the injected header be its first row. */
+.cy-hero .page-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin: 0 0 1.25rem;
+  padding: 0;
+  border: 0;
 }
-.cy-hero-text { min-width: 0; }
-.cy-hero h1 {
-  font-size: 2.6rem;
+.cy-hero .page-header img.logo { width: 116px; height: auto; flex: 0 0 auto; margin: 0; }
+.cy-hero .page-header h1 {
+  font-size: 2.75rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
-  margin: 0 0 0.5rem;
+  letter-spacing: -0.03em;
+  margin: 0;
 }
 .cy-hero-lede {
-  font-size: 1.12rem;
+  font-size: 1.15rem;
   line-height: 1.6;
   max-width: 62ch;
-  margin: 0 0 1.1rem;
+  margin: 0 0 1.5rem;
+  color: var(--bs-body-color);
 }
 .cy-hero-meta {
   font-size: 0.85rem;
   color: var(--bs-secondary-color, #5b6470);
-  margin: 0.9rem 0 0;
+  margin: 1.1rem 0 0;
 }
-.cy-hero-actions { margin: 0; display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.cy-hero-actions { margin: 0; display: flex; flex-wrap: wrap; gap: 0.55rem; }
 
-/* Buttons named cy-* rather than reusing .btn, because pkgdown's Bootstrap
-   restyles .btn between template versions and a site that follows it silently
-   would change appearance on an upgrade nobody asked for. */
+/* Named cy-* rather than reusing .btn: pkgdown's Bootstrap restyles .btn between
+   template versions, and a site that follows it silently changes appearance on
+   an upgrade nobody asked for. One filled button, because there is one thing a
+   first visitor should do; the rest are quiet. */
 .cy-btn {
   display: inline-block;
-  padding: 0.5rem 1.05rem;
-  border-radius: 0.4rem;
-  border: 1px solid var(--bs-border-color, #dee2e6);
-  font-weight: 600;
-  font-size: 0.95rem;
+  padding: 0.45rem 0.95rem;
+  border-radius: 6px;
+  border: 1px solid var(--bs-border-color, #d8dbe0);
+  font-weight: 500;
+  font-size: 0.93rem;
   text-decoration: none !important;
-  transition: background .12s ease, border-color .12s ease, color .12s ease;
+  color: var(--bs-body-color) !important;
+  transition: border-color .12s ease, background .12s ease;
 }
-.cy-btn:hover { border-color: var(--cyraven-orange); }
+.cy-btn:hover { border-color: var(--bs-secondary-color, #9aa3ad); }
 .cy-btn-primary {
   background: var(--cyraven-orange);
   border-color: var(--cyraven-orange);
   color: #fff !important;
+  font-weight: 600;
 }
-.cy-btn-primary:hover { filter: brightness(1.07); color: #fff !important; }
+.cy-btn-primary:hover { background: #d2650f; border-color: #d2650f; color: #fff !important; }
 
-/* The three claims the package actually rests on, so a reader who is deciding
-   whether to spend an afternoon on it can see them without reading an article. */
+/* The three claims the package rests on. Columns separated by space, with one
+   hairline above each heading to mark the division -- not boxes. */
 .cy-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1.1rem;
-  margin: 2rem 0 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 2rem 2.5rem;
+  margin: 2rem 0 2.25rem;
+  max-width: 100%;
 }
-.cy-card {
-  border: 1px solid var(--bs-border-color, #dee2e6);
-  border-top: 3px solid var(--cyraven-orange);
-  border-radius: 0.45rem;
-  padding: 1rem 1.1rem;
-  background: var(--bs-tertiary-bg, #f8f9fa);
+.cy-card { border-top: 1px solid var(--bs-border-color, #d8dbe0); padding-top: 0.9rem; }
+.cy-card h3 { font-size: 0.98rem; font-weight: 600; margin: 0 0 0.45rem; }
+.cy-card p {
+  font-size: 0.92rem;
+  line-height: 1.6;
+  margin: 0;
+  color: var(--bs-secondary-color, #5b6470);
 }
-.cy-card h3 {
-  font-size: 1.02rem;
-  margin: 0 0 0.45rem;
-  font-weight: 600;
-}
-.cy-card p { font-size: 0.93rem; margin: 0; line-height: 1.55; }
 
+/* The constraint that governs the design. Set larger and given room, which is
+   what makes a line read as a claim rather than a caption. */
 .cy-quote {
-  margin: 1.75rem 0 2.25rem;
-  padding: 1rem 1.25rem;
-  border-left: 3px solid var(--cyraven-orange);
-  background: rgba(236, 116, 20, 0.06);
-  font-size: 1.14rem;
-  font-weight: 600;
+  margin: 2.25rem 0 2.5rem;
+  padding: 0 0 0 1.15rem;
+  border-left: 2px solid var(--cyraven-orange);
+  font-size: 1.2rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
-/* The hero stacks below the width at which the logo and the lede stop fitting
-   side by side; the pkgdown sidebar has already dropped below the content by
-   then, so the page is one column either way. */
 @media (max-width: 768px) {
-}
-
-[data-bs-theme="dark"] .cy-card { background: rgba(255,255,255,0.03); }
-[data-bs-theme="dark"] .cy-quote { background: rgba(236, 116, 20, 0.10); }
-
-/* pkgdown finds the first h1 on the home page and wraps it, with the package
-   logo, into its own .page-header -- INSIDE whatever markup that h1 sits in. So
-   the hero cannot supply its own logo without ending up with two. It supplies
-   the layout instead, and the injected header becomes the hero's first row. */
-.cy-hero .page-header {
-  display: flex;
-  align-items: center;
-  gap: 1.35rem;
-  margin: 0 0 0.9rem;
-  padding: 0;
-  border: 0;
-}
-.cy-hero .page-header img.logo {
-  width: 132px;
-  height: auto;
-  margin: 0;
-  flex: 0 0 auto;
-}
-.cy-hero .page-header h1 {
-  font-size: 2.6rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin: 0;
-}
-@media (max-width: 768px) {
-  .cy-hero .page-header { gap: 0.9rem; }
-  .cy-hero .page-header img.logo { width: 92px; }
+  .cy-hero .page-header { gap: 1rem; }
+  .cy-hero .page-header img.logo { width: 84px; }
   .cy-hero .page-header h1 { font-size: 2.05rem; }
+  .cy-cards { gap: 1.5rem; margin: 2rem 0; }
 }
+
+/* DARK MODE. The tints above are all Bootstrap variables, which the template
+   already swaps, so only the two places using a literal need restating. */
+[data-bs-theme="dark"] main div.sourceCode,
+[data-bs-theme="dark"] main pre { background: rgba(255,255,255,0.04); }
+[data-bs-theme="dark"] main p > code,
+[data-bs-theme="dark"] main li > code,
+[data-bs-theme="dark"] main td > code { background: rgba(255,255,255,0.07); }

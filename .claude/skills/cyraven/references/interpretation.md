@@ -140,7 +140,7 @@ byte for byte.
 
 The comparison worth making: operator studies following the same convention
 report expanded uncertainty rising from about 12% on a three-gate strategy to
-about 16% on a five-gate one, with the first gate contributing most (Whitmore et
+about 16% on a five-gate one, with the first gate contributing most (Grant et
 al., 2021, *Methods Protoc* 4:24).
 
 ### 4.3 Cluster concordance

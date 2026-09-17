@@ -21,8 +21,22 @@ write_samplesheet_template(
 \item{populations}{Optional population names; one \code{count.} column each.}
 }
 \description{
-Emits the reserved columns with the filename-derived identifiers filled in
+Emits EVERY reserved column, with the filename-derived identifiers filled in
 and the rest blank, so the user edits a sheet that already accounts for every
 file rather than assembling one and discovering an omission at run time.
+}
+\details{
+WHY EVERY COLUMN AND NOT A USEFUL SUBSET. The template used to carry nine of
+the reserved columns. The rest are read by the pipeline exactly the same way,
+but a user only learns they exist by reading the Inputs chapter, so a run
+that could have reported cells per millilitre or used an FMO control instead
+silently did neither. A blank column costs one empty field and is deleted in
+a second; an absent column costs a re-run. Blank columns are ignored, so a
+sheet returned untouched behaves exactly as the nine-column one did.
+
+\verb{count.<Population>} columns are emitted only for populations the caller
+names, because the column is keyed by a population that has to exist. With
+none supplied one commented example header is written instead, so the format
+is visible without inventing a population.
 }
 \keyword{internal}

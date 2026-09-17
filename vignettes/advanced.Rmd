@@ -523,7 +523,7 @@ threshold itself travels under resampling.
 The published figures for manual gating are the comparison worth making. Operator
 studies following the same convention report expanded uncertainty rising from
 around 12% on a three-gate strategy to around 16% on a five-gate one, with the
-first gate contributing most of it (Whitmore et al. 2021, *Methods Protoc* 4:24).
+first gate contributing most of it (Grant et al. 2021, *Methods Protoc* 4:24).
 
 ### 5a. Detection limits
 
@@ -2150,10 +2150,13 @@ actually driven in, the per-donor score distribution, and the gate file.
 
 #### 3.4 Multi-site or longitudinal designs
 
-Analyst variance is the limiting factor. Operators gating identical files report
-population sizes differing by approximately 32%, and subjectivity accounts for up
-to 78% of technical variability once more than one analyst is involved
-([Cadwell et al., 2021](http://journal.pda.org/content/75/1/33)). Reagent
+Analyst variance is the limiting factor. Thirty-eight operators gating the same
+files carried a median expanded uncertainty of 3.6% under a gauge repeatability
+and reproducibility design
+([Grant et al., 2021](http://journal.pda.org/content/75/1/33)), and across 320
+routine clinical samples the residual dispersion was structured primarily by
+operator identity rather than by instrument configuration
+([Mead et al., 2026](https://doi.org/10.1002/cyto.b.70048)). Reagent
 standardisation alone is insufficient: EuroFlow reached between-centre
 coefficients of variation below 7% only after standardising the analysis
 ([Kalina et al., 2012](https://www.nature.com/articles/leu2012122)).
@@ -2254,15 +2257,20 @@ routine use as a cross-check
   Clustering method comparison. *Cytometry A* 89:1084.
 - [Kalina et al., 2012](https://www.nature.com/articles/leu2012122). EuroFlow
   standardisation. *Leukemia* 26:1986.
-- [Cadwell et al., 2021](http://journal.pda.org/content/75/1/33). Operator
-  contribution to technical variability. *PDA J Pharm Sci Technol* 75:33.
+- [Grant et al., 2021](http://journal.pda.org/content/75/1/33). Operator
+  subjectivity as measurement uncertainty: 38 participants, median expanded
+  uncertainty 3.6%. *PDA J Pharm Sci Technol* 75:33.
+- [Mead et al., 2026](https://doi.org/10.1002/cyto.b.70048). Interpretive
+  contribution to analytical variability, 320 clinical samples and six
+  technologists. *Cytometry B Clin Cytom*.
 - [Becht et al., 2018](https://academic.oup.com/bioinformatics/article/35/2/301/5042172).
   Hypergate: reverse-engineering a gating strategy from a cluster.
   *Bioinformatics* 35:301.
 - [Spidlen et al., 2015](https://onlinelibrary.wiley.com/doi/full/10.1002/cyto.a.22690).
   ISAC Gating-ML 2.0. *Cytometry A* 87:683.
-- [Whitmore et al., 2021](https://pmc.ncbi.nlm.nih.gov/articles/PMC8103269/).
-  Uncertainty analysis applied to manual gating. *Methods Protoc* 4:24.
+- [Grant et al., 2021](https://pmc.ncbi.nlm.nih.gov/articles/PMC8103269/).
+  Uncertainty analysis applied to manual gating; a diagrammatical protocol cut
+  between-participant variation by 57%. *Methods Protoc* 4:24.
 
 ## Driving it from Claude Code
 

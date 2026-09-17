@@ -120,6 +120,10 @@ density_valley <- function(x, bins = 220L, smooth = 4, peak_frac = 0.02,
 #' @param override Optional list for THIS sample and marker carrying
 #'   `threshold`, and optionally `reason` and `set_by`. See
 #'   [sample_override()].
+#' @param adaptive Sweep the kernel bandwidth and try the tail and Otsu rules
+#'   before falling back to a quantile. See [best_threshold()]. `FALSE` by
+#'   default, because it moves thresholds and a threshold that moves moves
+#'   every frequency beneath it.
 #' @param control_kind What `control_x` is, which decides the `source` string
 #'   recorded. `"control_q995"` for an unstained tube, `"fmo_q995"` for a
 #'   fluorescence-minus-one control. The arithmetic is identical; the two are
@@ -129,7 +133,8 @@ density_valley <- function(x, bins = 220L, smooth = 4, peak_frac = 0.02,
 resolve_threshold <- function(marker, x_parent, cfg_value = NULL,
                               control_x = NULL, control_q = 0.995,
                               fallback_q = 0.90, override = NULL,
-                              control_kind = c("control_q995", "fmo_q995")) {
+                              control_kind = c("control_q995", "fmo_q995"),
+                              adaptive = FALSE) {
   control_kind <- match.arg(control_kind)
   out <- function(threshold, source, needs_review,
                   reason = NA_character_, by = NA_character_)
@@ -146,6 +151,23 @@ resolve_threshold <- function(marker, x_parent, cfg_value = NULL,
     return(out(cfg_value, "config", FALSE))
   ctrl <- if (!is.null(control_x) && length(control_x) > 100L)
     as.numeric(quantile(control_x, control_q, na.rm = TRUE)) else NA_real_
+  # ADAPTIVE. One fixed smoothing is one hypothesis about how wide the kernel
+  # should be, and on a spectral panel it is usually the wrong one: two thirds of
+  # the cuts on the cohort this was written for came back as quantile fallbacks
+  # because the histogram was fitted to noise. `best_threshold()` sweeps the
+  # bandwidth, adds the tail and Otsu rules for the shapes a valley cannot
+  # describe, and scores every candidate the same way. Off by default because it
+  # moves thresholds, and a threshold that moves moves every frequency under it.
+  if (isTRUE(adaptive)) {
+    b <- best_threshold(x_parent, fallback_q = fallback_q)
+    if (is.finite(b$threshold)) {
+      if (is.finite(ctrl) && b$threshold < ctrl && !identical(b$source, "quantile_fallback"))
+        return(out(ctrl, paste0(control_kind, "_valley_rejected"), FALSE))
+      return(out(b$threshold, b$source,
+                 identical(b$source, "quantile_fallback")))
+    }
+  }
+
   v <- density_valley(x_parent)
   if (is.finite(v)) {
     if (is.finite(ctrl) && v < ctrl)

@@ -174,7 +174,21 @@ fig_absolute_vs_share <- function(ab, outfile, group_of = NULL, max_clusters = 1
     ggplot2::geom_point(position = ggplot2::position_jitter(width = 0.16, height = 0,
                                                             seed = 42L),
                         size = 0.9, alpha = 0.8) +
-    ggplot2::facet_grid(measure ~ population, scales = "free_y") +
+    # EVERY PANEL CARRIES ITS OWN NUMBERS. By default `facet_grid` draws the
+    # axis once per row, so only the leftmost panel is labelled and every other
+    # panel in that row is a shape with no scale -- and because `scales` is free,
+    # the left-hand numbers do not apply to its neighbours either. `axes =
+    # "all_y"` (ggplot2 >= 3.5) repeats the y axis on all of them.
+    #
+    # facet_wrap would also label every panel, but it puts both faceting
+    # variables in one strip, so each panel is captioned "pct_of_cd45_pos" over
+    # "Monocytes" and the population name is truncated. The grid keeps the
+    # population on the top strip and the measure on the right, read once.
+    ggplot2::facet_grid(measure ~ population, scales = "free_y",
+                        axes = "all_y",
+                        labeller = ggplot2::labeller(
+                          population = function(v) gsub("(.{1,14})(\\s|$)", "\\1\n",
+                                                        as.character(v)))) +
     # LOG SCALE ON BOTH ROWS. Population sizes in blood span orders of
     # magnitude -- T cells and regulatory T cells differ by a factor of ~20 in
     # share and rather more in cell number -- so on a linear axis the small
@@ -218,7 +232,13 @@ fig_absolute_vs_share <- function(ab, outfile, group_of = NULL, max_clusters = 1
     theme_cyto() + theme_panel_borders() +
     ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
                    legend.position = "none")
-  safe_ggsave(outfile, plot = p, width = max(8, 1.5 * length(keep) + 2),
-              height = 7.5, dpi = 200)
+  # At 1.5in per population "Non-classical monocytes" and "HLA-DR low monocytes"
+  # were clipped to "lassical monoc" and "DR low mono". The strip text now wraps
+  # at 14 characters, so a long name takes two short lines instead of one
+  # clipped one, and 1.8in per panel is enough to hold it. Sizing from the
+  # longest name instead produced a 59-inch figure, which is not a fix.
+  safe_ggsave(outfile, plot = p,
+              width = min(max(8, 1.8 * length(keep) + 2.5), 34),
+              height = 8.2, dpi = 200, limitsize = FALSE)
   invisible(outfile)
 }

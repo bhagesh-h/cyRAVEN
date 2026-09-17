@@ -191,6 +191,42 @@ emit_timepoint_figures <- function(ctx, dir, label) {
              file.path(dir, "cohort_composition_heatmap.png"),
              group_col = "sample_id", panel_label = plab, colors = cols))
   }
+
+  # ---- clinical variables, recomputed on this visit alone -------------------
+  # A severity score is not the same question on the day of admission and on day
+  # 7: pooling the visits averages two associations that can point opposite
+  # ways. These ARE recomputed per visit rather than subset from the pooled fit,
+  # because an association is a property of the samples it was fitted on.
+  #
+  # The n here is small -- a visit carries between five and nine donors on this
+  # cohort -- so every one of these is underpowered by the standard the pooled
+  # figure is held to, and `underpowered` in the table says so per row. They are
+  # written because the comparison between visits is the point, and a reader who
+  # wants it should not have to refit it by hand.
+  if (!is.null(ctx$clin) && length(ctx$clin) && !is.null(ctx$freq)) {
+    ca <- tryCatch(stats_clinical_association(ctx$freq, ctx$mfi, ctx$clin,
+                                              patient_of = ctx$patient_of),
+                   error = function(e) NULL)
+    if (!is.null(ca) && !is.null(ca$populations) && nrow(ca$populations)) {
+      utils::write.csv(ca$populations, file.path(dir, "clinical_association.csv"),
+                       row.names = FALSE)
+      written <- c(written, "clinical_association.csv")
+      emit("clinical_association.png",
+           fig_clinical_heatmap(ca$populations, "population",
+             file.path(dir, "clinical_association.png"),
+             title = paste0("Clinical variables against population abundance, ",
+                            label)))
+      for (cv in names(ctx$clin)) {
+        sfx <- gsub("[^A-Za-z0-9]+", "_", cv)
+        emit(paste0("clinical_", sfx, ".png"),
+             fig_clinical_detail(ctx$freq, ctx$clin[[cv]], cv,
+               file.path(dir, paste0("clinical_", sfx, ".png"))))
+        emit(paste0("clinical_effects_", sfx, ".png"),
+             fig_clinical_forest(ca$populations, "population", cv,
+               file.path(dir, paste0("clinical_effects_", sfx, ".png"))))
+      }
+    }
+  }
   written
 }
 
@@ -215,6 +251,20 @@ split_figures_by_timepoint <- function(ctx, outdir) {
     sub <- ctx
     for (nm in c("freq", "mfi", "fx", "rt", "tc", "ufreq"))
       sub[[nm]] <- subset_by_sample(ctx[[nm]], ids)
+    # The clinical variables restricted to this visit's samples. A severity
+    # score means something different on the day of admission and on day 7, so
+    # an association pooled over visits is an average of two questions. Every
+    # variable except the timepoint itself, which is constant here by
+    # construction and would empty the figure.
+    sub$clin <- if (!is.null(ctx$clin))
+      lapply(ctx$clin, function(v) v[names(v) %in% ids]) else NULL
+    if (!is.null(sub$clin)) {
+      keep <- vapply(sub$clin, function(v)
+        length(unique(v[!is.na(v)])) > 1L, logical(1))
+      sub$clin <- sub$clin[keep]
+      sub$clin[["timepoint"]] <- NULL
+    }
+    sub$patient_of <- ctx$patient_of
     sub$cells <- if (!is.null(ctx$cells) && "sample_id" %in% names(ctx$cells))
       ctx$cells[as.character(ctx$cells$sample_id) %in% ids, , drop = FALSE]
       else NULL

@@ -112,6 +112,9 @@ detect_viability_marker <- function(markers, explicit = NULL) {
 #'   returned by indexing the config's `sample_overrides` block by sample id.
 #'   See [sample_override()]. Absent by default, in which case every threshold is
 #'   derived exactly as before.
+#' @param adaptive Sweep the kernel bandwidth and try the tail and Otsu rules
+#'   before falling back to a quantile, for both hierarchy gates. See
+#'   [best_threshold()]. `FALSE` by default, because it moves thresholds.
 #' @param autofix Skip a hierarchy gate whose threshold came from
 #'   `quantile_fallback`, carrying its parent through unchanged. Such a gate
 #'   has its retention decided by the fallback constant rather than by the
@@ -123,7 +126,8 @@ detect_viability_marker <- function(markers, explicit = NULL) {
 apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,
                                  singlet_k = 3, viability_name = NULL,
                                  cd45_name = "CD45", transform = NULL,
-                                 overrides = NULL, autofix = FALSE) {
+                                 overrides = NULL, autofix = FALSE,
+                                 adaptive = FALSE) {
   ex <- rd$exprs; sc <- rd$scatter_cols; mc <- rd$marker_cols
   sg <- derive_scatter_gate(ex, sc)
   sb <- derive_singlet_band(ex, sc, sg$mask, k = singlet_k)
@@ -153,7 +157,8 @@ apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,
     vx <- tf(vmk)
     rr <- resolve_threshold(vmk, vx[sb$mask], cfg_threshold(cfg[[vmk]]),
                             control_ref[[vmk]], fallback_q = 0.90,
-                            override = sample_override(list(x = overrides), "x", vmk))
+                            override = sample_override(list(x = overrides), "x", vmk),
+                            adaptive = adaptive)
     v_thr <- rr$threshold; v_src <- rr$source
     # The candidate mask is built BEFORE the gate is judged, because one of the
     # two things being judged is how much it keeps. A "below" gate on a fallback
@@ -185,7 +190,8 @@ apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,
     cd45_x <- tf(cd45_name)
     rr <- resolve_threshold(cd45_name, cd45_x[live], cfg_threshold(cfg[[cd45_name]]),
                             control_ref[[cd45_name]],
-                            override = sample_override(list(x = overrides), "x", cd45_name))
+                            override = sample_override(list(x = overrides), "x", cd45_name),
+                            adaptive = adaptive)
     c_thr <- rr$threshold; c_src <- rr$source
     # An "above" gate on the same fallback keeps exactly 1 - fallback_q, 10%.
     # In PBMC every cell is a leukocyte, so CD45 has no negative mode to find

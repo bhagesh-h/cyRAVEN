@@ -14,7 +14,8 @@ apply_gate_hierarchy(
   cd45_name = "CD45",
   transform = NULL,
   overrides = NULL,
-  autofix = FALSE
+  autofix = FALSE,
+  adaptive = FALSE
 )
 }
 \arguments{
@@ -47,6 +48,10 @@ has its retention decided by the fallback constant rather than by the
 data, so it keeps a fixed share of the parent whatever the sample holds.
 \code{FALSE} by default, because skipping a gate changes every count in an
 affected file. See \code{gate_needs_autofix()}.}
+
+\item{adaptive}{Sweep the kernel bandwidth and try the tail and Otsu rules
+before falling back to a quantile, for both hierarchy gates. See
+\code{\link[=best_threshold]{best_threshold()}}. \code{FALSE} by default, because it moves thresholds.}
 }
 \value{
 list of masks, derived geometry, thresholds, and a tidy counts table

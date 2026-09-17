@@ -194,8 +194,23 @@ fig_marker_by_timepoint <- function(mfi, smap, outfile, max_pops = 8L) {
   agg <- stats::aggregate(median_asinh ~ population + marker + timepoint, d,
                           stats::median)
 
+  # HOW MANY PATIENTS IS EACH COLUMN. A cohort median drawn without its n reads
+  # as though every visit were equally supported, and here they are not: the
+  # later visits carry fewer patients than d0 because not every patient was
+  # sampled at every timepoint. Counted as DONORS rather than acquisitions,
+  # because the donor is the unit of replication.
+  npt <- stats::aggregate(patient_id ~ timepoint,
+                          unique(merge(d[, c("sample_id", "timepoint")],
+                                       smap[, c("sample_id", "patient_id")],
+                                       by = "sample_id")[, c("timepoint", "patient_id")]),
+                          function(v) length(unique(v)))
+  names(npt)[2] <- "n"
+  lab <- stats::setNames(sprintf("%s\nn = %d", npt$timepoint, npt$n),
+                         as.character(npt$timepoint))
+
   p <- ggplot2::ggplot(agg, ggplot2::aes(timepoint, marker, fill = median_asinh)) +
     ggplot2::geom_tile(colour = "white", linewidth = 0.25) +
+    ggplot2::scale_x_discrete(labels = function(v) lab[as.character(v)]) +
     ggplot2::facet_wrap(~ population, nrow = 1) +
     ggplot2::scale_fill_viridis_c(option = "C") +
     ggplot2::labs(title = "Marker intensity per population, by timepoint",
@@ -203,7 +218,10 @@ fig_marker_by_timepoint <- function(mfi, smap, outfile, max_pops = 8L) {
                                    "intensity; split by timepoint rather than",
                                    "pooled, so a shift shared by every patient",
                                    "is visible"),
-                  x = NULL, y = NULL, fill = "median\n(asinh)") +
+                  x = NULL, y = NULL, fill = "median\n(asinh)",
+                  caption = paste0("n = patients sampled at that visit (",
+                                   paste(sprintf("%s: %d", npt$timepoint, npt$n),
+                                         collapse = "; "), ")")) +
     theme_cyto() + theme_panel_borders()
   safe_ggsave(outfile, plot = p,
               width = max(9, 1.7 * length(big) + 2.5),

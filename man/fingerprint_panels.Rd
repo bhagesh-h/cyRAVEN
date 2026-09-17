@@ -4,12 +4,16 @@
 \alias{fingerprint_panels}
 \title{Group files into panels by their exact marker set}
 \usage{
-fingerprint_panels(reads, labels = NULL)
+fingerprint_panels(reads, labels = NULL, optional = character(0))
 }
 \arguments{
 \item{reads}{Named list of objects returned by \code{\link[=read_fcs_resolved]{read_fcs_resolved()}}.}
 
 \item{labels}{Vector of labels, one per row of coords.}
+
+\item{optional}{Marker names that do NOT take part in the fingerprint, so a
+reagent present in only some files does not split the cohort into two
+panels. Scored where present, UNAVAILABLE where absent. Default none.}
 }
 \value{
 list(assignment = named character (sample_id -> panel), panels = list)
