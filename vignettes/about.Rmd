@@ -233,7 +233,7 @@ shift confined to a subset moves one and not the other.
 Six outputs constrain interpretation of the preceding stages: threshold drift,
 gate and counting uncertainty, phenotype concordance, gate against cluster
 concordance, learned gate geometry, and conformance against a baseline. The
-[diagnostics article](advanced.html#diagnostics-in-reading-order) covers each in full.
+[Diagnostics](advanced.html#diagnostics-in-reading-order) covers each in full.
 
 `batch_mixing_report()` quantifies batch structure in the embedding against a
 permutation null and reports Cramér's *V* between batch and group. Correction

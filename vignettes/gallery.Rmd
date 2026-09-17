@@ -194,8 +194,8 @@ The singlet gate is skipped, since it needs FSC-H and FSC-A to be distinct.
 seven remain.
 
 Which file each figure comes from, and which flag produces it, is in the
-[Output article](advanced.html#every-output-file). The order to read them in is in the
-[Diagnostics article](advanced.html#diagnostics-in-reading-order) and is reproduced by `report.html`.
+[Every output file](advanced.html#every-output-file). The order to read them in is in the
+[Diagnostics](advanced.html#diagnostics-in-reading-order) and is reproduced by `report.html`.
 
 ## 1. Before any number
 
@@ -612,7 +612,7 @@ error or a sample-name mismatch is caught.
 They are absent here because the cohort has no volumetric measurement, and a
 count invented to fill the gap would be indistinguishable in the rendered figure
 from a measured one. The input format is documented in the
-[Output article](advanced.html#every-output-file).
+[Every output file](advanced.html#every-output-file).
 
 ## Where the clinical figure designs come from
 

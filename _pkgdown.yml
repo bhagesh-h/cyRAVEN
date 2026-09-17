@@ -17,7 +17,11 @@ template:
     primary: "#B4530C"
     link-color: "#B4530C"
     font-size-base: "1.0rem"
-    line-height-base: 1.65
+    # 1.65 is comfortable for a paragraph and tight for a page that alternates
+    # prose, tables and command blocks every few lines, which is what these
+    # chapters do. The extra leading is what stops a reference table and the
+    # sentence introducing it reading as one block.
+    line-height-base: 1.75
     headings-font-weight: 600
     border-radius: "0.4rem"
     # The hex sticker's orange at full strength fails WCAG AA on white for body
