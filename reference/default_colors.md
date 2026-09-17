@@ -1,0 +1,19 @@
+# Every colour this script draws with, in one place
+
+WHY A CONFIG-DRIVEN DEFAULTS LIST RATHER THAN LITERALS SCATTERED THROUGH
+EACH FIGURE FUNCTION: re-theming used to mean editing R code at a dozen
+call sites, with no guarantee of catching every one. Every figure
+function below takes a `colors = fcs_colors()` parameter (default
+arguments are resolved at CALL time in R, so a run that overrides COLORS
+via –config, see apply_color_config() in main(), changes what every
+later figure call picks up with no other code change) and reads
+exclusively from this list – no hex code or named colour is hardcoded
+anywhere past this point. Override any subset from –config's `colors:`
+block; unset keys keep these defaults (see write_config(), which
+round-trips the resolved list back out as YAML).
+
+## Usage
+
+``` r
+default_colors()
+```

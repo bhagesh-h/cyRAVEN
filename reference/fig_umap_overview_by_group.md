@@ -1,0 +1,99 @@
+# Combined + per-group UMAP small multiples
+
+WHAT: for each colouring fig_umap_overview() already draws (gated
+population, sample, and discovered covariates – excluding the group
+column itself), one FACETED ROW: "All samples" first (every group pooled
+– the same view fig_umap_overview() shows), then one facet per resolved
+group, each restricted to that group's cells on the same shared axes.
+
+## Usage
+
+``` r
+fig_umap_overview_by_group(
+  cells,
+  outfile,
+  group_col,
+  panel_label = "",
+  covariates = NULL,
+  feature_cols = character(0),
+  dpi = 200,
+  colors = fcs_colors()
+)
+```
+
+## Arguments
+
+- cells:
+
+  data.frame with umap_1, umap_2, population_label, sample_id, and the
+  resolved group column.
+
+- outfile:
+
+  Path to write the figure to.
+
+- group_col:
+
+  column in `cells` defining the groups (e.g. "cohort"). Returns NULL
+  (writes nothing) when it resolves to fewer than 2 groups – there is
+  nothing to compare side by side.
+
+- panel_label:
+
+  Marker-panel name added to the figure title; empty for none. Default
+  `""`.
+
+- covariates:
+
+  Column names in the patient table to screen as confounders.
+
+- feature_cols:
+
+  The feature cols. Default `character(0)`.
+
+- dpi:
+
+  Resolution in dots per inch. May be reduced automatically to respect
+  the raster ceiling; see
+  [`safe_ggsave()`](https://bhagesh-h.github.io/cyRAVEN/reference/safe_ggsave.md).
+  Default `200`.
+
+- colors:
+
+  Named list of colours; defaults to the package palette. See
+  [`fcs_colors()`](https://bhagesh-h.github.io/cyRAVEN/reference/fcs_colors.md).
+  Default
+  [`fcs_colors()`](https://bhagesh-h.github.io/cyRAVEN/reference/fcs_colors.md).
+
+## Details
+
+WHY A SEPARATE FIGURE, NOT A CHANGE TO fig_umap_overview(): that figure
+answers "what does the pooled embedding look like"; this one answers
+"does any group's embedding look different from the others" – the same
+split section 8.1 draws between population_frequencies.png and
+group_comparison.png, applied to the embedding itself instead of to
+abundance.
+
+WHY facet_wrap() PER ROW, NOT ONE PANEL PER (colouring x group)
+HAND-BUILT WITH patchwork: an earlier version built every small panel as
+its own ggplot object with its own manually-sized title and legend, then
+tiled them with patchwork::wrap_plots(). It looked fine on short
+synthetic group names but collapsed into an unreadable mess on this
+study's real group names (a long cohort label, say) – long strip text
+has nowhere fixed-size manual titles can absorb it. facet_wrap() is the
+same mechanism umap_density_by_group.png already uses successfully: ONE
+ggplot object per row, ONE colour scale, ONE legend, and ggplot's own
+(far more battle-tested) strip-label layout instead of a hand-rolled
+one.
+
+WHY the "All samples" facet is a literal duplicate of every group's
+rows, not a separate panel bolted on: a single shared scale_colour\_\*()
+only exists once you give ggplot one data frame and one aesthetic
+mapping to compute it from. Duplicating the pooled rows under a
+synthetic group level means
+population_colours()/scale_colour_viridis_c() sees every level that
+exists ANYWHERE, so a population missing from one group keeps its colour
+rather than shifting every alphabetically-later population in that
+facet. facet_wrap()'s default `scales = "fixed"` gives every facet the
+same x/y range for the same reason – coordinates only mean the same
+thing across panels if the axes are literally the same.

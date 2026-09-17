@@ -1,0 +1,74 @@
+# Build the UMAP input matrix and run the embedding
+
+WHAT: assembles an asinh-transformed, per-feature-scaled matrix from the
+per-sample subsamples and returns UMAP coordinates. WHY: scaling is
+computed on the GATED, subsampled matrix only. The template z-scored a
+debris-dominated matrix, so its feature means and SDs described noise
+rather than cell populations. Robust scaling (median / MAD) is used by
+default because marker distributions are bimodal, and an
+outlier-sensitive mean/SD compresses the informative separation.
+
+## Usage
+
+``` r
+run_umap(
+  mat,
+  scale_method = "robust",
+  n_neighbors = 30L,
+  min_dist = 0.3,
+  metric = "euclidean",
+  n_epochs = 200L,
+  seed = 42L,
+  n_threads = max(1L, parallel::detectCores() - 1L),
+  ret_model = FALSE
+)
+```
+
+## Arguments
+
+- mat:
+
+  numeric matrix, cells x features, already asinh-transformed.
+
+- scale_method:
+
+  "robust" (median/MAD), "zscore", or "none".
+
+- n_neighbors, min_dist, metric, n_epochs:
+
+  uwot parameters.
+
+- seed:
+
+  RNG seed for reproducible coordinates.
+
+- n_threads:
+
+  threads for uwot.
+
+- ret_model:
+
+  if TRUE, ask uwot to keep the trained model so later batches can be
+  PROJECTED into this same embedding instead of re-embedded from scratch
+  (see save_umap_model()/project_umap() below).
+
+  DEFAULT FALSE, AND THE DEFAULT PATH IS UNCHANGED from the baseline –
+  same call, same arguments, same coordinates.
+
+  TURNING IT ON CHANGES THE COORDINATES. Measured on 3,000 x 6 synthetic
+  cells at a fixed seed: each setting is perfectly reproducible with
+  itself, but ret_model = TRUE and ret_model = FALSE give different
+  embeddings of the same data (max coordinate difference 3.7, per-axis
+  correlation 0.96). uwot takes a different internal path when it has to
+  build and retain the nearest-neighbour index, and that path consumes
+  the RNG stream differently. The embedding is equally valid – it is not
+  a degraded one – but it is not the SAME picture, so clusters may be
+  numbered differently and islands may sit elsewhere on the page.
+
+  CONSEQUENCE FOR –save-umap-model: adding that flag to a finished
+  analysis re-draws the UMAP. Decide to persist the model at the START
+  of a study, not after the figures have been circulated.
+
+## Value
+
+list(coords = 2-column matrix, params = list of settings used)
