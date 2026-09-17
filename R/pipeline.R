@@ -307,7 +307,12 @@ run_cyraven_impl <- function(opt) {
       reads[[rd$sample_id]] <- rd
     }
   }
-  fpr <- fingerprint_panels(reads)
+  .opt_mk <- if (!is.null(opt$panel_optional_markers))
+    trimws(strsplit(opt$panel_optional_markers, ",")[[1]]) else character(0)
+  if (length(.opt_mk))
+    log_msg("  panel fingerprint ignores: ", paste(.opt_mk, collapse = ", "),
+            " (scored where present, UNAVAILABLE where absent)")
+  fpr <- fingerprint_panels(reads, optional = .opt_mk)
 
   # THE SUBSET LAYER IS NOT ADDED TO THE DECLARED SPECIFICATION.
   #
@@ -554,7 +559,8 @@ run_cyraven_impl <- function(opt) {
                                 viability_name = opt$viability_marker,
                                 transform = transforms[[p$name]],
                                 overrides = cfg_ovr[[s]],
-                                autofix = isTRUE(opt$auto_fix_gates))
+                                autofix = isTRUE(opt$auto_fix_gates),
+                                adaptive = isTRUE(opt$adaptive_gates))
       v <- staining_verdict(g, declared, min_cd45 * 1,
                             force_include = isTRUE(opt$include_qc_failed))
       log_msg("  ", v$verdict)
@@ -756,7 +762,8 @@ run_cyraven_impl <- function(opt) {
           fmo_sample = .fs, stringsAsFactors = FALSE)
       }
       rr <- resolve_threshold(m, tmat[g$masks$cd45_pos, m], cfg_thr[[m]]$threshold,
-                              cx, override = .ov, control_kind = .kind)
+                              cx, override = .ov, control_kind = .kind,
+                              adaptive = isTRUE(opt$adaptive_gates))
       thr[[m]] <- rr$threshold; tdet[[m]] <- rr
       qdens[[m]] <- tmat[g$masks$cd45_pos, m]
       thr_rows[[length(thr_rows) + 1L]] <- data.frame(
@@ -3159,6 +3166,12 @@ run_cyraven_impl <- function(opt) {
             markers      = .split_panels[[.pn]]$markers,
             feature_cols = .split_panels[[.pn]]$markers,
             panel_label  = if (.mp) .pn else "",
+            # The clinical variables and the donor map travel with the rest, so
+            # each visit's figures can refit the associations on that visit's
+            # samples instead of showing a cohort-level fit beside one visit's
+            # data. Both may be NULL; the split checks.
+            clin         = if (exists("clin", inherits = FALSE)) clin else NULL,
+            patient_of   = if (exists(".pat_of", inherits = FALSE)) .pat_of else NULL,
             colors       = fcs_colors()),
             opt$outdir)
         }

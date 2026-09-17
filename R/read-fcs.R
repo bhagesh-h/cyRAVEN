@@ -185,17 +185,39 @@ derive_sample_id <- function(fname, kw = NULL) {
 #'
 #' @param reads Named list of objects returned by [read_fcs_resolved()].
 #' @param labels Vector of labels, one per row of coords.
+#' @param optional Marker names that do NOT take part in the fingerprint, so a
+#'   reagent present in only some files does not split the cohort into two
+#'   panels. Scored where present, UNAVAILABLE where absent. Default none.
 #' @return list(assignment = named character (sample_id -> panel), panels = list)
 #' @export
-fingerprint_panels <- function(reads, labels = NULL) {
-  fp <- vapply(reads, function(r) paste(sort(names(r$marker_cols)), collapse = "|"), "")
+fingerprint_panels <- function(reads, labels = NULL, optional = character(0)) {
+  # MARKERS THAT DO NOT DEFINE THE PANEL. A reagent stained in some files and
+  # not others splits the cohort in two, and each half then gets its own
+  # embedding, its own figures and its own file names. That is the right answer
+  # when the two halves really are different panels. It is the wrong answer for
+  # one added antibody: CD16 on this cohort is in 12 files of 20, and letting it
+  # split the run buys three monocyte subsets at the cost of every UMAP position
+  # becoming incomparable between the halves, plus a doubled figure set.
+  #
+  # Naming a marker here keeps it out of the fingerprint, so the files stay one
+  # panel and one embedding, while the marker itself stays in `marker_cols` for
+  # the files that carry it. A population needing it scores on those files and
+  # is reported UNAVAILABLE on the rest, which is the same answer the split gave
+  # without the cost.
+  fp <- vapply(reads, function(r)
+    paste(setdiff(sort(names(r$marker_cols)), optional), collapse = "|"), "")
   uf <- unique(fp)
   pname <- if (!is.null(labels) && length(labels) == length(uf)) labels else
     paste0("panel_", seq_along(uf))
   assignment <- setNames(pname[match(fp, uf)], vapply(reads, `[[`, "", "sample_id"))
   panels <- lapply(seq_along(uf), function(i) {
     idx <- which(fp == uf[i])
-    list(name = pname[i], markers = sort(names(reads[[idx[1]]]$marker_cols)),
+    # The panel's marker list is the INTERSECTION over its files, not the first
+    # file's. With an optional marker the files in one panel no longer carry
+    # identical sets, and taking the first file's would put a marker into the
+    # embedding that 8 of 20 files cannot supply.
+    .common <- Reduce(intersect, lapply(reads[idx], function(r) names(r$marker_cols)))
+    list(name = pname[i], markers = sort(.common),
          samples = vapply(reads[idx], `[[`, "", "sample_id"), n_files = length(idx))
   })
   names(panels) <- pname

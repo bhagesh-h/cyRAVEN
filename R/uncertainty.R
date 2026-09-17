@@ -12,7 +12,8 @@
 # The consequence is not academic. Operator studies that follow the GUM
 # convention report expanded uncertainty rising from about 12% on a three-gate
 # strategy to about 16% on a five-gate one, with most of it entering at the first
-# gate (Cadwell et al. 2021; Whitmore et al. 2021, Methods Protoc 4:24). Those
+# gate (Grant et al. 2021, PDA J Pharm Sci Technol 75:33; Grant et al. 2021,
+# Methods Protoc 4:24). Those
 # figures describe humans placing gates. This file measures the same quantity for
 # the placement rule the package uses instead, which is the only version of the
 # number a reader of these outputs can act on.

@@ -10,14 +10,17 @@ marker threshold is derived inside the sample it applies to, populations are
 scored as Boolean conjunctions, and the result is tested against unsupervised
 structure recovered from the same cells.
 
-The design point: manual gating is the dominant source of technical variance in
-multi-sample immunophenotyping. Operators gating identical files report
-population sizes differing by about 32%, and analyst subjectivity accounts for up
-to 78% of technical variability once more than one person is involved (Cadwell et
-al., 2021, *PDA J Pharm Sci Technol* 75:33). Transferring fixed gate coordinates
-between samples does not remove that variance, it converts it into a bias that
-tracks staining intensity. cyRAVEN removes the analyst from threshold placement
-and quantifies what remains.
+The design point: manual gating is a measurable source of technical variance in
+multi-sample immunophenotyping. Thirty-eight operators gating the same files
+carried a median expanded uncertainty of 3.6% under a gauge repeatability and
+reproducibility design, with experience making no significant difference (Grant
+et al., 2021, *PDA J Pharm Sci Technol* 75:33), and across 320 routine clinical
+samples analysed by six technologists the residual dispersion was structured
+primarily by operator identity rather than by instrument configuration (Mead et
+al., 2026, *Cytometry B*, doi:10.1002/cyto.b.70048). Transferring fixed gate
+coordinates between samples does not remove that variance, it converts it into a
+bias that tracks staining intensity. cyRAVEN removes the analyst from threshold
+placement and quantifies what remains.
 
 Current version: 1.0.0, and the source tree is **ahead of it**. The published
 image installs 1.0.0; `NEWS.md` carries a development section on top of that with
@@ -380,6 +383,10 @@ number are opt-in. That rule is deliberate and worth preserving in any change.
 --max-events-per-file N    # bound memory; also raises every detection limit
 --include-qc-failed        # keep samples that failed staining QC
 --read-threads 2           # parallel FCS reads; lower it when memory is tight
+--adaptive-gates           # sweep the bandwidth, try tailgate and Otsu, then
+                           # score every candidate by the gap it sits in
+--panel-optional-markers CD16   # a marker present in only some files does not
+                           # split the cohort into separate panels
 --auto-fix-gates           # skip a hierarchy gate the data did not support
 --total-counts y.xlsx      # externally measured cell yields -> absolute counts
 --split-by-timepoint       # the figure set again per visit, into by_timepoint/
@@ -405,6 +412,65 @@ Four of these change numbers the previous run reported and default to off:
 changes the units every intensity is expressed in, and `--auto-fix-gates`
 changes every count in a file whose hierarchy gate it skips. Say so when you use
 them.
+
+### `--adaptive-gates`
+
+`density_valley()` returns NA for a unimodal marker and the threshold then comes
+from a fixed quantile. On a spectral panel that is not rare: on one sepsis cohort
+**65% of every sample-by-marker cut** was a `quantile_fallback`, so two thirds of
+the gates were placed by the constant rather than the data.
+
+The markers were not unimodal. The histogram is under-smoothed for such data --
+L/D showed 32 peaks in one sample, nearly all noise. Widen the kernel and CD45
+resolves to two modes.
+
+This flag keeps openCyto's vocabulary (Finak and others, 2014): **mindensity over
+a bandwidth ladder**, **tailgate** for one mode with a tail, **Otsu** for two
+classes of comparable size. Every candidate is scored the same way, by how deep a
+density gap the cut sits in, so no marker needs configuring by hand. Where
+nothing sits in a gap, tailgate is preferred over the quantile because it is
+anchored to the sample's own mode and spread.
+
+Fallbacks fell from 65% to under 1% on properly gated data. Say when you use it
+that it moves every threshold, and that it cannot find a population that was not
+stained: a channel holding no signal still reports none.
+
+### Never require the parent marker inside a population
+
+**The single most expensive mistake a specification can make**, and it looks
+correct. A population written as
+
+```yaml
+T cells:
+  CD45: above      # <- the trap
+  CD3: above
+```
+
+asks for a second CD45 threshold derived from cells that already passed the
+hierarchy's CD45 gate. That distribution is all positive, so it is unimodal, so
+no minimum exists, so the cut falls back to the 90th percentile -- and `above` on
+that fallback keeps exactly 10% of the parent.
+
+Every population carrying the redundant requirement is capped at 10%, and the
+run looks plausible: the frequencies are just small. On the cohort that surfaced
+it, CD45 fell back in 17 of 20 samples and classified cells sat at 9.3 to 10.0%
+per sample. Removing it took classification from **21% to 88%**.
+
+Check any specification you are handed for this. The rule: do not name a marker
+in a population if a gate above it already applied that marker.
+
+### `--panel-optional-markers`
+
+A reagent stained in only some files splits the cohort into separate panels, each
+with its own embedding, figures and file names. That is right for two genuinely
+different panels and wrong for one antibody added partway through: it makes UMAP
+positions incomparable between the halves and doubles the figure set.
+
+Naming the marker here keeps it out of the panel fingerprint without touching the
+data. The files stay one panel with one embedding; a population needing the
+marker scores where it exists and is UNAVAILABLE where it does not. Distinct from
+`--ignore-channels`, which drops the marker and makes those populations
+impossible everywhere.
 
 ### `--auto-fix-gates`
 

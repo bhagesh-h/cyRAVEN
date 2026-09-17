@@ -1619,6 +1619,68 @@ the panel split.
 | `--min-cd45-pct` | 5 | Staining QC floor, percent CD45<sup>+</sup> of live |
 | `--include-qc-failed` | off | Keep declared samples that failed staining QC. Admits them to every stage, not only the embedding. Their percentages carry no evidence; under this flag `qc_status` reads `pass` and only the `verdict` column in `staining_qc.csv` records which were forced in |
 | `--discover-controls` | off | Let a sample that fails staining QC become the unstained reference for its panel even though the sheet declares no control. See below for why this is off |
+| `--adaptive-gates` | off | Choose each threshold by sweeping the kernel bandwidth and trying the tail and Otsu rules, instead of one fixed smoothing with a quantile fallback. **Consequential**: it moves thresholds. See [Placing a threshold when no valley exists](#placing-a-threshold-when-no-valley-exists) |
+| `--panel-optional-markers` | none | Comma-separated markers that do not define the panel. A reagent stained in only some files otherwise splits the cohort into separate panels with separate embeddings. Named here, the files stay one panel; a population needing the marker scores where it exists and is UNAVAILABLE where it does not |
+
+### Placing a threshold when no valley exists
+
+`density_valley()` answers one question: where is the deepest separation between
+two modes. Where a marker is unimodal it answers `NA`, and the threshold then
+comes from a fixed quantile of the parent.
+
+On a spectral panel that is not a rare outcome. On the sepsis cohort this was
+written against, **65% of every sample-by-marker cut** came back
+`quantile_fallback`, which means two thirds of the gates were placed by the
+constant rather than by the data, and the viability gate was skipped in all 20
+samples because L/D never resolved.
+
+The markers were not unimodal. The histogram being smoothed -- 220 bins, a
+9-bin moving average -- is under-smoothed for these data: L/D showed 32 peaks in
+one sample and CD45 showed 10, nearly all of them noise. Widen the kernel and
+CD45 resolves to exactly two modes.
+
+`--adaptive-gates` keeps the same vocabulary as openCyto
+([Finak and others, 2014](https://doi.org/10.1371/journal.pcbi.1003806)) rather
+than inventing one:
+
+| Method | For |
+|---|---|
+| mindensity over a bandwidth ladder | a genuinely bimodal marker, at whatever smoothing resolves it |
+| tailgate | one real mode with a positive tail. The cut sits a robust spread above the mode, estimated by mirroring the half the tail cannot reach |
+| Otsu | two classes of comparable size |
+
+Every candidate is then scored the same way: **how deep a density gap the cut
+sits in**. That is method-agnostic, needs no per-marker configuration, and
+measures the property a gate is supposed to have. Where nothing sits in a gap
+the tail rule is preferred over the quantile, because it is anchored to the
+sample's own mode and spread rather than declaring a fixed share positive.
+
+Measured on that cohort: quantile fallbacks fell from **65% to under 1%** on
+properly gated data, and the viability gate placed at 0.1 to 2.4% dead.
+
+**It cannot find a population that was not stained.** One sample there carries
+CD3 at 0.3% positive while its CD45 stains normally. No threshold rule recovers
+T cells from a channel holding none, and the selector reports what is there.
+
+### Do not require the parent marker twice
+
+A specification that opens every population with `CD45: above` looks like the
+textbook leukocyte gate and is a trap.
+
+The hierarchy has already applied CD45: the parent every population is scored
+inside is `cd45_pos`. Repeating the requirement asks for a second CD45 threshold
+derived from the cells that passed the first -- a distribution that is all
+positive and therefore unimodal. No minimum exists in it, the cut falls back to
+the 90th percentile, and an `above` comparison on that fallback keeps exactly
+10%.
+
+On the cohort above, CD45 fell back to the quantile in 17 of 20 samples and the
+share of parent cells carrying any label came out at 10.0, 9.4, 9.3, 9.8 and
+9.5% for the first five. Removing the redundant requirement took classified
+cells from **21% to 88%**. Nothing else about the specification changed.
+
+The rule generalises: do not name a marker in a population if a gate above it
+has already applied that marker.
 
 #### 3.4 Uncertainty and detection limits
 

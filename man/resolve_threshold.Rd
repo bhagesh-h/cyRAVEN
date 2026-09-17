@@ -12,7 +12,8 @@ resolve_threshold(
   control_q = 0.995,
   fallback_q = 0.9,
   override = NULL,
-  control_kind = c("control_q995", "fmo_q995")
+  control_kind = c("control_q995", "fmo_q995"),
+  adaptive = FALSE
 )
 }
 \arguments{
@@ -37,6 +38,11 @@ recorded. \code{"control_q995"} for an unstained tube, \code{"fmo_q995"} for a
 fluorescence-minus-one control. The arithmetic is identical; the two are
 named apart because they are different experiments and support different
 claims. See \code{\link[=parse_fmo_map]{parse_fmo_map()}}.}
+
+\item{adaptive}{Sweep the kernel bandwidth and try the tail and Otsu rules
+before falling back to a quantile. See \code{\link[=best_threshold]{best_threshold()}}. \code{FALSE} by
+default, because it moves thresholds and a threshold that moves moves
+every frequency beneath it.}
 }
 \description{
 Priority (per the agreed contract):

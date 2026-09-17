@@ -32,13 +32,18 @@ See [Explore mode](https://bhagesh-h.github.io/cyRAVEN/articles/advanced.html#ex
 
 ## Why
 
-Manual gating is the dominant source of technical variance in multi-sample
-immunophenotyping: operators gating identical files report population sizes
-differing by approximately 32%, and analyst subjectivity accounts for up to 78%
-of technical variability once more than one person is involved (Cadwell et al.,
-2021, *PDA J Pharm Sci Technol* 75:33). Fixed gate coordinates transferred
-between samples do not remove this variance; they convert it into a systematic
-bias that tracks staining intensity.
+Manual gating is a measurable source of technical variance in multi-sample
+immunophenotyping. Thirty-eight operators gating the same files under a gauge
+repeatability and reproducibility design carried a median expanded uncertainty
+of 3.6%, with no significant difference between more and less experienced users
+(Grant et al., 2021, *PDA J Pharm Sci Technol* 75:33). Across 320 routine
+clinical samples analysed by six technologists on three harmonised cytometers,
+the dispersion that remained was structured primarily by operator identity
+rather than by instrument configuration (Mead et al., 2026, *Cytometry B*,
+doi:10.1002/cyto.b.70048).
+
+Fixed gate coordinates transferred between samples do not remove that variance;
+they convert it into a systematic bias that tracks staining intensity.
 
 cyRAVEN removes the analyst from threshold placement and quantifies the residual
 uncertainty rather than concealing it. Each cut is resampled from the events it
