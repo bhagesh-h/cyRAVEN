@@ -1,0 +1,24 @@
+# Smallest two-sided p a rank-sum test can produce at these group sizes
+
+WHY THIS MATTERS ON A SMALL COHORT. A Wilcoxon rank-sum test has
+`choose(n1 + n2, n1)` equally likely rank arrangements under the null,
+so the most extreme possible separation gives a two-sided p of
+`2 / choose(n1 + n2, n1)` and nothing smaller is reachable. At 4 against
+5 that floor is 0.016; after correcting across a dozen populations, no
+population can reach 0.05 no matter how cleanly the groups separate. A
+reader looking at a volcano plot with an empty top has no way to tell
+"nothing differs" from "this design cannot produce a significant p", and
+those are opposite conclusions. Drawing the floor answers it on the
+figure.
+
+## Usage
+
+``` r
+rank_sum_p_floor(n1, n2)
+```
+
+## Arguments
+
+- n1, n2:
+
+  group sizes.
