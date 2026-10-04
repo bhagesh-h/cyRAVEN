@@ -41,8 +41,10 @@
 #'
 #' @param smap the sample map, or NULL
 #' @return a data.frame with one row per (file, marker) the file controls for,
-#'   carrying `sample_id`, `marker` and `control_group`; NULL when no FMO is
-#'   declared
+#'   carrying `sample_id`, `marker`, `control_group`, and `control_kind`
+#'   (`minus_one` where the file leaves out a single reagent, `minus_multiple`
+#'   where it leaves out several) with `n_markers_in_file`; NULL when no FMO
+#'   is declared
 #' @export
 parse_fmo_map <- function(smap) {
   if (is.null(smap) || !"fmo_for" %in% names(smap)) return(NULL)
@@ -63,7 +65,101 @@ parse_fmo_map <- function(smap) {
   if (!length(rows)) return(NULL)
   out <- do.call(rbind, rows)
   rownames(out) <- NULL
+
+  # FLUORESCENCE MINUS ONE, OR MINUS MANY? The distinction is not bookkeeping.
+  # An FMO is the full panel with ONE reagent left out, so its distribution in
+  # that channel is the negative population under exactly the spreading the real
+  # samples experience (Roederer 2001, Cytometry 45:194). A tube with twelve
+  # reagents left out is a different control: the eleven others are not spilling
+  # into the channel either, so its negative is NARROWER than the true FMO, and a
+  # cut anchored to it sits TOO LOW and calls spillover positive.
+  #
+  # The direction of that bias is knowable even when its size is not, so the kind
+  # is recorded per file and travels into the threshold `source` string. It is
+  # still a far better reference than an unstained tube or a quantile of the
+  # parent; it is just not the control the FMO literature describes, and a reader
+  # comparing two runs should be able to see which they have.
+  per_file <- table(out$sample_id)
+  out$control_kind <- ifelse(per_file[out$sample_id] > 1L,
+                             "minus_multiple", "minus_one")
+  out$n_markers_in_file <- as.integer(per_file[out$sample_id])
   out
+}
+
+#' Place a cut on a control channel, and refuse a control that cannot be one
+#'
+#' Two things go wrong with a control-anchored cut, and both were observed on
+#' real minus-multiple data before this existed.
+#'
+#' A FAR QUANTILE RIDES AN ARTEFACT TAIL. The negative population's upper edge
+#' is what the control is for, and `q = 0.995` finds it only when the control
+#' contains nothing but that population. A control tube carrying about one
+#' percent of bright events -- aggregates, dead cells, a residual stained
+#' population -- puts the 99.5th percentile inside that tail rather than at the
+#' edge of the negative. On the cohort this was written for, one channel's
+#' control sat at 1.04 at the 95th percentile and 5.60 at the 99.5th: the cut
+#' moved by four and a half units of a transformed scale, and landed above the
+#' full stain's own 99th percentile, so nothing in any sample would have been
+#' called positive. [tail_threshold()] is immune to this, because it locates the
+#' negative mode and measures the spread of the half that cannot contain
+#' positives. Taking whichever of the two is lower keeps the quantile where the
+#' control is clean -- for a Gaussian negative the quantile is the lower of the
+#' pair, so nothing changes -- and falls back to the robust estimate only where
+#' the quantile has left the negative population altogether.
+#'
+#' THE CONTROL IS NOT ACTUALLY MISSING THE REAGENT. A minus control must be
+#' dimmer in the channel it leaves out. When it is brighter, something is wrong
+#' with the tube, the panel sheet, or the unmixing, and anchoring to it raises
+#' the cut and deletes a real population. This is not a hypothetical: of twelve
+#' channels declared on one minus-multiple tube, five were no dimmer than the
+#' full stain and one was brighter at every quantile. Comparing the two negative
+#' modes, in units of the sample's own spread, catches that before it reaches a
+#' frequency table. A refused control is reported, not silently dropped, and the
+#' threshold falls back to the sample's own data.
+#'
+#' @param control_x transformed control values in this channel.
+#' @param sample_x transformed sample values in the same channel, used only to
+#'   check that the control is the dimmer of the two.
+#' @param q the quantile taken where the control is clean. Default `0.995`.
+#' @param k passed to [tail_threshold()].
+#' @param max_mode_shift how far above the sample's negative mode the control's
+#'   may sit, in units of the sample's own robust spread, before the control is
+#'   refused. Default `1`.
+#' @return a list carrying `threshold` (`NA_real_` where the control is
+#'   refused), `verdict`, and the two candidate cuts.
+#' @export
+control_cut <- function(control_x, sample_x = NULL, q = 0.995, k = 3.5,
+                        max_mode_shift = 1) {
+  out <- function(th, v, qc = NA_real_, rc = NA_real_)
+    list(threshold = th, verdict = v, quantile_cut = qc, robust_cut = rc)
+  cx <- control_x[is.finite(control_x)]
+  if (length(cx) < 100L) return(out(NA_real_, "too few control events"))
+
+  qc <- as.numeric(stats::quantile(cx, q, na.rm = TRUE))
+  rc <- tail_threshold(cx, k = k)
+
+  # IS THE CONTROL REALLY THE DIMMER TUBE? Both modes come from the same kernel,
+  # and the margin is the sample's own spread, so the test does not care what
+  # scale or transform is in force.
+  if (!is.null(sample_x)) {
+    sx <- sample_x[is.finite(sample_x)]
+    if (length(sx) >= 200L) {
+      mode_of <- function(z) {
+        d <- stats::density(z, n = 1024, adjust = 2)
+        d$x[which.max(d$y)]
+      }
+      mc <- mode_of(cx); ms <- mode_of(sx)
+      lower <- sx[sx <= ms]
+      ss <- stats::mad(c(lower, 2 * ms - lower), constant = 1.4826)
+      if (!is.finite(ss) || ss <= 0) ss <- stats::sd(sx)
+      if (is.finite(ss) && ss > 0 && mc > ms + max_mode_shift * ss)
+        return(out(NA_real_, "control brighter than the sample", qc, rc))
+    }
+  }
+
+  th <- if (is.finite(rc)) min(qc, rc) else qc
+  if (!is.finite(th)) return(out(NA_real_, "no cut could be placed", qc, rc))
+  out(th, if (is.finite(rc) && rc < qc) "tail trimmed" else "ok", qc, rc)
 }
 
 #' Which FMO file, if any, controls a given marker for a given sample
@@ -111,9 +207,14 @@ fmo_for_sample <- function(fmo_map, sample_id, marker, group_of = NULL) {
 #' @param thr_all the thresholds table, carrying `sample_id`, `marker`,
 #'   `threshold` and `source`
 #' @param fmo_thresholds data.frame of `sample_id`, `marker`, `fmo_threshold`,
-#'   `fmo_sample`
+#'   `fmo_sample`, and optionally `fmo_verdict` from [control_cut()]. A row whose
+#'   `fmo_threshold` is `NA` is a control that was refused, and is reported as
+#'   such rather than compared.
 #' @param unc optional `thresholds` element of [run_gate_uncertainty()], used to
-#'   scale the distance
+#'   scale the distance. A cut the control supplied has no uncertainty of its
+#'   own, because the events it came from are in a separate tube, so those rows
+#'   carry `distance` but not `distance_in_u`. The scaled verdict is available
+#'   for the rows where the sample's own cut was the one applied.
 #' @param agree_at distance in uncertainties within which the two agree
 #' @param disagree_at distance beyond which they are reported as disagreeing
 #' @return a data.frame, or NULL
@@ -123,9 +224,22 @@ fmo_agreement <- function(thr_all, fmo_thresholds, unc = NULL,
   if (is.null(thr_all) || !nrow(thr_all)) return(NULL)
   if (is.null(fmo_thresholds) || !nrow(fmo_thresholds)) return(NULL)
   m <- merge(thr_all[, intersect(c("sample_id", "panel", "marker", "threshold",
-                                   "source"), names(thr_all))],
+                                   "source", "derived_threshold",
+                                   "derived_source"), names(thr_all))],
              fmo_thresholds, by = c("sample_id", "marker"))
   if (!nrow(m)) return(NULL)
+
+  # COMPARE THE RIGHT PAIR. Where the control replaced the data-derived cut,
+  # `threshold` IS the control's cut, and subtracting one from the other gives
+  # zero for every such row -- the control measured against itself. The cut the
+  # sample's own density implied is carried alongside for exactly this reason;
+  # it is used where present, and `threshold` only where the control was not the
+  # one that won.
+  d_thr <- if ("derived_threshold" %in% names(m))
+    ifelse(is.finite(m$derived_threshold), m$derived_threshold, m$threshold)
+    else m$threshold
+  d_src <- if ("derived_source" %in% names(m))
+    ifelse(!is.na(m$derived_source), m$derived_source, m$source) else m$source
 
   u <- rep(NA_real_, nrow(m))
   if (!is.null(unc) && nrow(unc) && "u_combined" %in% names(unc)) {
@@ -133,29 +247,34 @@ fmo_agreement <- function(thr_all, fmo_thresholds, unc = NULL,
                paste(unc$sample_id, unc$marker, sep = "\r"))
     u <- unc$u_combined[k]
   }
-  d <- m$threshold - m$fmo_threshold
+  d <- d_thr - m$fmo_threshold
   din <- ifelse(is.finite(u) & u > 0, d / u, NA_real_)
 
   out <- data.frame(
     sample_id = m$sample_id,
     panel = m$panel %||% NA_character_,
     marker = m$marker,
-    derived_threshold = round(m$threshold, 4),
-    derived_source = m$source,
+    derived_threshold = round(d_thr, 4),
+    derived_source = d_src,
+    applied_threshold = round(m$threshold, 4),
+    applied_source = m$source,
     fmo_threshold = round(m$fmo_threshold, 4),
     fmo_sample = m$fmo_sample,
+    fmo_verdict = m$fmo_verdict %||% NA_character_,
     distance = round(d, 4),
     threshold_u = round(u, 4),
     distance_in_u = round(din, 2),
     stringsAsFactors = FALSE)
   out$verdict <- ifelse(
+    !is.finite(out$fmo_threshold), "control refused, not used",
+    ifelse(
     !is.finite(out$distance_in_u), "no uncertainty available",
     ifelse(abs(out$distance_in_u) <= agree_at, "corroborated by the FMO",
     ifelse(abs(out$distance_in_u) >= disagree_at,
            ifelse(out$distance_in_u > 0,
                   "derived cut well above the FMO: signal may be discarded",
                   "derived cut well below the FMO: spillover may be called positive"),
-           "differs from the FMO, within explanation")))
+           "differs from the FMO, within explanation"))))
   out[order(-abs(replace(out$distance_in_u, !is.finite(out$distance_in_u), -1))), ,
       drop = FALSE]
 }

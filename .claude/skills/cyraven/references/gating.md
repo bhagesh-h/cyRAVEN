@@ -62,6 +62,38 @@ every sample. **`fmo_q995`** takes the place of `control_q995` when a
 fluorescence-minus-one control is declared for that marker through the sample
 map's `fmo_for` column, which is the better reference because an FMO shows the
 negative population under the spillover the real samples experience.
+**`fmm_q995`** marks a tube that leaves out several reagents at once: the other
+missing fluorochromes are not spreading into the channel either, so its negative
+is narrower than a true FMO's and the cut it anchors is permissive.
+
+A control-anchored cut keeps the bare source name where the parent indicated no
+cut at all, and gains `_valley_rejected` where it did and the control put the
+boundary higher. Either way `derived_threshold` and `derived_source` record what
+would have been used without the control.
+
+### When a control cannot be one
+
+Before a declared control anchors anything, `control_cut()` checks it, because
+two failure modes both raise cuts and delete populations.
+
+A far quantile finds the negative's upper edge only when the control holds
+nothing else. A tube with about one percent of bright events puts the 99.5th
+percentile in that tail: on real minus-multiple data one channel read 1.0 at the
+95th percentile and 5.6 at the 99.5th, a cut above the full stain's own 99th
+percentile, so nothing would have been positive. The cut is also placed from the
+negative mode and the spread of the half below it, and the lower of the two is
+taken. A clean control still gives the quantile.
+
+A minus control must be dimmer in the channel it leaves out. One that is
+brighter is not that experiment, whatever the sample sheet says. Comparing the
+two negative modes in units of the sample's own spread catches it; the channel
+is listed in `controls_refused.csv` and the threshold comes from the sample's
+own data instead.
+
+**Check `controls_refused.csv` before reading a run that declares controls.** A
+minus-multiple tube commonly leaves several of its declared channels no dimmer
+than the full stain, because those markers were barely expressed to begin with.
+Those channels gained nothing from the control.
 
 ### When a marker never resolves
 

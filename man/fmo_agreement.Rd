@@ -17,10 +17,15 @@ fmo_agreement(
 \code{threshold} and \code{source}}
 
 \item{fmo_thresholds}{data.frame of \code{sample_id}, \code{marker}, \code{fmo_threshold},
-\code{fmo_sample}}
+\code{fmo_sample}, and optionally \code{fmo_verdict} from \code{\link[=control_cut]{control_cut()}}. A row whose
+\code{fmo_threshold} is \code{NA} is a control that was refused, and is reported as
+such rather than compared.}
 
 \item{unc}{optional \code{thresholds} element of \code{\link[=run_gate_uncertainty]{run_gate_uncertainty()}}, used to
-scale the distance}
+scale the distance. A cut the control supplied has no uncertainty of its
+own, because the events it came from are in a separate tube, so those rows
+carry \code{distance} but not \code{distance_in_u}. The scaled verdict is available
+for the rows where the sample's own cut was the one applied.}
 
 \item{agree_at}{distance in uncertainties within which the two agree}
 

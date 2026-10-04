@@ -11,8 +11,10 @@ parse_fmo_map(smap)
 }
 \value{
 a data.frame with one row per (file, marker) the file controls for,
-carrying \code{sample_id}, \code{marker} and \code{control_group}; NULL when no FMO is
-declared
+carrying \code{sample_id}, \code{marker}, \code{control_group}, and \code{control_kind}
+(\code{minus_one} where the file leaves out a single reagent, \code{minus_multiple}
+where it leaves out several) with \code{n_markers_in_file}; NULL when no FMO
+is declared
 }
 \description{
 Parse the \code{fmo_for} column into a marker-to-file map

@@ -126,20 +126,34 @@ density_valley <- function(x, bins = 220L, smooth = 4, peak_frac = 0.02,
 #'   every frequency beneath it.
 #' @param control_kind What `control_x` is, which decides the `source` string
 #'   recorded. `"control_q995"` for an unstained tube, `"fmo_q995"` for a
-#'   fluorescence-minus-one control. The arithmetic is identical; the two are
-#'   named apart because they are different experiments and support different
-#'   claims. See [parse_fmo_map()].
+#'   fluorescence-minus-one control, `"fmm_q995"` for a tube missing several
+#'   reagents at once, whose negative is narrower than a true FMO's, so the
+#'   cut it anchors is permissive. The arithmetic is identical in all three
+#'   cases; they are named apart because they are different experiments and
+#'   support different claims. See [parse_fmo_map()].
+#' @param control_threshold A cut already placed on the control by the caller,
+#'   used in place of `control_q` of `control_x`. [control_cut()] produces one
+#'   and refuses a control that is brighter than the sample, which a minus
+#'   control cannot be. `NULL` by default, in which case the quantile is taken
+#'   here as before.
 #' @export
 resolve_threshold <- function(marker, x_parent, cfg_value = NULL,
                               control_x = NULL, control_q = 0.995,
                               fallback_q = 0.90, override = NULL,
-                              control_kind = c("control_q995", "fmo_q995"),
+                              control_kind = c("control_q995", "fmo_q995",
+                                               "fmm_q995"),
+                              control_threshold = NULL,
                               adaptive = FALSE) {
   control_kind <- match.arg(control_kind)
   out <- function(threshold, source, needs_review,
-                  reason = NA_character_, by = NA_character_)
+                  reason = NA_character_, by = NA_character_,
+                  derived = NA_real_, derived_source = NA_character_)
     list(threshold = threshold, source = source, needs_review = needs_review,
-         override_reason = reason, override_by = by)
+         override_reason = reason, override_by = by,
+         # Carried so a control-anchored cut can still be compared against the
+         # cut the sample's own density implied. Without this the agreement
+         # diagnostic compares the control against itself and reports zero.
+         derived_threshold = derived, derived_source = derived_source)
 
   ov <- suppressWarnings(as.numeric(override$threshold %||% NA_real_))
   if (is.finite(ov))
@@ -149,8 +163,12 @@ resolve_threshold <- function(marker, x_parent, cfg_value = NULL,
 
   if (!is.null(cfg_value) && is.finite(cfg_value))
     return(out(cfg_value, "config", FALSE))
-  ctrl <- if (!is.null(control_x) && length(control_x) > 100L)
-    as.numeric(quantile(control_x, control_q, na.rm = TRUE)) else NA_real_
+  # A caller that has already placed and validated the cut on the control passes
+  # it here; see control_cut(). Everything downstream is identical either way.
+  ctrl <- suppressWarnings(as.numeric(control_threshold %||% NA_real_))[1]
+  if (!is.finite(ctrl))
+    ctrl <- if (!is.null(control_x) && length(control_x) > 100L)
+      as.numeric(quantile(control_x, control_q, na.rm = TRUE)) else NA_real_
   # ADAPTIVE. One fixed smoothing is one hypothesis about how wide the kernel
   # should be, and on a spectral panel it is usually the wrong one: two thirds of
   # the cuts on the cohort this was written for came back as quantile fallbacks
@@ -158,11 +176,40 @@ resolve_threshold <- function(marker, x_parent, cfg_value = NULL,
   # bandwidth, adds the tail and Otsu rules for the shapes a valley cannot
   # describe, and scores every candidate the same way. Off by default because it
   # moves thresholds, and a threshold that moves moves every frequency under it.
+  # WHERE A CONTROL WINS, AND WHERE IT MUST NOT. A control-anchored cut replaces
+  # a data-derived one in two cases, and the two are not the same case.
+  #
+  #   The derived cut has no support. `quantile_fallback` is a constant fraction
+  #   of the parent, chosen because nothing in the distribution indicated a cut.
+  #   An independent experiment beats that outright, so the control is taken
+  #   whether it is higher or lower, and the review flag is cleared because the
+  #   cut is no longer blind. This is what a bare `control_q995`, `fmo_q995` or
+  #   `fmm_q995` has always meant, and it keeps that name; what changed is that
+  #   the adaptive path used to refuse the control here and keep the blind
+  #   quantile, which left the weakest cuts in the run unsupported.
+  #
+  #   The derived cut sits below the control. Here the data did indicate a cut,
+  #   and the control says the negative population reaches further than the
+  #   sample's own density suggested. Taking the control is the conservative
+  #   reading, and the earlier cut is kept on the row so the two can be compared
+  #   rather than one of them disappearing.
+  #
+  # A derived cut ABOVE the control is left alone. The control cannot argue a cut
+  # downwards: its negative is at most as wide as the sample's, so a sample whose
+  # own density puts the boundary higher has seen something the control cannot.
+  take_control <- function(b) {
+    if (!is.finite(ctrl)) return(NULL)
+    blind <- identical(b$source, "quantile_fallback")
+    if (!blind && !(b$threshold < ctrl)) return(NULL)
+    out(ctrl, if (blind) control_kind else paste0(control_kind, "_valley_rejected"),
+        FALSE, derived = b$threshold, derived_source = b$source)
+  }
+
   if (isTRUE(adaptive)) {
     b <- best_threshold(x_parent, fallback_q = fallback_q)
     if (is.finite(b$threshold)) {
-      if (is.finite(ctrl) && b$threshold < ctrl && !identical(b$source, "quantile_fallback"))
-        return(out(ctrl, paste0(control_kind, "_valley_rejected"), FALSE))
+      tc <- take_control(b)
+      if (!is.null(tc)) return(tc)
       return(out(b$threshold, b$source,
                  identical(b$source, "quantile_fallback")))
     }
@@ -170,14 +217,14 @@ resolve_threshold <- function(marker, x_parent, cfg_value = NULL,
 
   v <- density_valley(x_parent)
   if (is.finite(v)) {
-    if (is.finite(ctrl) && v < ctrl)
-      return(out(ctrl, paste0(control_kind, "_valley_rejected"), FALSE))
+    tc <- take_control(list(threshold = v, source = "valley"))
+    if (!is.null(tc)) return(tc)
     return(out(v, "valley", FALSE))
   }
-  if (is.finite(ctrl))
-    return(out(ctrl, control_kind, FALSE))
-  out(as.numeric(quantile(x_parent, fallback_q, na.rm = TRUE)),
-      "quantile_fallback", TRUE)
+  qf <- as.numeric(quantile(x_parent, fallback_q, na.rm = TRUE))
+  tc <- take_control(list(threshold = qf, source = "quantile_fallback"))
+  if (!is.null(tc)) return(tc)
+  out(qf, "quantile_fallback", TRUE)
 }
 
 #' Look up a per-sample, per-marker threshold override
