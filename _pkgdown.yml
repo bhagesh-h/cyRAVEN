@@ -82,6 +82,7 @@ reference:
   - sample_override
   - parse_fmo_map
   - fmo_for_sample
+  - control_cut
   - fmo_agreement
 
 - title: Acquisition and panel quality

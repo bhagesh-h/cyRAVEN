@@ -12,7 +12,8 @@ resolve_threshold(
   control_q = 0.995,
   fallback_q = 0.9,
   override = NULL,
-  control_kind = c("control_q995", "fmo_q995"),
+  control_kind = c("control_q995", "fmo_q995", "fmm_q995"),
+  control_threshold = NULL,
   adaptive = FALSE
 )
 }
@@ -35,9 +36,17 @@ resolve_threshold(
 
 \item{control_kind}{What \code{control_x} is, which decides the \code{source} string
 recorded. \code{"control_q995"} for an unstained tube, \code{"fmo_q995"} for a
-fluorescence-minus-one control. The arithmetic is identical; the two are
-named apart because they are different experiments and support different
-claims. See \code{\link[=parse_fmo_map]{parse_fmo_map()}}.}
+fluorescence-minus-one control, \code{"fmm_q995"} for a tube missing several
+reagents at once, whose negative is narrower than a true FMO's, so the
+cut it anchors is permissive. The arithmetic is identical in all three
+cases; they are named apart because they are different experiments and
+support different claims. See \code{\link[=parse_fmo_map]{parse_fmo_map()}}.}
+
+\item{control_threshold}{A cut already placed on the control by the caller,
+used in place of \code{control_q} of \code{control_x}. \code{\link[=control_cut]{control_cut()}} produces one
+and refuses a control that is brighter than the sample, which a minus
+control cannot be. \code{NULL} by default, in which case the quantile is taken
+here as before.}
 
 \item{adaptive}{Sweep the kernel bandwidth and try the tail and Otsu rules
 before falling back to a quantile. See \code{\link[=best_threshold]{best_threshold()}}. \code{FALSE} by

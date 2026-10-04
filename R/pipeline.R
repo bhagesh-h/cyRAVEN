@@ -146,6 +146,7 @@ run_cyraven_impl <- function(opt) {
   # the config because which tube is a control is a property of the acquisition.
   # Both are absent on a run that declares none, and nothing below changes.
   .fmo_map <- NULL; .fmo_group <- NULL; .fmo_used <- list()
+  .ctrl_refused <- list()
   # Every fig_*() call below defaults to `colors = fcs_colors()`, resolved as a
   # default ARGUMENT at call time -- setting the package's palette here is what
   # makes a --config `colors:` override reach every figure with no other change.
@@ -213,11 +214,27 @@ run_cyraven_impl <- function(opt) {
       .sid <- smap$sample_id %||% smap$well %||% smap$file
       .fmo_group <- if ("control_group" %in% names(smap))
         setNames(trimws(as.character(smap$control_group)), as.character(.sid)) else NULL
-      log_msg("fluorescence-minus-one control(s) declared for ",
+      log_msg("reference control(s) declared for ",
               length(unique(.fmo_map$marker)), " marker(s) across ",
               length(unique(.fmo_map$sample_id)), " file(s): ",
               paste(utils::head(sort(unique(.fmo_map$marker)), 8), collapse = ", "),
               if (length(unique(.fmo_map$marker)) > 8) ", ..." else "")
+      # Say which kind they are. A tube missing several reagents at once is not
+      # the control the FMO literature describes: the reagents it also leaves
+      # out are not spilling into the channel either, so its negative is
+      # narrower than a true FMO's and the cut it anchors is permissive. The
+      # run uses it regardless, because it is still a far better reference than
+      # a quantile of the parent, and records it as `fmm_q995` so the reader can
+      # see which thresholds rest on it.
+      .mm <- unique(.fmo_map$sample_id[.fmo_map$control_kind == "minus_multiple"])
+      for (.f in .mm) {
+        .n <- sum(.fmo_map$sample_id == .f)
+        log_msg("  NOTE ", .f, " leaves out ", .n, " reagents at once, so it is ",
+                "fluorescence-minus-multiple rather than minus-one. Its negative ",
+                "carries no spreading from the other ", .n - 1L, ", which makes it ",
+                "narrower than a true FMO and the cuts it anchors permissive. ",
+                "Recorded as fmm_q995 in thresholds_used.csv.")
+      }
     }
   }
 
@@ -737,8 +754,12 @@ run_cyraven_impl <- function(opt) {
     thr <- setNames(rep(NA_real_, length(avail)), avail)
     tdet <- list(); qdens <- list()
     for (m in avail) {
+      # The control is gated to the same level as the sample it is a control
+      # for. Taken one level looser it carries events -- dead cells, CD45
+      # negatives -- that the sample's own distribution no longer contains, and
+      # the reference is then not the comparison it claims to be.
       cx <- if (!is.null(ctrl_s) && ctrl_s != s && m %in% names(reads[[ctrl_s]]$marker_cols))
-        tr$fn(reads[[ctrl_s]]$exprs[gates[[ctrl_s]]$masks$single_cells,
+        tr$fn(reads[[ctrl_s]]$exprs[gates[[ctrl_s]]$masks$cd45_pos,
                                     reads[[ctrl_s]]$marker_cols[[m]]], m) else NULL
       .ov <- sample_override(cfg_ovr, s, m)
       if (!is.null(.ov)) .ovr_applied <- c(.ovr_applied, paste0(s, "\r", m))
@@ -753,22 +774,54 @@ run_cyraven_impl <- function(opt) {
       .fs <- fmo_for_sample(.fmo_map, s, m, .fmo_group)
       if (!is.na(.fs) && !is.null(reads[[.fs]]) &&
           m %in% names(reads[[.fs]]$marker_cols)) {
-        cx <- tr$fn(reads[[.fs]]$exprs[gates[[.fs]]$masks$single_cells,
+        cx <- tr$fn(reads[[.fs]]$exprs[gates[[.fs]]$masks$cd45_pos,
                                        reads[[.fs]]$marker_cols[[m]]], m)
-        .kind <- "fmo_q995"
-        .fmo_used[[length(.fmo_used) + 1L]] <- data.frame(
-          sample_id = s, marker = m,
-          fmo_threshold = as.numeric(stats::quantile(cx, 0.995, na.rm = TRUE)),
-          fmo_sample = .fs, stringsAsFactors = FALSE)
+        # A minus-multiple tube is recorded under its own source string, because
+        # its negative is narrower than a true FMO's and the resulting cut is
+        # therefore permissive. The reader sees which control produced each
+        # threshold in thresholds_used.csv rather than having to infer it.
+        .ck <- .fmo_map$control_kind[.fmo_map$sample_id == .fs &
+                                     .fmo_map$marker == m]
+        .kind <- if (length(.ck) && identical(.ck[1], "minus_multiple"))
+          "fmm_q995" else "fmo_q995"
       }
+      # PLACE THE CUT ON THE CONTROL, AND CHECK THAT IT CAN BE ONE. A far
+      # quantile of a control carrying a bright tail lands in the tail rather
+      # than at the negative edge, and a tube that is brighter than the sample
+      # in a channel it is supposed to lack is not a minus control at all. Both
+      # were present in the minus-multiple data this was written against, and
+      # both raise cuts and delete populations. See control_cut().
+      .cc <- NULL
+      if (!is.null(cx)) {
+        .cc <- control_cut(cx, tmat[g$masks$cd45_pos, m])
+        if (!is.na(.fs)) .fmo_used[[length(.fmo_used) + 1L]] <- data.frame(
+          sample_id = s, marker = m,
+          fmo_threshold = .cc$threshold,
+          fmo_quantile_cut = .cc$quantile_cut,
+          fmo_robust_cut = .cc$robust_cut,
+          fmo_verdict = .cc$verdict,
+          fmo_sample = .fs, stringsAsFactors = FALSE)
+        if (!is.finite(.cc$threshold))
+          .ctrl_refused[[length(.ctrl_refused) + 1L]] <- data.frame(
+            sample_id = s, marker = m,
+            control = if (!is.na(.fs)) .fs else (ctrl_s %||% NA_character_),
+            reason = .cc$verdict, stringsAsFactors = FALSE)
+      }
+      .cc_ok <- !is.null(.cc) && is.finite(.cc$threshold)
       rr <- resolve_threshold(m, tmat[g$masks$cd45_pos, m], cfg_thr[[m]]$threshold,
-                              cx, override = .ov, control_kind = .kind,
+                              if (.cc_ok) cx else NULL, override = .ov,
+                              control_kind = .kind,
+                              control_threshold = if (.cc_ok) .cc$threshold else NULL,
                               adaptive = isTRUE(opt$adaptive_gates))
       thr[[m]] <- rr$threshold; tdet[[m]] <- rr
       qdens[[m]] <- tmat[g$masks$cd45_pos, m]
       thr_rows[[length(thr_rows) + 1L]] <- data.frame(
         sample_id = s, panel = pn, marker = m, threshold = rr$threshold,
         source = rr$source, needs_review = rr$needs_review, cofactor = cf,
+        # The cut the sample's own density implied, kept even where a control
+        # replaced it, so the two remain comparable downstream.
+        derived_threshold = rr$derived_threshold %||% NA_real_,
+        derived_source = rr$derived_source %||% NA_character_,
         # Carried on every row, but dropped again before the table is written
         # unless the run actually declares an override. Two all-NA columns are
         # still a change to a published file, and a run with no overrides must
@@ -1425,6 +1478,12 @@ run_cyraven_impl <- function(opt) {
   if (!is.null(thr_all) && !length(cfg_ovr))
     thr_all <- thr_all[, setdiff(names(thr_all), c("override_reason", "override_by")),
                        drop = FALSE]
+  # Same rule for the derived pair: they are carried on every row, and written
+  # only by a run where a control actually replaced a cut.
+  if (!is.null(thr_all) && !any(is.finite(thr_all$derived_threshold)))
+    thr_all <- thr_all[, setdiff(names(thr_all),
+                                 c("derived_threshold", "derived_source")),
+                       drop = FALSE]
   if (length(cfg_ovr)) {
     report_unused_overrides(cfg_ovr, .ovr_applied)
     if (length(.ovr_applied))
@@ -1506,6 +1565,24 @@ run_cyraven_impl <- function(opt) {
                 "minimum in most samples AND receive substantial spreading. ",
                 "For those the cut is unresolved because of the panel, and no ",
                 "gating strategy recovers it. See spreading_receivers.csv")
+    }
+  }
+
+  # ---- controls that could not serve as controls -----------------------------
+  # A refused control is a finding about the experiment, not an internal detail.
+  # Either the tube is brighter than the sample in a channel it is supposed to
+  # lack, or it holds too few events to place a cut on. Both mean the threshold
+  # came from the sample's own data after all, and a reader comparing this run
+  # against one without controls needs to know which channels that applies to.
+  if (length(.ctrl_refused)) {
+    .cr <- do.call(rbind, .ctrl_refused)
+    write.csv(.cr, file.path(opt$outdir, "controls_refused.csv"), row.names = FALSE)
+    log_msg("wrote controls_refused.csv (", nrow(.cr), " channel(s) where the ",
+            "declared control could not anchor a cut)")
+    for (.r in unique(.cr$reason)) {
+      .mk <- sort(unique(.cr$marker[.cr$reason == .r]))
+      log_msg("  NOTE ", .r, ": ", paste(.mk, collapse = ", "),
+              ". The threshold came from the sample's own data instead.")
     }
   }
 

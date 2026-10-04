@@ -1,5 +1,58 @@
 # cyRAVEN (development)
 
+## A control is checked before it is trusted
+
+Minus-one and minus-multiple controls now go through `control_cut()`, which
+places the cut and can refuse the control outright. Two failure modes were
+found on real minus-multiple data and both raise thresholds and delete
+populations.
+
+**A far quantile can leave the negative population.** The 99.5th percentile is
+the edge of the negative only when the control contains nothing else. On one
+tube, a channel sat at 1.0 at the 95th percentile and 5.6 at the 99.5th: about
+one percent of bright events, and a cut among them that was higher than the
+full stain's own 99th percentile, so no sample would have had a positive cell
+in that channel. The cut is now also placed from the negative mode and the
+spread of the half below it, which a bright tail cannot move, and the lower of
+the two is used. A Gaussian negative gives the quantile, so a clean control
+behaves exactly as before.
+
+**A control that is brighter than the sample is not a minus control.** Of twelve
+channels declared on one tube, five were no dimmer than the full stain and one
+was brighter at every quantile. Comparing the two negative modes, in units of
+the sample's own robust spread, catches it. A refused control is written to
+`controls_refused.csv` with its reason and the threshold falls back to the
+sample's own data.
+
+## A control now helps where the data gave nothing
+
+`--adaptive-gates` previously refused a control whenever its own selector had
+fallen back to a quantile of the parent, so the weakest cuts in a run were the
+ones left without independent support. The control is now used there, which is
+what a bare `control_q995`, `fmo_q995` or `fmm_q995` source has always meant. A
+control still cannot argue a cut downwards: its negative is at most as wide as
+the sample's, so a sample whose own density puts the boundary higher has seen
+something the control cannot.
+
+## The FMO agreement table compared the control against itself
+
+Where a control replaced a cut, `threshold` in `thresholds_used.csv` *is* the
+control's cut, and `fmo_agreement.csv` subtracted the two and reported a
+distance of zero. Every substituted row therefore read as perfect agreement,
+which is the one thing the table exists to test. `thresholds_used.csv` now
+carries `derived_threshold` and `derived_source` wherever a control won, and the
+agreement table compares against those; `applied_threshold` records what the run
+actually used.
+
+## Controls are gated like the samples they control
+
+A control was subset to `single_cells` while the sample it was compared against
+was subset to `cd45_pos`, so the reference carried dead cells and CD45 negatives
+that the sample's distribution no longer contained. Both are now taken at
+`cd45_pos`. On the data this was found with the effect was under 0.1 transformed
+units, because the CD45 gate removed little from those tubes; on a tube with
+more debris it would not be.
+
 ## The documentation is six chapters read in order
 
 Fifteen articles became six, and the navbar lists them in the order they are

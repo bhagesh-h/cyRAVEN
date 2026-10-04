@@ -136,3 +136,96 @@ test_that("agreement without an uncertainty table says so rather than guessing",
   expect_null(fmo_agreement(NULL, fmo))
   expect_null(fmo_agreement(thr, NULL))
 })
+
+test_that("a clean control keeps its quantile, a tailed one is trimmed", {
+  set.seed(1)
+  # A negative population and nothing else: the far quantile is the edge of it,
+  # and the robust estimate sits further out, so nothing changes.
+  clean <- control_cut(rnorm(20000), rnorm(20000))
+  expect_identical(clean$verdict, "ok")
+  expect_equal(clean$threshold, clean$quantile_cut)
+  expect_gt(clean$robust_cut, clean$quantile_cut)
+
+  # The same negative with one percent of bright events in it. The 99.5th
+  # percentile is now inside that tail rather than at the negative's edge, and
+  # a cut there would call almost nothing positive in a real sample.
+  tailed <- control_cut(c(rnorm(19800), rnorm(200, 8, 0.5)), rnorm(20000))
+  expect_identical(tailed$verdict, "tail trimmed")
+  expect_gt(tailed$quantile_cut, 6)
+  expect_lt(tailed$threshold, 5)
+  expect_equal(tailed$threshold, tailed$robust_cut)
+})
+
+test_that("a control brighter than the sample is refused", {
+  set.seed(1)
+  # A minus control is dimmer in the channel it leaves out. One that is brighter
+  # is not that experiment, whatever the sample sheet says, and anchoring to it
+  # raises the cut and deletes a population.
+  bad <- control_cut(rnorm(20000, 4), rnorm(20000, 0))
+  expect_false(is.finite(bad$threshold))
+  expect_identical(bad$verdict, "control brighter than the sample")
+
+  expect_true(is.finite(control_cut(rnorm(20000, 0), rnorm(20000, 3))$threshold))
+  expect_match(control_cut(rnorm(50), rnorm(20000))$verdict, "too few")
+})
+
+test_that("a control beats a blind quantile but cannot argue a cut downwards", {
+  # Deterministic and perfectly smooth, so there is no sampling noise for the
+  # kernel to mistake for a valley. Nothing in this parent indicates a cut.
+  flat <- qnorm(ppoints(5000))
+  blind <- resolve_threshold("M", flat, NULL)
+  expect_identical(blind$source, "quantile_fallback")
+  expect_true(blind$needs_review)
+
+  # An independent experiment beats a constant fraction of the parent outright,
+  # and the cut is no longer blind, so the review flag clears. The earlier cut
+  # stays on the row so the two remain comparable.
+  helped <- resolve_threshold("M", flat, NULL, control_threshold = 1.9,
+                              control_kind = "fmm_q995")
+  expect_identical(helped$source, "fmm_q995")
+  expect_false(helped$needs_review)
+  expect_equal(helped$threshold, 1.9)
+  expect_equal(helped$derived_threshold, blind$threshold)
+  expect_identical(helped$derived_source, "quantile_fallback")
+
+  set.seed(1)
+  two <- c(rnorm(4000, 0), rnorm(2000, 6))
+  own <- resolve_threshold("M", two, NULL, adaptive = TRUE)
+  # The control says the negative reaches further than the sample's own density
+  # did: the conservative reading wins, and the derived cut is kept.
+  above <- resolve_threshold("M", two, NULL, control_threshold = 9,
+                             adaptive = TRUE)
+  expect_equal(above$threshold, 9)
+  expect_match(above$source, "_valley_rejected$")
+  expect_equal(above$derived_threshold, own$threshold)
+  # A control cannot argue a cut DOWNWARDS. Its negative is at most as wide as
+  # the sample's, so a sample whose density puts the boundary higher has seen
+  # something the control cannot.
+  below <- resolve_threshold("M", two, NULL, control_threshold = 0.5,
+                             adaptive = TRUE)
+  expect_equal(below$threshold, own$threshold)
+  expect_identical(below$source, own$source)
+})
+
+test_that("agreement compares the derived cut, not the control against itself", {
+  # The failure this guards: where the control replaced the cut, `threshold` IS
+  # the control's cut, so the naive difference is zero for every such row and
+  # the diagnostic reports perfect agreement everywhere.
+  thr <- data.frame(sample_id = "S1", panel = "P1", marker = "CCR7",
+                    threshold = 1.5, source = "fmm_q995_valley_rejected",
+                    derived_threshold = 2.4, derived_source = "valley",
+                    stringsAsFactors = FALSE)
+  fmo <- data.frame(sample_id = "S1", marker = "CCR7", fmo_threshold = 1.5,
+                    fmo_sample = "F", stringsAsFactors = FALSE)
+  out <- fmo_agreement(thr, fmo, unc = NULL)
+  expect_equal(out$distance, 0.9)
+  expect_equal(out$derived_threshold, 2.4)
+  expect_equal(out$applied_threshold, 1.5)
+
+  # A refused control is reported as refused rather than compared to nothing.
+  ref <- data.frame(sample_id = "S1", marker = "CCR7",
+                    fmo_threshold = NA_real_, fmo_sample = "F",
+                    fmo_verdict = "control brighter than the sample",
+                    stringsAsFactors = FALSE)
+  expect_identical(fmo_agreement(thr, ref)$verdict, "control refused, not used")
+})

@@ -873,6 +873,7 @@ exhaustive list rather than a second copy of them.
 | `acquisition_qc_bins.csv` | Per-interval rate and channel departure |
 | `acquisition_qc_impact.csv` | How far each population would move if the flagged intervals were excluded |
 | `fmo_agreement.csv` | Derived cut against its FMO-anchored equivalent, in units of the cut's own uncertainty |
+| `controls_refused.csv` | Channels where a declared control could not anchor a cut, and why |
 | `spreading_pairs.csv` | Per channel pair, how much wider the receiver's negatives become |
 | `spreading_receivers.csv` | Per marker, total spreading received and whether it explains a fallback |
 | `calibration.csv` | Bead fit per channel, written by `--calibration-beads` |
@@ -880,7 +881,42 @@ exhaustive list rather than a second copy of them.
 `thresholds_used.csv` gains `override_reason` and `override_by` only when the
 config declares a `sample_overrides:` block, so a run that overrides nothing
 writes the table it always wrote. `source` is `manual` for an overridden cut,
-`fmo_q995` for one anchored to a fluorescence-minus-one control.
+`fmo_q995` for one anchored to a fluorescence-minus-one control, `fmm_q995` for
+a tube that leaves out several reagents at once, and `control_q995` for an
+unstained tube. Those three bare names mean the data indicated no cut and the
+control supplied one; the `_valley_rejected` suffix means the data did indicate
+a cut and the control put the boundary higher. Either way the row carries
+`derived_threshold` and `derived_source`, the cut that would have been used
+without the control, so the two stay comparable.
+
+#### What a control has to be before it is used
+
+Two things go wrong with a control-anchored cut, so each declared control
+channel is checked before it is trusted.
+
+A far quantile finds the edge of the negative population only when the control
+contains nothing but that population. A tube carrying roughly one percent of
+bright events puts the 99.5th percentile inside that tail instead. On the
+minus-multiple data this check was written against, one channel's control sat at
+1.0 at the 95th percentile and 5.6 at the 99.5th: a cut there was above the full
+stain's own 99th percentile, so nothing in any sample would have been positive.
+The run also places the cut by the negative mode and the spread of the half
+below it, which a bright tail cannot move, and takes whichever of the two is
+lower. For a clean control that is the quantile, so nothing changes.
+
+A minus control must also be dimmer in the channel it leaves out. When it is
+brighter, the tube, the sample sheet or the unmixing is wrong, and anchoring to
+it raises the cut and deletes a real population. Comparing the two negative
+modes in units of the sample's own spread catches that. A refused control is
+listed in `controls_refused.csv` with its reason, and the threshold comes from
+the sample's own data as it would have without any control.
+
+One consequence is worth knowing when reading `fmo_agreement.csv`. A cut the
+control supplied has no uncertainty of its own, because the events behind it are
+in a different tube, so those rows carry `distance` but leave `distance_in_u`
+empty. The verdict scaled by uncertainty is therefore available for the rows
+where the sample's own cut was the one applied, which are also the rows where
+the two methods were free to disagree.
 
 Read `acquisition_qc_impact.csv` against `u_pct_points` for the same population
 before acting on an acquisition flag. `--drop-unstable-events` performs the

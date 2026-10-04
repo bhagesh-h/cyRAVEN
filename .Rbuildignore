@@ -63,3 +63,6 @@
 # from an R session. Every chunk that draws one is guarded with file.exists(), so
 # a vignette built from the tarball renders without them rather than failing.
 ^vignettes/images$
+# Editor working directory. Untracked by git, never read by R, and reported by
+# R CMD check as a hidden file probably included in error.
+^\.vscode$
