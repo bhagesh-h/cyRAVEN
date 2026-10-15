@@ -126,8 +126,10 @@ The cost is real and worth stating: some clusters will split on scatter rather
 than on lineage. If that is not what you want:
 
 ```bash
---explore-markers CD3,CD4,CD8,CD19,CD56    # cluster on these only
---explore-exclude FSC-A,SSC-A,LiveDead     # or drop the usual suspects
+# cluster on these markers only
+--explore-markers CD3,CD4,CD8,CD19,CD56
+# or drop the usual suspects
+--explore-exclude FSC-A,SSC-A,LiveDead
 ```
 
 ### 4. The quality gate
@@ -158,8 +160,10 @@ ignored and the run flagged: at that point the markers are more likely mis-named
 than the data bad.
 
 ```bash
---no-explore-qc          # embed every event, debris included
---explore-keep-dead      # keep the cluster the viability dye marks as dead
+# embed every event, debris included
+--no-explore-qc
+# keep the cluster marked dead
+--explore-keep-dead
 ```
 
 ### 5. Two things it does that the declared path cannot
@@ -2362,7 +2366,8 @@ when the task needs them, so the description above is also the routing table.
 Copy the directory into the personal skills folder:
 
 ```bash
-cp -r .claude/skills/cyraven ~/.claude/skills/
+cp -r .claude/skills/cyraven \
+  ~/.claude/skills/
 ```
 
 ```powershell
@@ -2458,7 +2463,9 @@ When adding a flag or an output, update `SKILL.md` and the reference file that
 mentions the area. The filenames are verifiable mechanically:
 
 ```bash
-grep -rohE '"[a-z0-9_]+\.(csv|png|txt|rds)"' R/pipeline.R | sort -u
+grep -rohE \
+  '"[a-z0-9_]+\.(csv|png|txt|rds)"' \
+  R/pipeline.R | sort -u
 ```
 
 Cross-check that list against `references/interpretation.md`.

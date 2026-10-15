@@ -35,6 +35,17 @@ Categorical colours past the sixth now continue in hues the base palette does
 not use. The old extension started with a pink close to the sixth colour, so a
 seventh category was hard to tell apart from the sixth.
 
+A category now keeps one colour across every figure. Colours used to be
+assigned from whichever categories a figure contained, so a visit missing one
+organism shifted every colour after it: Klebsiella was purple on the pooled
+microbiology figure and red on day 7. The per-visit figures now carry the whole
+cohort's categories and build the palette from those, so the pooled figure,
+each visit's figure and the clinical landscape strip agree.
+
+The clinical landscape is now sized for its keys as well as its tiles. With
+eleven clinical variables the column of keys grew past the top of the figure
+and cut off the first one's title.
+
 ## Two flags for the first run: `--demo` and `--write-template`
 
 `--demo DIR` writes the demonstration cohort, 35 FCS files with a sample sheet

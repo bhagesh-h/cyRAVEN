@@ -146,13 +146,14 @@ in the CSV; anything that is one decision for the whole study belongs in the
 YAML. An analysis choice put in the CSV would repeat on every row and invite the
 rows to disagree about it.
 
-Both templates ship with the package:
+Start the sheet from your own files, so it already has a row for each one,
+and the config from the annotated template:
 
 ```bash
-docker run --rm \
-  --entrypoint sh \
+docker run --rm -v "$PWD/data:/data" \
   cyraven:1.0.0 \
-  -c 'cat /usr/local/lib/R/site-library/cyRAVEN/examples/samples_template.csv'
+  --dir /data/fcs --recursive \
+  --write-samples /data/samples.csv
 ```
 
 ```bash
@@ -1046,13 +1047,13 @@ docker run --rm \
 docker run --rm \
   -v "$PWD/data:/data:ro" \
   -v "$PWD/results2:/results" \
-  -v "$PWD/results/baseline.rds:/baseline.rds:ro" \
+  -v "$PWD/results:/prev:ro" \
   cyraven:1.0.0 \
   --dir /data/fcs \
   --samples /data/samples.csv \
   --config /data/analysis.yaml \
   --outdir /results \
-  --baseline /baseline.rds \
+  --baseline /prev/baseline.rds \
   --fail-on-drift
 ```
 
@@ -1120,7 +1121,8 @@ Each of the following is a complete command. `$D` is the mount pair every run
 needs, written once here so the recipes stay readable:
 
 ```bash
-D='-v '"$PWD"'/data:/data:ro -v '"$PWD"'/results:/results'
+D="-v $PWD/data:/data:ro \
+   -v $PWD/results:/results"
 ```
 
 or write the two `-v` flags out in full, as in Part 1.
@@ -1262,13 +1264,12 @@ Then test every later run against it:
 
 ```bash
 docker run --rm $D \
-  -v "$PWD/results/baseline.rds:/baseline.rds:ro" \
   cyraven:1.0.0 \
   --dir /data/fcs \
   --samples /data/samples.csv \
   --config /data/analysis.yaml \
   --outdir /results \
-  --baseline /baseline.rds \
+  --baseline /results/baseline.rds \
   --fail-on-drift
 ```
 
@@ -1307,6 +1308,7 @@ single timepoint, and a box per timepoint averages exactly that away.
 ##### A cohort with clinical scores and outcomes
 
 ```bash
+C=sofa,survival_28d,crp_mg_l,age_years
 docker run --rm $D \
   cyraven:1.0.0 \
   --dir /data/fcs \
@@ -1314,14 +1316,15 @@ docker run --rm $D \
   --config /data/analysis.yaml \
   --group-column infection_focus \
   --reference-group Pulmonary \
-  --clinical-columns sofa,survival_28d,crp_mg_l,age_years \
+  --clinical-columns "$C" \
   --outdir /results
 ```
 
 Any sheet column can be named. `sofa` and `crp_mg_l` are numeric and get
 Spearman's rho, `survival_28d` has two levels and gets Wilcoxon with Cliff's
-delta, and each effect is written with a percentile bootstrap interval -- which on
-a cohort of ten usually spans zero, and seeing that is the point. Read
+delta, and each effect is written with a percentile bootstrap interval. On a
+cohort of ten that interval usually spans zero, meaning the effect is not
+resolved. Read
 `clinical_variables_correlation.png` first: p-values are adjusted within each
 variable on the assumption that the variables are separate questions, and two
 variables correlated with each other are one question asked twice.
@@ -1399,7 +1402,7 @@ docker run --rm $D \
   --samples /data/samples.csv \
   --config /data/analysis.yaml \
   --calibration-beads /beads/rainbow.fcs \
-  --calibration-values /beads/lot_values.csv \
+  --calibration-values /beads/lot.csv \
   --outdir /results
 ```
 
@@ -1416,7 +1419,7 @@ docker run --rm $D \
   --dir /data/fcs \
   --samples /data/samples.csv \
   --config /data/analysis.yaml \
-  --external-labels /data/cycondor_labels.csv \
+  --external-labels /data/labels.csv \
   --export-gates \
   --outdir /results
 ```
@@ -1506,7 +1509,8 @@ specification to be worth anything.
 ##### A new panel, and no specification written yet
 
 ```bash
-# no --config, no --samples. A folder of FCS files is the whole input.
+# No --config and no --samples:
+# a folder of FCS files is the whole input.
 docker run --rm $D \
   cyraven:1.0.0 \
   --dir /data/fcs \
