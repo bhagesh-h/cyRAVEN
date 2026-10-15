@@ -64,7 +64,7 @@ The result is a phenotype with a measurement behind it: `CD19+ HLA-DR+ CD3-
 CD14-`, where every call is a percentage of cells above their own sample's
 threshold, rather than a colour you interpreted.
 
-Run without `--maybe-learn`, explore is deliberately blind: it sees the
+Run without `--maybe-learn`, explore is blind: it sees the
 transform and the group labels and nothing else, and names its clusters from
 pooled medians. That is the right default, and section 6 explains why.
 
@@ -122,7 +122,7 @@ deliberate: it is what lets the QC gate find debris (CD45 low), dead cells
 (viability high) and granulocytes (side scatter high, identified by no antibody
 in most panels).
 
-The cost is real and worth stating: some clusters will split on scatter rather
+The cost: some clusters will split on scatter rather
 than on lineage. If that is not what you want:
 
 ```bash
@@ -243,9 +243,9 @@ Two questions, two answers, and they can disagree.
 **Correspondence** is measured by which cells overlap.
 `explore_cluster_identity.png` puts clusters in rows and declared populations in
 columns, grouped by the population each cluster best matches. The match is
-scored by the **F1 statistic** -- the harmonic mean of precision (how much of the
+scored by the **F1 statistic**, the harmonic mean of precision (how much of the
 cluster is that population) and recall (how much of that population is in the
-cluster) -- rather than by the largest overlap. The distinction matters: a
+cluster), rather than by the largest overlap. The distinction matters: a
 cluster of 500 cells holding 300 CD4 T cells has CD4 as its plurality even when
 those 300 are a twentieth of the CD4 T cells in the run. The label would
 describe the cluster; the cluster would not describe the label. F1 can only be
@@ -256,18 +256,19 @@ Every cluster has a best match, so the call is qualified rather than asserted:
 `confident` at F1 ≥ 0.5, `partial`, or `no clear match`, all written to
 `explore_cluster_identity.csv` with the precision and recall behind them.
 
-The catch-all is ranked apart. It is not a cell type -- it is the complement of
-the specification -- and letting it compete would name most clusters "Other" on a
-specification with modest coverage, which is true and useless. A cluster at or
+The catch-all is ranked apart, because it is the complement of the
+specification rather than a cell type. Letting it compete would name most
+clusters "Other" on a specification with modest coverage, which is true but not
+informative. A cluster at or
 above 70% catch-all is reported as **undescribed**, which is a gap in the
 specification rather than a property of the cluster. A cluster more than half
 catch-all is never called confident, however clean its F1 against the remainder.
 
 **Identity** is read from the cluster's own marker profile.
 `explore_cluster_subsets.csv` matches each cluster's positivity fractions
-against the immune subsets the panel can express -- activated, exhausted and
+against the immune subsets the panel can express (activated, exhausted and
 homing T cell subsets, NK CD56 bright/dim, HLA-DR low and CD38+ monocytes, and
-so on -- and takes the most specific definition the profile satisfies. The base
+so on) and takes the most specific definition the profile satisfies. The base
 lineages are candidates too, so a cluster of plain CD4 T cells is named rather
 than left blank. The `margin` column is the smallest distance from the
 positivity cut across the requirements that were checked: a cluster 51% positive
@@ -280,10 +281,10 @@ run still gets it.
 The subsets a panel can define are a property of the **panel**, not of
 immunology. Only definitions whose every marker is present are proposed, and the
 canonical groups that cannot be reached are named in the log with the markers
-they would need -- naive/central-memory/effector-memory without CD45RA and CCR7,
+they would need: naive/central-memory/effector-memory without CD45RA and CCR7,
 the three monocyte subsets without CD16, senescent T cells without CD28.
 
-The subsets are deliberately **not** added to the declared specification.
+The subsets are **not** added to the declared specification.
 Appending them there re-scores every cell, changes every frequency and legend,
 and asks a circular question of a subset named after the marker that defines it:
 a CD69+ subset is 100% CD69-positive by construction. The annotation attaches to
@@ -332,7 +333,7 @@ is **not** evidence of normality. That is why the rank test is used,
 and the table says so rather than leaving a reader to conclude "p > 0.05, so a
 t-test would have been fine".
 
-What deliberately does not happen: running every test and reporting all the
+What does not happen: running every test and reporting all the
 p-values. At these group sizes that is p-hacking with extra steps.
 
 ### 10. Options
@@ -697,7 +698,7 @@ alone would raise an alarm on any study with unequal age distributions.
 `confounding_diagnostics.csv` reports both conditions using tests estimable at
 small *n*, and assigns a `confounder_risk` verdict.
 
-Adjustment is opt-in and deliberately separated. At single-digit *n* per group, a
+Adjustment is opt-in and kept separate. At single-digit *n* per group, a
 model carrying group with age and sex expends most residual degrees of freedom on
 nuisance terms. Where age is strongly associated with group, as in a
 syndrome-against-adult-control design, the parameters are not separable at any
@@ -933,7 +934,7 @@ modes in units of the sample's own spread catches that. A refused control is
 listed in `controls_refused.csv` with its reason, and the threshold comes from
 the sample's own data as it would have without any control.
 
-One consequence is worth knowing when reading `fmo_agreement.csv`. A cut the
+Keep one consequence in mind when reading `fmo_agreement.csv`. A cut the
 control supplied has no uncertainty of its own, because the events behind it are
 in a different tube, so those rows carry `distance` but leave `distance_in_u`
 empty. The verdict scaled by uncertainty is therefore available for the rows
@@ -982,7 +983,7 @@ them the value falls. Both are set by what was acquired rather than by the gatin
 strategy, so `--max-events-per-file` raises them in proportion; `--lod-events` and
 `--loq-events` change the conventions themselves.
 
-Counting is deliberately not a row in `uncertainty_budget.csv`. That table
+Counting is not a row in `uncertainty_budget.csv`. That table
 answers which threshold a population's uncertainty comes from, and counting is
 not a threshold.
 
@@ -1211,7 +1212,7 @@ tested against it, because each variable is its own question asked of every
 population. Pooling across variables would penalise a well-powered variable for
 the company it keeps.
 
-Two things this deliberately is not. It is not **survival analysis**: a 28-day
+Two things this is not. It is not **survival analysis**: a 28-day
 flag is tested as the two-group comparison it is, and no time-to-event model is
 fitted because the sheet carries no follow-up time. And it is not a **claim about
 cells**: every test runs on one value per sample, so the replicates are subjects.
@@ -1320,7 +1321,7 @@ than 5% of its parent is misplaced whatever its source says, because a viability
 or CD45 gate that discards nineteen cells in twenty is not measuring what it
 claims to.
 
-Population markers are deliberately untouched. A quantile fallback on CD19 is a
+Population markers are left untouched. A quantile fallback on CD19 is a
 poor threshold, but "no threshold" does not mean "every cell is a B cell", so
 this repairs the hierarchy and leaves the reason a specification may describe few
 cells exactly where it was.
@@ -1414,9 +1415,9 @@ further column whose header is non-empty and whose body is numeric is read as a
 population. Blank rows are skipped, so cohort separators do not need removing.
 
 ```
-sample,        Granulocytes, Monocytes, Lymphocytes
-HC-13;2.fcs,           3810,       420,        1650
-HC-14;1.fcs,           2990,       395,        1880
+sample,Granulocytes,Monocytes,Lymphocytes
+HC-13;2.fcs,3810,420,1650
+HC-14;1.fcs,2990,395,1880
 ```
 
 Units come from any header cell that is not itself a population column. A label
@@ -1512,7 +1513,7 @@ column rather than `shapiro_p` alone: Shapiro-Wilk on 4 to 10 donors has almost
 no power, so a non-significant result is **not** evidence of normality, and the
 column says so. That is why the rank test is used.
 
-What deliberately does not happen is running every test and reporting all the
+What does not happen is running every test and reporting all the
 p-values. At these group sizes, choosing among six p-values per population is
 p-hacking with extra steps.
 
@@ -1580,7 +1581,7 @@ drawn over that visit's samples alone.
 
 **The embedding, the thresholds and the statistics are not recomputed per
 visit.** Only the rows drawn are restricted. A position on one visit's UMAP is
-therefore the same position on another's, and a threshold is the same cut -- a
+therefore the same position on another's, and a threshold is the same cut. A
 difference between two of these directories is a difference in the cells, not in
 the method. Re-running the pipeline per visit would instead produce embeddings
 computed from different cells, between which no position is comparable, and
@@ -1592,8 +1593,8 @@ by study group leaves too few samples per comparison, and a bracket computed on
 the pooled cohort drawn beside one visit's data would attribute a cohort-level
 result to a subset of it.
 
-The paired views -- `timepoint_trajectories_*.png`, `timepoint_subset_balance.png`,
-`timepoint_marker_intensity.png` -- stay in the run directory and are written
+The paired views (`timepoint_trajectories_*.png`, `timepoint_subset_balance.png`,
+`timepoint_marker_intensity.png`) stay in the run directory and are written
 whether or not the flag is set. They need every visit at once, so splitting them
 by visit is what destroys them.
 
@@ -1612,6 +1613,8 @@ augments is not an addition.
 # lines they would type and which the session printed back, and copying the
 # block copies the output with it.
 knitr::opts_chunk$set(collapse = FALSE, comment = "#>", eval = TRUE)
+# Printed results wrap at 44 characters, the width a phone shows a code block.
+options(width = 44)
 set.seed(1)
 ```
 
@@ -1644,17 +1647,26 @@ following Weber et al. (2019, *Commun Biol* 2:183). The degrees of freedom
 reflect the number of donors.
 
 ```{r ds}
-mfi <- expand.grid(sample_id = sprintf("S%02d", 1:12),
-                   population = "CD4 T cells", marker = "HLA-DR",
+ids <- sprintf("S%02d", 1:12)
+mfi <- expand.grid(sample_id = ids,
+                   population = "CD4 T cells",
+                   marker = "HLA-DR",
                    stringsAsFactors = FALSE)
 mfi$n_cells <- 500
-mfi$median_asinh <- rnorm(12, 2, 0.3) + rep(c(0, 0.8), each = 6)
-mfi$pct_positive <- pmin(100, pmax(0, rnorm(12, 30, 5) + rep(c(0, 10), each = 6)))
-mfi$is_control <- FALSE; mfi$qc_status <- "pass"
-grp <- setNames(rep(c("HC", "Patient"), each = 6), sprintf("S%02d", 1:12))
+mfi$median_asinh <- rnorm(12, 2, 0.3) +
+  rep(c(0, 0.8), each = 6)
+mfi$pct_positive <- pmin(100, pmax(0,
+  rnorm(12, 30, 5) + rep(c(0, 10), each = 6)))
+mfi$is_control <- FALSE
+mfi$qc_status <- "pass"
+grp <- setNames(
+  rep(c("HC", "Patient"), each = 6), ids)
 
-res <- stats_marker_state(mfi, grp, reference = "HC")
-res[, c("marker", "measure", "n_reference", "n_comparison", "delta_median", "p_value")]
+res <- stats_marker_state(
+  mfi, grp, reference = "HC")
+res[, c("marker", "measure", "n_reference",
+        "n_comparison", "delta_median",
+        "p_value")]
 ```
 
 `n_reference` is 6, the number of control donors, not 3,000, the number of events
@@ -1752,12 +1764,22 @@ relative to the geometric mean of the sample composition rather than to a fixed
 total.
 
 ```{r clr}
+share <- function() {
+  v <- c(60, 25, 15) * exp(rnorm(3, 0, .1))
+  100 * v / sum(v)
+}
 freq <- data.frame(
-  sample_id = rep(sprintf("S%02d", 1:6), each = 3),
-  population = rep(c("Granulocytes", "CD4 T cells", "B cells"), 6),
-  pct_of_cd45_pos = as.vector(replicate(6, {v <- c(60, 25, 15) * exp(rnorm(3, 0, .1)); 100*v/sum(v)})),
+  sample_id = rep(sprintf("S%02d", 1:6),
+                  each = 3),
+  population = rep(c("Granulocytes",
+                     "CD4 T cells",
+                     "B cells"), 6),
+  pct_of_cd45_pos =
+    as.vector(replicate(6, share())),
   is_control = FALSE, qc_status = "pass")
-head(clr_frequencies(freq)[, c("sample_id", "population", "pct_of_cd45_pos", "clr")], 3)
+cl <- clr_frequencies(freq)
+head(cl[, c("sample_id", "population",
+            "pct_of_cd45_pos", "clr")], 3)
 ```
 
 #### 3.3 Concordance
@@ -2061,7 +2083,7 @@ observations, is documented rather than ignored
 ([*Statistical uncertainty analysis for small-sample, high log-variance data*](https://pmc.ncbi.nlm.nih.gov/articles/PMC6754704/)),
 which is why no interval is written below six.
 
-**What is deliberately not implemented.** Generalised linear mixed models are the
+**What is not implemented.** Generalised linear mixed models are the
 right tool when donors contribute several samples, and CytoGLMM implements them
 for cytometry specifically
 ([Seiler et al.](https://christofseiler.github.io/CytoGLMM/)). Beta regression
@@ -2177,10 +2199,13 @@ clustering them again.
 Export the assignment with the sample and the event index, then hand it over.
 
 ```r
-cl <- data.frame(sample = condor@anno$sample_id,
-                 event  = condor@anno$event_index,
-                 cluster = paste0("k", condor@clustering$FlowSOM$metacluster))
-write.csv(cl, "labels.csv", row.names = FALSE)
+meta <- condor@clustering$FlowSOM$metacluster
+cl <- data.frame(
+  sample  = condor@anno$sample_id,
+  event   = condor@anno$event_index,
+  cluster = paste0("k", meta))
+write.csv(cl, "labels.csv",
+          row.names = FALSE)
 ```
 
 ```bash
@@ -2243,25 +2268,36 @@ already carries, so one file serves both.
 
 ```r
 run_cyraven(list(
-  dir = "data/fcs/", outdir = "results_cyraven/",
+  dir = "data/fcs/",
+  outdir = "results_cyraven/",
   sample_map = "data/sample_map.csv",
   config = "data/panel.yaml",
-  group_column = "cohort", reference_group = "Healthy controls",
-  unsupervised = TRUE, explain_clusters = TRUE
+  group_column = "cohort",
+  reference_group = "Healthy controls",
+  unsupervised = TRUE,
+  explain_clusters = TRUE
 ))
 
 anno <- read.csv("data/sample_map.csv")
-write.csv(anno, "results_condor/anno_table.csv", row.names = FALSE)
+at <- "results_condor/anno_table.csv"
+write.csv(anno, at, row.names = FALSE)
 
 condor <- cyCONDOR::prep_fcd(
-  data_path = "data/fcs/", max_cell = 30000, useCSV = FALSE,
-  transformation = "auto_logi", remove_param = c("Time", "InFile"),
-  anno_table = "results_condor/anno_table.csv",
+  data_path = "data/fcs/",
+  max_cell = 30000, useCSV = FALSE,
+  transformation = "auto_logi",
+  remove_param = c("Time", "InFile"),
+  anno_table = at,
   filename_col = "file", seed = 42)
-condor <- cyCONDOR::runPCA(condor, data_slot = "orig", seed = 42)
-condor <- cyCONDOR::runUMAP(condor, input_type = "pca", data_slot = "orig", seed = 42)
-condor <- cyCONDOR::runFlowSOM(condor, input_type = "pca", data_slot = "orig",
-                               nClusters = 8, seed = 42)
+condor <- cyCONDOR::runPCA(
+  condor, data_slot = "orig", seed = 42)
+condor <- cyCONDOR::runUMAP(
+  condor, input_type = "pca",
+  data_slot = "orig", seed = 42)
+condor <- cyCONDOR::runFlowSOM(
+  condor, input_type = "pca",
+  data_slot = "orig",
+  nClusters = 8, seed = 42)
 ```
 
 The `benchmark/` directory of the cyRAVEN repository executes both on a public
@@ -2371,7 +2407,9 @@ cp -r .claude/skills/cyraven \
 ```
 
 ```powershell
-Copy-Item -Recurse .claude\skills\cyraven $HOME\.claude\skills\
+Copy-Item -Recurse `
+  .claude\skills\cyraven `
+  $HOME\.claude\skills\
 ```
 
 Confirm with `/skills`, or ask Claude to invoke `/cyraven`.
@@ -2383,11 +2421,13 @@ Code discovers it when the session is rooted in the repository.
 
 #### Without a copy
 
-Point Claude at the raw files:
+Point Claude at the raw
+[SKILL.md](https://raw.githubusercontent.com/bhagesh-h/cyRAVEN/main/.claude/skills/cyraven/SKILL.md)
+by pasting its link with:
 
 ```
-Read https://raw.githubusercontent.com/bhagesh-h/cyRAVEN/main/.claude/skills/cyraven/SKILL.md
-and follow it.
+Read this SKILL.md and follow it:
+<paste the link here>
 ```
 
 ### 3. Using it
@@ -2398,18 +2438,23 @@ with `/cyraven`.
 Requests it is built for:
 
 ```
-Run cyRAVEN on the FCS files in ./data. The panel is CD3, CD4, CD8,
-CD14, CD16, CD19, CD56, HLA-DR.
+Run cyRAVEN on the FCS files in ./data.
+The panel is CD3, CD4, CD8, CD14, CD16,
+CD19, CD56, HLA-DR.
 
-Set up the demonstration dataset and show me what the output looks like.
+Set up the demonstration dataset and
+show me what the output looks like.
 
-Write a population spec for this panel and explain each definition.
+Write a population spec for this panel
+and explain each definition.
 
 My frequency table came out empty. Why?
 
-Read results/ and tell me which findings survive.
+Read results/ and tell me which findings
+survive.
 
-Is the difference in CD8 T cells between the two cohorts real?
+Is the difference in CD8 T cells between
+the two cohorts real?
 ```
 
 The first builds and invokes the container without being asked to, because that

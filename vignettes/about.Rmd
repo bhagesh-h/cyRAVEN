@@ -59,6 +59,10 @@ share nothing unless you add `--maybe-learn`; see
 # lines they would type and which the session printed back, and copying the
 # block copies the output with it.
 knitr::opts_chunk$set(collapse = FALSE, comment = "#>", eval = TRUE)
+# Printed results wrap at 44 characters, the width a phone shows a code block
+# at, so a data frame folds into stacked column blocks instead of running off
+# the screen.
+options(width = 44)
 set.seed(1)
 library(cyRAVEN)
 ```
@@ -98,9 +102,12 @@ compensation twice is as damaging as omitting it.
 
 ```{r cofactor}
 set.seed(42)
-ex <- matrix(abs(rnorm(20000 * 4, 0, 250)), ncol = 4,
-             dimnames = list(NULL, c("CD3", "CD4", "CD8", "CD19")))
-cf <- derive_cofactor(ex, setNames(1:4, colnames(ex)))
+mk <- c("CD3", "CD4", "CD8", "CD19")
+ex <- matrix(abs(rnorm(20000 * 4, 0, 250)),
+             ncol = 4,
+             dimnames = list(NULL, mk))
+cf <- derive_cofactor(
+  ex, setNames(1:4, colnames(ex)))
 round(as.numeric(cf), 1)
 ```
 
@@ -115,7 +122,9 @@ every threshold in the run is computed.
 #### 3 Gate
 
 ```{r valley}
-x <- c(rnorm(8000, 0, 0.4), rnorm(2000, 4, 0.5))   # bimodal marker
+# a bimodal marker
+x <- c(rnorm(8000, 0, 0.4),
+       rnorm(2000, 4, 0.5))
 round(density_valley(x), 2)
 ```
 
@@ -131,7 +140,8 @@ definition of a population to differ between groups, which
 #### 4 Score
 
 ```{r spec}
-str(default_population_spec()[["CD3 pos CD4 pos"]])
+spec <- default_population_spec()
+str(spec[["CD3 pos CD4 pos"]])
 ```
 
 Populations are evaluated as Boolean conjunctions of marker directions read from
@@ -140,7 +150,8 @@ YAML. Editing the specification changes the analysis without modifying R code.
 #### 5 Quantify the uncertainty
 
 ```{r unc, eval = FALSE}
-u <- threshold_uncertainty(x_parent, source = "valley", B = 100)
+u <- threshold_uncertainty(
+  x_parent, source = "valley", B = 100)
 c(u$u_sampling, u$u_method, u$u_combined)
 ```
 
@@ -156,7 +167,8 @@ draws from the same stream position whether this runs or not.
 #### 6 Embed
 
 ```{r umap, eval = FALSE}
-emb <- run_umap(mat, n_neighbors = 30, min_dist = 0.3, seed = 42)
+emb <- run_umap(mat, n_neighbors = 30,
+                min_dist = 0.3, seed = 42)
 ```
 
 `select_umap_features()` excludes scatter, viability, time and the height and
@@ -172,15 +184,23 @@ alters the embedding; see `?run_umap`.
 #### 7 Test
 
 ```{r stats}
+ids <- sprintf("S%02d", 1:12)
 freq <- data.frame(
-  sample_id = rep(sprintf("S%02d", 1:12), each = 2),
-  population = rep(c("CD4 T cells", "B cells"), 12),
-  pct_of_cd45_pos = c(rbind(rnorm(12, 25, 4), rnorm(12, 10, 2))),
+  sample_id = rep(ids, each = 2),
+  population = rep(c("CD4 T cells",
+                     "B cells"), 12),
+  pct_of_cd45_pos = c(rbind(
+    rnorm(12, 25, 4), rnorm(12, 10, 2))),
   is_control = FALSE, qc_status = "pass")
-grp <- setNames(rep(c("HC", "Patient"), each = 12)[1:12], sprintf("S%02d", 1:12))
+grp <- setNames(
+  rep(c("HC", "Patient"), each = 12)[1:12],
+  ids)
 
-res <- stats_group_comparison(freq, grp, reference = "HC")
-res[, c("population", "comparison_group", "n_reference", "cliffs_delta", "p_value")]
+res <- stats_group_comparison(
+  freq, grp, reference = "HC")
+res[, c("population", "comparison_group",
+        "n_reference", "cliffs_delta",
+        "p_value")]
 ```
 
 `stats_marker_state()` applies the same treatment to marker expression within a
@@ -224,9 +244,12 @@ the enclosed events and recurses, producing the topology of a manual gating
 strategy.
 
 ```r
-st <- explain_cluster(marker_matrix, cluster_id == 7)
-st$summary               # marker pair and metrics per level
-st$levels[[1]]$polygon   # vertices, in arcsinh units
+st <- explain_cluster(marker_matrix,
+                      cluster_id == 7)
+# marker pair and metrics per level
+st$summary
+# vertices, in arcsinh units
+st$levels[[1]]$polygon
 ```
 
 Convex polygons rather than thresholds: a conjunction of one-dimensional cuts is
@@ -278,12 +301,12 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
 
 The design record for explore mode: what the supervised and unsupervised halves
 can lend each other, which of those exchanges are implemented, which are
-deliberately refused, and where that leaves cyRAVEN against the tools it sits
+refused, and where that leaves cyRAVEN against the tools it sits
 beside.
 
 Written because "add unsupervised clustering" is the easy half of the problem.
 The hard half is deciding what the two halves are allowed to tell each other
-without destroying the guarantee that made either worth having.
+without losing what made each one useful.
 
 ### 1. The two failure modes
 
@@ -306,7 +329,7 @@ elsewhere in this project, one cyCONDOR run went from **1 significant cluster to
 8** by changing only how many cells were drawn.
 
 Running both and reading them side by side does not fix either. What fixes them
-is deciding, deliberately, which specific facts may cross between them.
+is deciding which specific facts may cross between them.
 
 ### 2. The exchange, enumerated
 
@@ -379,7 +402,7 @@ and explore can still describe.
 
 **It looks outside the parent gate.** Anything the CD45 gate excluded is
 invisible to the declared analysis by construction. Explore embeds it, which is
-the only way a population that fails the parent gate can ever be seen.
+how a population that fails the parent gate can still be seen.
 
 ### 5. Carrying the confounding verdict
 
@@ -401,7 +424,7 @@ Not a reimplementation: the same function, so the two cannot drift apart.
 
 `explore_suggested_spec.yaml` turns clusters into declarable population
 definitions. The obvious next step, feeding it straight back into the declared
-pipeline, is refused, and this is the most important design decision in the
+pipeline, is refused, and this is a central design decision in the
 feature.
 
 cyRAVEN's argument is that populations are declared **before** the data are
@@ -459,22 +482,22 @@ honestly be read side by side.
 
 ### 8. Where this leaves cyRAVEN
 
-| Capability | cyRAVEN | FlowSOM / Phenograph | cyCONDOR | diffcyt | CATALYST |
-|---|:--:|:--:|:--:|:--:|:--:|
-| Per-sample gate derivation | yes | | | | |
-| Uncertainty propagated to every frequency | yes | | | | |
-| Detection limits per population | yes | | | | |
-| Donor-level inference by construction | yes | | part | yes | part |
-| Refuses batch correction when confounded | yes | | | | |
-| Unsupervised discovery | yes | yes | yes | yes | yes |
-| Clusters named from per-sample thresholds | yes | | | | |
-| Cluster -> executable gate geometry | yes | | | | |
-| Gating-ML 2.0 export | yes | | | | |
-| Empirical-Bayes moderation across clusters | | | | yes | |
-| Trajectory inference | | | yes | | |
-| Data-determined cluster count | | yes | yes | | yes |
+Compared with FlowSOM, Phenograph, cyCONDOR, diffcyt and CATALYST:
 
-`yes` present. `part` possible but not enforced by the tool.
+| Capability | cyRAVEN | Also in |
+|---|:--:|---|
+| Per-sample gate derivation | yes | none of them |
+| Uncertainty carried to every frequency | yes | none of them |
+| Detection limits per population | yes | none of them |
+| Donor-level inference by construction | yes | diffcyt; possible but not enforced in cyCONDOR and CATALYST |
+| Refuses batch correction when confounded | yes | none of them |
+| Unsupervised discovery | yes | all of them |
+| Clusters named from per-sample thresholds | yes | none of them |
+| Cluster turned into gate geometry | yes | none of them |
+| Gating-ML 2.0 export | yes | none of them |
+| Empirical-Bayes moderation across clusters | no | diffcyt |
+| Trajectory inference | no | cyCONDOR |
+| Cluster count found from the data | no | Phenograph, and cyCONDOR through it. FlowSOM and CATALYST are given the count |
 
 The gap this feature closes is the "unsupervised discovery" row. The row that
 remains distinctive is **clusters named from per-sample thresholds**, which

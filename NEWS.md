@@ -61,16 +61,27 @@ two steps are `write_demo_cohort()` and `write_config_template()` from R.
 The ratio and functional-marker figures drawn by visit were titled "by group".
 They now say "by timepoint".
 
+## A comparison-table correction
+
+The table comparing cyRAVEN with other tools marked FlowSOM and CATALYST as
+finding the cluster count from the data. FlowSOM is given the count, and
+CATALYST computes metaclusterings up to a maximum and leaves the choice of k to
+the user; only Phenograph, and cyCONDOR through it, determines the count. The
+table is corrected, and restructured into three columns so it fits a phone.
+
 ## The site and the manual, redesigned for small screens
 
 The README, the site home page and the start of Get started lead with a
 four-command quick start and a diagram of what happens to the data. Repeated
 passages and overclaims were removed.
 
-Every command a new user meets is written one option per line, no wider than
-44 characters, so it fits a phone without scrolling sideways. Elsewhere, 37
-longer `docker run` commands were reflowed the same way, each checked to parse
-to the same arguments as before.
+Every code block on the site, commands, R examples, printed output, YAML and
+CSV, now fits a 390-pixel phone screen. A layout check of all nine pages at
+that width finds no page that scrolls sideways, no code box wider than the
+screen and no table that has to scroll. Shell commands are one option per line;
+R examples are reflowed with their evaluated results unchanged; printed R
+output wraps at 44 characters. The prose was swept for overstatement and
+filler, and every double hyphen used as a dash was rewritten.
 
 The site uses Inter and a lighter stylesheet written for phones first: tables
 wrap and scroll inside their own box instead of pushing the page sideways, and
