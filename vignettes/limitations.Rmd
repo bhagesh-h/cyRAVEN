@@ -11,7 +11,7 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
 ```
 
-Every caveat in one place, and the methods deliberately left out with the
+Every caveat in one place, and the methods left out, with the
 reason for each.
 
 Read this before quoting a number from a run. Nothing here is hypothetical: each
@@ -62,7 +62,7 @@ the only cohort they have been measured on is the demonstration one. Nothing
 here establishes that the defaults generalise to a different panel, a different
 instrument, or a different laboratory's staining.
 
-Two consequences worth stating plainly. The hardcoded constants in
+Two consequences. The hardcoded constants in
 `density_valley()`, `min_rel_depth` among them, may have been tuned to one
 cohort without anyone intending to tune them. And a learned gate is descriptive:
 it carries no p-value and is not evidence that the population is real.
@@ -319,8 +319,8 @@ decision too, and this is where it is written down.
 cohort, neither of which the CLR re-test does, but it pulls Stan into the image
 for a question users have not asked. `propeller` borrows variance across
 populations, which is the right instinct at n = 5-10, and is worth offering
-beside the rank tests rather than instead of them -- it assumes a variance
-structure the rank tests deliberately do not.
+beside the rank tests rather than instead of them, because it assumes a
+variance structure the rank tests do not.
 [CytoBatchFlagR](https://onlinelibrary.wiley.com/doi/10.1002/cyto.a.70024) is
 CC BY-NC-ND, which forbids redistribution in a packaged pipeline, and its
 MSI/frequency/EMD triad largely duplicates what is here.
@@ -340,7 +340,7 @@ the forward-compatible work is an optional `cl_id:` field per population.
 **And on small cohorts specifically: there is no consensus to follow.** No ISAC
 position paper, no journal guidance, no methods paper aimed at the n < 20
 immunophenotyping case. The field is quietly importing `propeller` and `sccomp`
-from single-cell RNA sequencing. The approach here -- rank tests, Cliff's delta,
+from single-cell RNA sequencing. The approach here (rank tests, Cliff's delta,
 Benjamini-Hochberg within a family, bootstrap intervals, and the attainable-p
-floor drawn on the figure -- is behind no published standard, because there is
+floor drawn on the figure) is behind no published standard, because there is
 not one.

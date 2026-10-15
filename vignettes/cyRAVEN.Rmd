@@ -213,7 +213,7 @@ during a run costs however long the run had been going.
 ### 2. Columns of the sheet
 
 Only `file` is required. Everything else is optional, and a column that is
-absent simply disables what depends on it.
+absent disables what depends on it.
 
 #### 2.1 Which file this is
 
@@ -290,8 +290,8 @@ Any column named `count.<Population>` is read as an externally measured
 absolute count for that population, from bead-based or volumetric counting.
 
 ```
-file,sample_id,count.Granulocytes,count.Monocytes
-HC-01.fcs,HC-01,3810,420
+file,sample_id,count.Monocytes
+HC-01.fcs,HC-01,420
 ```
 
 A frequency is a proportion of a parent gate, so it moves whenever any other
@@ -431,7 +431,7 @@ The errors this format can raise, and what each means:
 | `--samples supersedes ...` | The sheet was combined with a flag it replaces. |
 
 Every population reported `UNAVAILABLE`, or an empty frequency table, is almost
-always a marker name that does not match `$PnS` exactly. `--check` lists every
+usually a marker name that does not match `$PnS` exactly. `--check` lists every
 marker the files carry and names the specification entries matching none of
 them.
 
@@ -576,7 +576,9 @@ sample_overrides:
   D07:
     CCR7:
       threshold: 2.15
-      reason: "valley sat inside the negative mode, see gating_qc.png"
+      reason: >-
+        valley sat inside the negative
+        mode, see gating_qc.png
       set_by: "initials"
 ```
 
@@ -704,7 +706,9 @@ functional_blocks:
     require: CD3
   exhaustion:
     markers: [LAG-3, TIM-3, PD-1]
-    exclude: [Classical monocytes, Non-classical monocytes]
+    exclude:
+      - Classical monocytes
+      - Non-classical monocytes
 ```
 
 Each block reports its markers' median intensity and percent positive within the
@@ -964,13 +968,19 @@ In R:
 ```r
 library(cyRAVEN)
 
-opt <- list(dir = "data/fcs", recursive = TRUE, outdir = "results/",
-            samples = "data/samples.csv", config = "data/analysis.yaml",
-            group_column = "cohort", reference_group = "Healthy controls",
-            seed = 42)
+opt <- list(
+  dir = "data/fcs", recursive = TRUE,
+  outdir = "results/",
+  samples = "data/samples.csv",
+  config = "data/analysis.yaml",
+  group_column = "cohort",
+  reference_group = "Healthy controls",
+  seed = 42)
 
-run_cyraven(c(opt, list(check_only = TRUE)))   # validate
-run_cyraven(opt)                                # run
+# validate
+run_cyraven(c(opt, list(check_only = TRUE)))
+# run
+run_cyraven(opt)
 ```
 
 #### 1.4 The full analysis
@@ -1225,8 +1235,8 @@ population moves. Add `count.<Population>` columns to the sheet, in cells per
 microlitre, and the run tests them alongside the frequencies:
 
 ```
-file,sample_id,patient_id,cohort,count.Granulocytes,count.Lymphocytes
-HC-01.fcs,HC-01,HC-01,Healthy controls,3810,1650
+file,sample_id,cohort,count.Monocytes
+HC-01.fcs,HC-01,Healthy controls,420
 ```
 
 ```bash
@@ -1301,7 +1311,7 @@ donors happen to share a label, and guessing wrong changes every p-value.
 The same two flags also produce `population_trajectories.png`: one line per
 patient across the conditions, with the cohort median drawn over them. Add
 `--clinical-columns survival_28d` and the lines are coloured by outcome, which is
-the comparison a longitudinal design is usually about -- survivors and
+the comparison a longitudinal design is usually about. Survivors and
 non-survivors often differ in the direction each patient moves rather than at any
 single timepoint, and a box per timepoint averages exactly that away.
 
@@ -1341,7 +1351,9 @@ sample_overrides:
     CD14:
       threshold: 2.4
       set_by: "your initials"
-      reason: "bimodal but the minimum fell in the shoulder, see gating_qc.png"
+      reason: >-
+        bimodal but the minimum fell in
+        the shoulder, see gating_qc.png
 ```
 
 Then run normally. `set_by` and `reason` are recorded in `run_manifest.txt`, so a
@@ -1524,7 +1536,7 @@ the supervised path with it. Full detail in [Explore mode](advanced.html#explore
 
 #### 2.3 The five that change reported numbers
 
-Use these deliberately and say so when you report a result.
+Turn these on only when you mean to, and say so when you report a result.
 
 | Option | What it changes | Read first |
 |---|---|---|
@@ -1652,8 +1664,8 @@ written against, **65% of every sample-by-marker cut** came back
 constant rather than by the data, and the viability gate was skipped in all 20
 samples because L/D never resolved.
 
-The markers were not unimodal. The histogram being smoothed -- 220 bins, a
-9-bin moving average -- is under-smoothed for these data: L/D showed 32 peaks in
+The markers were not unimodal. The histogram being smoothed (220 bins, a
+9-bin moving average) is under-smoothed for these data: L/D showed 32 peaks in
 one sample and CD45 showed 10, nearly all of them noise. Widen the kernel and
 CD45 resolves to exactly two modes.
 
@@ -1687,7 +1699,7 @@ textbook leukocyte gate and is a trap.
 
 The hierarchy has already applied CD45: the parent every population is scored
 inside is `cd45_pos`. Repeating the requirement asks for a second CD45 threshold
-derived from the cells that passed the first -- a distribution that is all
+derived from the cells that passed the first. That distribution is all
 positive and therefore unimodal. No minimum exists in it, the cut falls back to
 the 90th percentile, and an `above` comparison on that fallback keeps exactly
 10%.
@@ -1868,7 +1880,8 @@ with `options(cyRAVEN.report_table_max_mb = )`.
 Progress goes to stderr through `message()`.
 
 ```r
-options(cyRAVEN.verbose = "none")     # or "inform" (default), or "debug"
+# or "inform" (default), or "debug"
+options(cyRAVEN.verbose = "none")
 ```
 
 ## Where to go next
