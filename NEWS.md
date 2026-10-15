@@ -1,5 +1,76 @@
 # cyRAVEN (development)
 
+## Every declared population is drawn
+
+Four figures kept only the most abundant populations and dropped the rest
+without saying so: per-patient trajectories and absolute against share (12),
+marker intensity by timepoint (8), and the clinical landscape (the first six
+clinical variables). Ranked by abundance, the rarest went first, which on a
+sepsis panel meant Vd2 T cells, NK cells and NKT cells, and every laboratory
+value listed after the sixth clinical column. Declared runs now draw everything
+they were asked for. Explore mode keeps its cap of 12 on absolute against share,
+because it can produce dozens of clusters, and now passes it explicitly.
+
+Marker intensity by timepoint now wraps at eight populations per row. In one
+row, fifteen populations made a 28-inch figure.
+
+## Every cell type, per timepoint
+
+`population_ratios_by_timepoint.png` shows only the ratios the config declares,
+usually CD4 to CD8. The new `population_ratios_by_cell_type_by_timepoint.png`
+shows every population as a share of CD45+, one panel per cell type, with the
+visits on the x axis. It carries no test, because the visits are the same
+patients, and it is written whether or not `--no-group-tests` is set.
+
+## Long category names get a legend
+
+In `clinical_<variable>.png`, the categories of a categorical variable were
+written under every panel. Organism names are long, so on a microbiology column
+they overprinted into an unreadable band. When the labels cannot fit, each
+category now gets a colour and is named once in a shared legend, with the number
+of samples it holds. Short levels such as `d0`/`d3`/`d7` or `Yes`/`No` keep
+their axis labels.
+
+Categorical colours past the sixth now continue in hues the base palette does
+not use. The old extension started with a pink close to the sixth colour, so a
+seventh category was hard to tell apart from the sixth.
+
+## Two flags for the first run: `--demo` and `--write-template`
+
+`--demo DIR` writes the demonstration cohort, 35 FCS files with a sample sheet
+and a config, and `--write-template FILE` writes the annotated config template.
+Neither needs `--dir`, and both exit after writing. They replace typing a path
+inside the image (`/opt/cyraven/src/inst/scripts/demo_data.R`), which was the
+longest command in the quick start. `write_config_template()` refuses to
+overwrite an existing file, so it cannot clobber an edited config. The same
+two steps are `write_demo_cohort()` and `write_config_template()` from R.
+
+## Figure titles name the timepoint
+
+The ratio and functional-marker figures drawn by visit were titled "by group".
+They now say "by timepoint".
+
+## The site and the manual, redesigned for small screens
+
+The README, the site home page and the start of Get started lead with a
+four-command quick start and a diagram of what happens to the data. Repeated
+passages and overclaims were removed.
+
+Every command a new user meets is written one option per line, no wider than
+44 characters, so it fits a phone without scrolling sideways. Elsewhere, 37
+longer `docker run` commands were reflowed the same way, each checked to parse
+to the same arguments as before.
+
+The site uses Inter and a lighter stylesheet written for phones first: tables
+wrap and scroll inside their own box instead of pushing the page sideways, and
+the source link and repeated logo are hidden on small screens.
+
+The PDF manual is now A5, which reads at nearly half as large again when a
+phone shows the page fit-to-width. It uses Inter and Source Code Pro, ragged
+right text, a plain title page, and numbers chapters only, so every heading
+reads as it does on the site. The PDF build also had a bug that left an empty
+heading level and numbered sections 1.0.1; fixed.
+
 ## A control is checked before it is trusted
 
 Minus-one and minus-multiple controls now go through `control_cut()`, which

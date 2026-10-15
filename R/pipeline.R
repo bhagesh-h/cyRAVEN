@@ -62,6 +62,18 @@ run_cyraven <- function(opt) {
 run_cyraven_impl <- function(opt) {
   opt <- fill_option_defaults(opt)
   set.seed(opt$seed)
+
+  # ---- modes that need no input at all --------------------------------------
+  # Handled before the FCS directory is resolved, because neither has one: they
+  # are how a new user gets something to run on and something to edit, so
+  # requiring --dir would ask for the very thing they do not have yet.
+  if (!is.null(opt[["demo", exact = TRUE]])) {
+    write_demo_cohort(opt$demo); return(invisible(NULL))
+  }
+  if (!is.null(opt[["write_template", exact = TRUE]])) {
+    write_config_template(opt$write_template); return(invisible(NULL))
+  }
+
   fcs <- resolve_input_files(opt)
 
   # ---- modes that write one file and analyse nothing ------------------------
@@ -2184,6 +2196,36 @@ run_cyraven_impl <- function(opt) {
         freq_p, file.path(opt$outdir, paste0("population_frequencies", sfx, ".png")),
         panel_label = plabel)
 
+      # EVERY CELL TYPE, PER TIMEPOINT. population_ratios_by_timepoint.png draws
+      # only the ratios the config declares, which on most cohorts is CD4 to
+      # CD8, so a reader looking for the gamma delta or NK compartments by visit
+      # found nothing. This is each population as a ratio of CD45+ leukocytes,
+      # one panel per cell type, the visits on the x axis.
+      #
+      # No stats, and outside `if (group_tests)` for the reason the functional
+      # markers by timepoint are: the visits are the same patients, so a
+      # between-group test would assert an independence the design does not
+      # have, and the descriptive figure should not vanish under
+      # --no-group-tests. The paired view is timepoint_trajectories_*.png.
+      if (!is.null(.tp_of))
+        .ext_ok("population ratios by cell type by timepoint", {
+          .tp_lev <- levels(natural_cluster_factor(unique(.tp_of)))
+          fig_group_comparison(
+            freq_p, file.path(opt$outdir, paste0(
+              "population_ratios_by_cell_type", sfx, "_by_timepoint.png")),
+            group_of = .tp_of, stats = NULL, reference = .tp_lev[1],
+            p_source = p_src, panel_label = plabel,
+            value_col = "pct_of_cd45_pos",
+            value_label = "% of CD45+ (cell type / CD45+ x 100)",
+            value_caveat = paste(
+              "Visits are the same patients, so no between-visit test is drawn;",
+              "read direction per patient in timepoint_trajectories_*.png.",
+              "A share cannot show a change in size: see",
+              "absolute_vs_share_by_timepoint.png."),
+            title_noun = "Cell type as a ratio of CD45+",
+            group_noun = "timepoint")
+        })
+
       # ---- functional-marker positivity, same grouping/stats as abundance ---
       if (!is.null(fx_p) && nrow(fx_p)) {
         fxstats <- NULL
@@ -2213,7 +2255,7 @@ run_cyraven_impl <- function(opt) {
             fx_p, file.path(opt$outdir,
                             paste0("functional_markers", sfx, "_by_timepoint.png")),
             group_of = .tp_of, stats = NULL, reference = NULL,
-            p_source = p_src, panel_label = plabel))
+            p_source = p_src, panel_label = plabel, group_noun = "timepoint"))
       }
 
       # ---- derived-ratio comparison, same grouping/stats as abundance ------
@@ -2241,7 +2283,7 @@ run_cyraven_impl <- function(opt) {
             rt_p, file.path(opt$outdir,
                             paste0("population_ratios", sfx, "_by_timepoint.png")),
             group_of = .tp_of, stats = NULL, reference = NULL,
-            p_source = p_src, panel_label = plabel))
+            p_source = p_src, panel_label = plabel, group_noun = "timepoint"))
       }
     }
   }

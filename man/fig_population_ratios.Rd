@@ -15,7 +15,8 @@ fig_population_ratios(
   ncol = 3L,
   panel_label = "",
   dpi = 300,
-  colors = fcs_colors()
+  colors = fcs_colors(),
+  group_noun = "group"
 )
 }
 \arguments{
@@ -38,6 +39,9 @@ fig_population_ratios(
 \item{dpi}{Resolution in dots per inch. May be reduced automatically to respect the raster ceiling; see \code{\link[=safe_ggsave]{safe_ggsave()}}. Default \code{300}.}
 
 \item{colors}{Named list of colours; defaults to the package palette. See \code{\link[=fcs_colors]{fcs_colors()}}. Default \code{fcs_colors()}.}
+
+\item{group_noun}{what the groups are, completing the title; see
+\code{\link[=fig_group_comparison]{fig_group_comparison()}}.}
 }
 \description{
 Population-ratio figure -- same layout as fig_group_comparison(), one panel

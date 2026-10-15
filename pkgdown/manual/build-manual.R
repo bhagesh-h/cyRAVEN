@@ -60,11 +60,22 @@ strip_yaml <- function(lines) {
 # Fenced code blocks are skipped: a shell comment `# 1. write the cohort` is not
 # a heading, and demoting it would corrupt the command.
 demote <- function(lines) {
+  # SHIFT BY WHAT THE CHAPTER ACTUALLY USES. The chapters open their sections at
+  # `##`, not `#`, so a fixed one-level push put every section at level 3 under
+  # a level-1 chapter, left level 2 empty, and numbered them 1.0.1, 1.0.2. The
+  # shallowest heading outside a code fence is moved to level 2, directly under
+  # the chapter, and everything else keeps its distance from it.
   in_fence <- FALSE
+  is_h <- logical(length(lines))
   for (i in seq_along(lines)) {
-    if (grepl("^\\s*```", lines[i])) in_fence <- !in_fence
-    if (!in_fence && grepl("^#{1,5} ", lines[i])) lines[i] <- paste0("#", lines[i])
+    if (grepl("^\\s*```", lines[i])) { in_fence <- !in_fence; next }
+    is_h[i] <- !in_fence && grepl("^#{1,6} ", lines[i])
   }
+  if (!any(is_h)) return(lines)
+  top <- min(nchar(sub("^(#+) .*$", "\\1", lines[is_h])))
+  shift <- max(0L, 2L - top)
+  if (shift > 0L)
+    lines[is_h] <- paste0(strrep("#", shift), lines[is_h])
   lines
 }
 
@@ -228,15 +239,39 @@ header <- c(
   "    number_sections: true",
   "    latex_engine: xelatex",
   "    includes:",
-  sprintf("      in_header: %s", file.path(work, "preamble.tex")),
+  "      in_header:",
+  sprintf("        - %s", file.path(work, "preamble.tex")),
+  sprintf("        - %s", file.path(work, "titlepage.tex")),
   "documentclass: report",
-  "geometry: margin=2.5cm",
+  "fontsize: 10pt",
+  # A5 READS ON A PHONE. A PDF is shown fit-to-width, and at that scale an A4
+  # page sets 10pt text at about the size of a footnote. A5 makes the same text
+  # nearly half as large again, and still prints and reads fine on a desk.
+  "geometry: a5paper, top=16mm, bottom=18mm, left=14mm, right=14mm, headsep=5mm, footskip=8mm",
   "colorlinks: true",
-  "linkcolor: RavenOrange",
-  "urlcolor: RavenOrange",
+  "linkcolor: RavenText",
+  "urlcolor: RavenText",
   "toccolor: black",
   "---",
   "")
+
+# A plain title page: the logo, the name, one line saying what it is, and the
+# version. Written per build because the version and date change.
+writeLines(c(
+  "\\makeatletter",
+  "\\renewcommand{\\maketitle}{\\begin{titlepage}\\raggedright",
+  "  \\vspace*{18mm}",
+  "  \\IfFileExists{logo.png}{\\includegraphics[width=24mm]{logo.png}\\par\\vspace{9mm}}{}",
+  "  {\\fontsize{32}{36}\\selectfont\\bfseries cyRAVEN\\par}",
+  "  \\vspace{4mm}",
+  "  {\\large\\color{RavenMuted} Flow cytometry files in, population",
+  "   frequencies, a UMAP and statistics out.\\par}",
+  "  \\vfill",
+  sprintf("  {\\small\\color{RavenMuted} Version %s \\textperiodcentered\\ %s\\par", version,
+          format(Sys.Date(), "%d %B %Y")),
+  "  \\smallskip https://bhagesh-h.github.io/cyRAVEN\\par}",
+  "\\end{titlepage}}",
+  "\\makeatother"), file.path(work, "titlepage.tex"))
 
 manual_md <- file.path(work, "manual.md")
 writeLines(c(header, body), manual_md)

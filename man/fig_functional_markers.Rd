@@ -14,7 +14,8 @@ fig_functional_markers(
   ncol = 3L,
   panel_label = "",
   dpi = 300,
-  colors = fcs_colors()
+  colors = fcs_colors(),
+  group_noun = "group"
 )
 }
 \arguments{
@@ -41,6 +42,9 @@ into "All samples" (mirrors fig_population_frequencies()).}
 \item{dpi}{Resolution in dots per inch. May be reduced automatically to respect the raster ceiling; see \code{\link[=safe_ggsave]{safe_ggsave()}}. Default \code{300}.}
 
 \item{colors}{Named list of colours; defaults to the package palette. See \code{\link[=fcs_colors]{fcs_colors()}}. Default \code{fcs_colors()}.}
+
+\item{group_noun}{what the groups are, completing the title; see
+\code{\link[=fig_group_comparison]{fig_group_comparison()}}.}
 }
 \description{
 Delegates to fig_group_comparison(), exactly as fig_population_frequencies()

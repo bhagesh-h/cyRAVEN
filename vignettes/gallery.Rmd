@@ -20,10 +20,6 @@ here can be reproduced from a clean checkout using the commands in section 0.
 The two figures the package can draw but this cohort cannot produce are at the
 end, with the reason.
 
-Every figure a run produces, shown as unmodified output, with what each
-measures and what this particular run shows. The two further figures the package
-can write, and why this cohort cannot produce them, are at the end.
-
 ## 0. The data, and how to reproduce every figure below
 
 ### 0.1 What the data is
@@ -64,7 +60,8 @@ docker pull bhagesh/cyraven:1.0.0
 ```
 
 ```bash
-docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
+docker tag bhagesh/cyraven:1.0.0 \
+  cyraven:1.0.0
 ```
 
 To build it from source instead, see
@@ -80,29 +77,42 @@ mkdir -p demo results
 **3. Write the cohort, its sample sheet and its config.**
 
 ```bash
-docker run --rm -v "$PWD/demo:/demo" \
-  --entrypoint Rscript cyraven:1.0.0 \
-  /opt/cyraven/src/inst/scripts/demo_data.R /demo
+docker run --rm -v "$PWD:/w" \
+  cyraven:1.0.0 --demo /w/demo
 ```
 
 **4. Validate the inputs, in seconds, analysing nothing.**
 
 ```bash
-docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs \
-  --samples /data/samples.csv --config /data/panel.yaml \
-  --group-column cohort --reference-group "GvHD grade 1" \
-  --batch-column visit --outdir /results --check
+docker run --rm \
+  -v "$PWD/demo:/data:ro" \
+  -v "$PWD/results:/results" \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/panel.yaml \
+  --group-column cohort \
+  --reference-group "GvHD grade 1" \
+  --batch-column visit \
+  --outdir /results \
+  --check
 ```
 
 **5. Run it.**
 
 ```bash
-docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs \
-  --samples /data/samples.csv --config /data/panel.yaml \
-  --group-column cohort --reference-group "GvHD grade 1" \
-  --batch-column visit --cluster --outdir /results
+docker run --rm \
+  -v "$PWD/demo:/data:ro" \
+  -v "$PWD/results:/results" \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/panel.yaml \
+  --group-column cohort \
+  --reference-group "GvHD grade 1" \
+  --batch-column visit \
+  --cluster \
+  --outdir /results
 ```
 
 On Windows PowerShell substitute `${PWD}` for `$PWD`; on Git Bash prefix the
@@ -249,7 +259,7 @@ knitr::include_graphics("figures/demo_frequency_uncertainty.png")
 between samples. Where it is not, the variation on display is the cut moving.
 
 **This run.** None of the five populations has a gate uncertainty as wide as its
-between-sample spread. The donors genuinely differ from each other by more than
+between-sample spread. The donors differ from each other by more than
 the cuts move, which is the configuration in which a between-group comparison is
 worth attempting at all.
 
@@ -648,4 +658,4 @@ finding once donors rather than cells are the replicates.
 It does not show sensitivity. The group contrast is unbalanced, confounded with
 donor, and null at this sample size. Nothing here establishes that cyRAVEN
 detects a real biological effect; it establishes what the diagnostics report when
-the data are genuinely difficult.
+the data are difficult.

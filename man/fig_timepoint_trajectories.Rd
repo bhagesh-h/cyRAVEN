@@ -10,7 +10,7 @@ fig_timepoint_trajectories(
   outfile,
   value_col = "pct_of_cd45_pos",
   log_scale = TRUE,
-  max_pops = 12L
+  max_pops = Inf
 )
 }
 \arguments{
@@ -25,7 +25,11 @@ fig_timepoint_trajectories(
 \item{log_scale}{Use a log10 y axis. Population sizes span orders of
 magnitude, so a fold change is the comparable quantity.}
 
-\item{max_pops}{Facet cap, largest populations first.}
+\item{max_pops}{Facet cap, largest populations first. \code{Inf} by default:
+every population a specification declares was asked for by name, and a cap
+ranked by abundance removes the rarest first, which on a sepsis panel is
+exactly the gamma delta and NK compartments. A caller drawing dozens of
+unsupervised clusters passes a finite cap.}
 }
 \description{
 The paired view: each line is one patient followed through their visits, so

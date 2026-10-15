@@ -37,11 +37,15 @@
 #' @param value_col Column to plot.
 #' @param log_scale Use a log10 y axis. Population sizes span orders of
 #'   magnitude, so a fold change is the comparable quantity.
-#' @param max_pops Facet cap, largest populations first.
+#' @param max_pops Facet cap, largest populations first. `Inf` by default:
+#'   every population a specification declares was asked for by name, and a cap
+#'   ranked by abundance removes the rarest first, which on a sepsis panel is
+#'   exactly the gamma delta and NK compartments. A caller drawing dozens of
+#'   unsupervised clusters passes a finite cap.
 #' @keywords internal
 fig_timepoint_trajectories <- function(freq, smap, outfile,
                                        value_col = "pct_of_cd45_pos",
-                                       log_scale = TRUE, max_pops = 12L) {
+                                       log_scale = TRUE, max_pops = Inf) {
   if (is.null(freq) || !nrow(freq) || !value_col %in% names(freq))
     return(invisible(NULL))
   if (is.null(smap) || !all(c("timepoint", "patient_id") %in% names(smap)))
@@ -176,9 +180,10 @@ fig_subset_balance <- function(freq, smap, outfile,
 #' @param mfi population_marker_mfi table (median_asinh per sample x population x marker).
 #' @param smap Sample map carrying `timepoint`.
 #' @param outfile Destination PNG.
-#' @param max_pops Population cap, largest first.
+#' @param max_pops Population cap, largest first. `Inf` by default, for the
+#'   reason given in [fig_timepoint_trajectories()].
 #' @keywords internal
-fig_marker_by_timepoint <- function(mfi, smap, outfile, max_pops = 8L) {
+fig_marker_by_timepoint <- function(mfi, smap, outfile, max_pops = Inf) {
   if (is.null(mfi) || !nrow(mfi) || !"median_asinh" %in% names(mfi))
     return(invisible(NULL))
   if (is.null(smap) || !"timepoint" %in% names(smap)) return(invisible(NULL))
@@ -187,8 +192,8 @@ fig_marker_by_timepoint <- function(mfi, smap, outfile, max_pops = 8L) {
            is.finite(d$median_asinh), , drop = FALSE]
   if (!nrow(d) || length(unique(d$timepoint)) < 2L) return(invisible(NULL))
 
-  big <- names(sort(table(d$population), decreasing = TRUE))[seq_len(
-    min(max_pops, length(unique(d$population))))]
+  big <- utils::head(names(sort(table(d$population), decreasing = TRUE)),
+                     max_pops)
   d <- d[d$population %in% big, , drop = FALSE]
   d$timepoint <- natural_cluster_factor(d$timepoint)
   agg <- stats::aggregate(median_asinh ~ population + marker + timepoint, d,
@@ -208,10 +213,13 @@ fig_marker_by_timepoint <- function(mfi, smap, outfile, max_pops = 8L) {
   lab <- stats::setNames(sprintf("%s\nn = %d", npt$timepoint, npt$n),
                          as.character(npt$timepoint))
 
+  # Every population, wrapped at eight per row. In a single row fifteen of
+  # them made a 28-inch figure; wrapped, each heatmap keeps its width.
+  .nc <- min(8L, length(big)); .nr <- ceiling(length(big) / .nc)
   p <- ggplot2::ggplot(agg, ggplot2::aes(timepoint, marker, fill = median_asinh)) +
     ggplot2::geom_tile(colour = "white", linewidth = 0.25) +
     ggplot2::scale_x_discrete(labels = function(v) lab[as.character(v)]) +
-    ggplot2::facet_wrap(~ population, nrow = 1) +
+    ggplot2::facet_wrap(~ population, ncol = .nc) +
     ggplot2::scale_fill_viridis_c(option = "C") +
     ggplot2::labs(title = "Marker intensity per population, by timepoint",
                   subtitle = paste("cohort median of each sample's median",
@@ -224,8 +232,8 @@ fig_marker_by_timepoint <- function(mfi, smap, outfile, max_pops = 8L) {
                                          collapse = "; "), ")")) +
     theme_cyto() + theme_panel_borders()
   safe_ggsave(outfile, plot = p,
-              width = max(9, 1.7 * length(big) + 2.5),
-              height = max(5, 0.22 * length(unique(agg$marker)) + 2.2),
+              width = max(9, 1.7 * .nc + 2.5),
+              height = max(5, .nr * (0.22 * length(unique(agg$marker)) + 1.2) + 1.4),
               dpi = 200, limitsize = FALSE)
   invisible(outfile)
 }

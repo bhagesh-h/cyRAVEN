@@ -174,3 +174,12 @@ test_that("marker_symbol strips the spectral detector suffix", {
   expect_equal(cyRAVEN:::marker_symbol(c("", "CD3"), c("FSC-A", "RB780-A")),
                c("FSC-A", "CD3"))
 })
+
+test_that("the config template is written once and never overwritten", {
+  f <- file.path(tempfile(), "analysis.yaml")
+  write_config_template(f)
+  expect_true(file.exists(f))
+  expect_true(any(grepl("populations:", readLines(f))))
+  # A second call must refuse rather than clobber an edited config.
+  expect_error(write_config_template(f), "already exists")
+})

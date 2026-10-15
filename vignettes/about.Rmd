@@ -11,90 +11,45 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
 ```
 
-cyRAVEN turns a directory of FCS files into population frequencies, marker
-expression, a shared UMAP and between-group statistics.
-
-This chapter is the argument for the design: what the pipeline does, the ten
-stages a run moves through, and why unsupervised discovery is deliberately kept
-at arm's length from the specification it exists to check.
+cyRAVEN turns a folder of FCS files into population frequencies, marker
+expression, a UMAP and group statistics. This page explains what happens to the
+data at each stage, and why it is done that way.
 
 New to flow cytometry? Read [About flow cytometry](flow-cytometry.html) first.
 Want to run something now? Go to [Get started](cyRAVEN.html).
 
-## Why this exists
+## Why per-sample gates
 
-Manual gating is a measurable source of technical variance in multi-sample
-immunophenotyping. Thirty-eight operators gating the same files under a gauge
-repeatability and reproducibility design carried a median expanded uncertainty
-of 3.6%, and experience made no significant difference to it (Grant and others,
-2021, *PDA J Pharm Sci Technol* 75:33). Across 320 routine clinical samples
-analysed by six technologists on three harmonised cytometers, the dispersion
-that remained was structured primarily by operator identity rather than by
-instrument configuration (Mead and others, 2026, *Cytometry B*,
-doi:10.1002/cyto.b.70048).
+Manual gating varies between operators. When 38 operators gated the same files,
+the median expanded uncertainty was 3.6%, and experience made no significant
+difference (Grant and others, 2021, *PDA J Pharm Sci Technol* 75:33). Across
+320 clinical samples analysed by six technologists on three harmonised
+cytometers, the remaining spread followed the operator more than the instrument
+(Mead and others, 2026, *Cytometry B*, doi:10.1002/cyto.b.70048).
 
-Copying fixed gate coordinates between samples does not remove that variance. It
-converts it into a systematic bias that tracks staining intensity, which is
-harder to notice because every sample then carries the same apparent boundary.
-cyRAVEN takes the analyst out of threshold placement and measures the
-uncertainty that remains instead of hiding it.
+Copying one set of gate coordinates to every sample does not solve this.
+Staining intensity differs between samples, so a fixed cut is right for some and
+wrong for others, and the error then follows staining intensity. cyRAVEN places
+each cut inside its own sample and reports how precisely that cut is determined.
 
-One constraint governs everything else:
+Statistics follow one rule: **the donor is the unit, not the cell.** A tube run
+for longer gives more events but no more information about the study, so every
+test first reduces each sample to one value. Anything that cannot be reduced
+that way is reported as an effect size without a p-value.
 
-> The unit of replication is the donor, not the event.
+## Two ways to use it
 
-Event counts are set by how long a tube was run, not by study design. Every test
-aggregates to one value per sample before estimation, and anything that cannot
-be aggregated is reported with an effect size and no p-value.
-
-## What cyRAVEN does
-
-A directory of FCS files becomes population frequencies, marker expression, a
-shared UMAP and between-group statistics. Populations are declared in advance;
-every marker threshold is derived inside the sample it applies to; and the
-declaration is then tested against unsupervised structure recovered from the same
-cells.
-
-There are two ways to use it, and they answer different questions.
-
-| | **Supervised**, the default | **Explore mode**, `--explore` |
+| | **Declared** (default) | **Explore** (`--explore`) |
 |---|---|---|
-| You supply | A specification of the populations to score | Nothing beyond the FCS files |
-| It returns | Named populations, with uncertainty and group statistics | Numbered clusters over every eligible channel |
-| It can find | Only what you declared | A population nobody declared |
-| Runs on | The parent gate | Every event in the file |
+| You supply | A list of populations and their marker rules | Only the FCS files |
+| You get | Named populations, with uncertainty and statistics | Numbered clusters over every usable channel |
+| It can find | Only what you listed | Populations nobody listed |
+| Cells used | The CD45+ parent gate | Every event in the file |
 
-Explore mode writes everything into `<outdir>/explore/` and changes no existing
-output, so adding `--explore` to a run is always safe. `--explore-only` skips the
-declared analysis entirely and needs no specification, which is the mode for a
-panel you have not written one for yet. The two stay isolated unless you pass
-`--maybe-learn`; see [Explore mode](advanced.html#explore-mode-unsupervised-discovery) for what that exchanges, and
-[the design record](about.html#why-explore-mode-is-built-this-way) for why it is off by default.
-
-The design addresses one failure mode. Manual gating is a measurable source of
-technical variance in multi-sample immunophenotyping: thirty-eight operators
-gating the same files carried a median expanded uncertainty of 3.6% under a
-gauge repeatability and reproducibility design, with experience making no
-significant difference (Grant et al., 2021, *PDA J Pharm Sci Technol* 75:33),
-and in routine clinical work the residual dispersion is structured primarily by
-operator identity rather than by instrument configuration (Mead et al., 2026,
-*Cytometry B*, doi:10.1002/cyto.b.70048). Transferring fixed gate coordinates
-between samples does not remove that variance; it converts it into a bias that
-tracks staining intensity.
-
-cyRAVEN removes the analyst from threshold placement and quantifies what remains.
-Each cut is resampled from the events it was derived from and re-derived across
-the settings that placed it, and the resulting spread is propagated to every
-population that reads it, so a frequency separated by a clean gap and one sitting
-on a shoulder are not reported to the same apparent precision.
-
-One constraint governs everything below.
-
-> The unit of replication is the donor, not the event.
-
-Event counts are set by acquisition duration rather than by study design. Every
-test aggregates to one value per sample before estimation; quantities that cannot
-be aggregated are reported with effect sizes and no p-value.
+Explore writes to `<outdir>/explore/` and changes nothing else, so adding it to
+a run is safe. `--explore-only` needs no population list at all. The two halves
+share nothing unless you add `--maybe-learn`; see
+[Explore mode](advanced.html#explore-mode-unsupervised-discovery).
 
 ## How it works: the ten stages
 
@@ -108,19 +63,23 @@ set.seed(1)
 library(cyRAVEN)
 ```
 
-What the pipeline does, stage by stage, with the function implementing each. One
-call runs all ten; every stage is also an exported function callable on its own,
-so a step can be inspected or replaced without forking the package.
+One call to `run_cyraven()` runs every stage. Each stage is also an exported
+function, so you can run or replace a single step.
 
-One constraint governs the design and is stated before the stages.
+| Stage | In plain words | Function |
+|---|---|---|
+| 1 Read | Open each file and work out which channel is which marker | `read_fcs_resolved()` |
+| 2 Transform | Put intensities on an arcsinh scale so negative and positive cells separate | `derive_cofactor()` |
+| 3 Gate | In each sample, cut each marker at the lowest point between its negative and positive peaks | `density_valley()`, `resolve_threshold()` |
+| 4 Score | Count the cells that meet each population's rule from your YAML | `score_populations()` |
+| 5 Uncertainty | Re-derive every cut on resampled events to see how far it moves | `threshold_uncertainty()` |
+| 6 Embed | Build a UMAP from an equal number of cells per sample | `run_umap()` |
+| 7 Test | Compare groups with one value per sample | `stats_group_comparison()` |
+| 8 Diagnose | Check whether the gates and populations held up | `stats_threshold_drift()`, `cluster_gate_agreement()` |
+| 9 Explain | Describe an unexplained cluster as a gating strategy | `explain_cluster()` |
+| 10 Report | Write tables, figures, the run manifest and `report.html` | `write_run_manifest()` |
 
-> The unit of replication is the donor, not the event.
-
-Event counts are set by acquisition duration rather than by study design.
-Inference over events sets the degrees of freedom from instrument time and allows
-one deeply acquired donor to determine a group result. Every test aggregates to
-one value per sample before estimation. Quantities that cannot be aggregated are
-reported with effect sizes and no p-value.
+The sections below give the detail for each stage.
 
 ```{r ten-stages, eval = TRUE, echo = FALSE, fig.alt = "The ten pipeline stages in order, with explore mode attached as an optional branch"}
 if (file.exists("images/pipeline-ten-stages.png")) knitr::include_graphics("images/pipeline-ten-stages.png")
@@ -247,7 +206,7 @@ which would render an abundance difference partly definitional.
 associates with the outcome, the two conditions jointly defining a confounder.
 
 `cluster_gate_agreement()` cross-tabulates declared labels against unsupervised
-clusters and is the only output capable of identifying a population absent from
+clusters, which can reveal a population absent from
 the specification, or a threshold rejecting events that belong to its population.
 
 `run_gate_uncertainty()` reports how far each threshold moves under resampling and
@@ -402,7 +361,7 @@ CD19+ HLA-DR+ CD3- CD14-
 
 where every `+` means *this fraction of the cluster's cells were above the
 threshold derived in their own sample*, recorded in `frac_pos.<marker>` columns.
-A marker the cluster is genuinely mixed for is **omitted** rather than called
+A marker the cluster is mixed for is **omitted** rather than called
 either way, so the phenotype string admits what it does not know.
 
 That is a claim no standalone clusterer can make, and it is not a clever

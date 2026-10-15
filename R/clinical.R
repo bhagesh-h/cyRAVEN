@@ -213,8 +213,17 @@ clin_cat_palette <- function(levels, colors = fcs_colors()) {
   # and leave green and red to mean reference-and-study where they already do.
   if (length(levels) == 2L)
     return(stats::setNames(c("#0072F0", "#FFA400"), levels))
-  cols <- if (length(levels) <= length(base)) base[seq_along(levels)]
-          else c(base, grDevices::hcl.colors(length(levels) - length(base),
+  # PAST THE STUDY PALETTE, EXTEND WITH HUES IT DOES NOT ALREADY USE. The six
+  # are green, red, purple, yellow, blue and pink, and the extension used to be
+  # hcl.colors("Dark 3"), whose first colour is also a pink: a seventh category
+  # was then indistinguishable from the sixth. On a microbiology column that put
+  # Staphylococcus and Streptococcus in two shades of one colour. These six
+  # continue in hues the base set leaves free, so twelve categories stay
+  # separable, and only beyond that is an evenly spaced palette appended.
+  extra <- c("#2B2B2B", "#8C564B", "#00A6A6", "#F28E2B", "#808000", "#1F2E7A")
+  pool <- c(base, extra)
+  cols <- if (length(levels) <= length(pool)) pool[seq_along(levels)]
+          else c(pool, grDevices::hcl.colors(length(levels) - length(pool),
                                              "Dark 3"))
   stats::setNames(cols, levels)
 }
@@ -519,15 +528,45 @@ fig_clinical_detail <- function(freq, clin_values, var_name, outfile,
            x = var_name, y = value_col)
   } else {
     d$.x <- factor(trimws(as.character(d$cv)))
-    fig <- ggplot(d, aes(.x, .y)) +
-      geom_boxplot(outlier.shape = NA, fill = colors$na_fill %||% "grey85",
-                   colour = colors$bar_outline %||% "grey20", linewidth = 0.3) +
-      geom_jitter(width = 0.15, height = 0, size = 1.4, alpha = 0.85,
-                  colour = colors$accent %||% "#0a7d4a") +
-      facet_wrap(~ population, scales = "free_y", ncol = ncol) +
-      labs(title = paste0("Population abundance by ", var_name),
-           subtitle = "one point per sample; box is median and quartiles",
-           x = var_name, y = value_col)
+    lev <- levels(d$.x)
+    # LABELS UNDER THE PANEL, OR A LEGEND. Short levels such as d0/d3/d7 or
+    # Yes/No fit beneath a 2.6-inch panel and read best there. Organism names do
+    # not: seven of them, the longest 36 characters, were written over one
+    # another into an unreadable band under every panel. Past roughly 48
+    # characters of label per panel (levels times the longest one, at the
+    # axis text size) the categories are colour-coded instead and named once,
+    # in a shared legend that also carries how many samples each holds.
+    use_legend <- length(lev) * max(nchar(lev)) > 48L
+    if (use_legend) {
+      pal <- clin_cat_palette(lev, colors = colors)
+      n_of <- table(d$.x[!duplicated(d$sample_id)])
+      key <- stats::setNames(sprintf("%s (n = %d)", lev, as.integer(n_of[lev])), lev)
+      fig <- ggplot(d, aes(.x, .y)) +
+        geom_boxplot(aes(fill = .x), outlier.shape = NA, alpha = 0.35,
+                     colour = colors$bar_outline %||% "grey20", linewidth = 0.3,
+                     show.legend = FALSE) +
+        geom_jitter(aes(colour = .x), width = 0.15, height = 0, size = 1.6,
+                    alpha = 0.9) +
+        scale_fill_manual(values = pal, guide = "none") +
+        scale_colour_manual(values = pal, labels = key, name = var_name,
+                            drop = FALSE) +
+        facet_wrap(~ population, scales = "free_y", ncol = ncol) +
+        labs(title = paste0("Population abundance by ", var_name),
+             subtitle = paste("one point per sample; box is median and quartiles;",
+                              "colour identifies the", var_name,
+                              "category, named in the legend"),
+             x = NULL, y = value_col)
+    } else {
+      fig <- ggplot(d, aes(.x, .y)) +
+        geom_boxplot(outlier.shape = NA, fill = colors$na_fill %||% "grey85",
+                     colour = colors$bar_outline %||% "grey20", linewidth = 0.3) +
+        geom_jitter(width = 0.15, height = 0, size = 1.4, alpha = 0.85,
+                    colour = colors$accent %||% "#0a7d4a") +
+        facet_wrap(~ population, scales = "free_y", ncol = ncol) +
+        labs(title = paste0("Population abundance by ", var_name),
+             subtitle = "one point per sample; box is median and quartiles",
+             x = var_name, y = value_col)
+    }
   }
   fig <- fig + theme_cyto(8, colors = colors) +
     theme(panel.border = element_rect(colour = colors$axis_ticks, fill = NA,
@@ -535,9 +574,21 @@ fig_clinical_detail <- function(freq, clin_values, var_name, outfile,
           panel.spacing = grid::unit(0.6, "lines"),
           strip.background = element_rect(fill = colors$grid_major, colour = NA),
           strip.text = element_text(size = 7))
+  legend_rows <- 0L
+  if (exists("use_legend", inherits = FALSE) && isTRUE(use_legend)) {
+    # The categories are in the legend, so the axis carries no text at all.
+    legend_rows <- ceiling(length(lev) / 3L)
+    fig <- fig +
+      guides(colour = guide_legend(nrow = legend_rows, byrow = TRUE,
+                                   override.aes = list(size = 3, alpha = 1))) +
+      theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+            legend.position = "bottom", legend.text = element_text(size = 8),
+            legend.title = element_text(size = 8, face = "bold"))
+  }
   nr <- ceiling(npop / ncol)
   safe_ggsave(outfile, plot = fig, width = 2.6 * min(ncol, npop) + 1.2,
-              height = 2.3 * nr + 1.1, dpi = dpi, limitsize = FALSE)
+              height = 2.3 * nr + 1.1 + 0.25 * legend_rows, dpi = dpi,
+              limitsize = FALSE)
   log_msg("[fig] wrote ", outfile)
   invisible(fig)
 }
@@ -835,13 +886,14 @@ fig_clinical_correlogram <- function(clin, outfile, dpi = 200,
 #' @param order_by which clinical variable orders the columns; the first numeric
 #'   one by default.
 #' @param value_col frequency column.
-#' @param max_vars most clinical strips to draw, so the key cannot outgrow the
-#'   figure.
+#' @param max_vars most clinical strips to draw. `Inf` by default, so every
+#'   variable passed to `--clinical-columns` appears; the figure grows taller
+#'   with each strip rather than dropping the later ones.
 #' @param dpi resolution.
 #' @param colors palette.
 #' @export
 fig_clinical_landscape <- function(freq, clin, outfile, order_by = NULL,
-                                   value_col = NULL, max_vars = 6L, dpi = 200,
+                                   value_col = NULL, max_vars = Inf, dpi = 200,
                                    colors = fcs_colors()) {
   if (is.null(freq) || !nrow(freq) || !length(clin)) return(invisible(NULL))
   if (is.null(value_col)) value_col <- abundance_measure(freq)$col
@@ -851,6 +903,11 @@ fig_clinical_landscape <- function(freq, clin, outfile, order_by = NULL,
   d <- d[is.finite(d[[value_col]]), , drop = FALSE]
   if (!nrow(d)) return(invisible(NULL))
 
+  # Every clinical variable the run was given, not the first six. A cap here
+  # dropped whatever was listed last in --clinical-columns without saying so,
+  # which on the cohort that found it was all four laboratory values and the
+  # microbiology. The strips scale the figure's height, so more variables make
+  # it taller rather than squeezing it.
   vars <- utils::head(names(clin), max_vars)
   # ORDER BY THE DESIGN, NOT BY A SEVERITY SCORE. Ordering by the first numeric
   # variable put the visits in the order sofa happened to fall -- d3 columns,

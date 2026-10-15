@@ -171,6 +171,8 @@ p_annotation <- function(p, style = c("stars_and_trend", "stars", "numeric")) {
 #' @param title_noun the figure title's subject, e.g. "Population abundance"
 #'   or "Functional marker positivity"; " by group" is appended automatically
 #'   when 2+ groups are plotted.
+#' @param group_noun what the x-axis groups are, completing the title as
+#'   "<title_noun> by <group_noun>". `"group"` by default.
 #' @param outfile Path to write the figure to.
 #' @param reference The group every other group is compared against.
 #' @param measure Which abundance measure to use. Default `"auto"`.
@@ -190,6 +192,7 @@ fig_group_comparison <- function(freq, outfile, group_of, stats = NULL,
                                  value_col = NULL, value_label = NULL,
                                  value_caveat = NULL,
                                  title_noun = "Population abundance",
+                                 group_noun = "group",
                                  panel_order = c("abundance", "name"),
                                  colors = fcs_colors()) {
   p_source <- match.arg(p_source)
@@ -374,7 +377,7 @@ fig_group_comparison <- function(freq, outfile, group_of, stats = NULL,
   fig <- patchwork::wrap_plots(panels, ncol = ncol, guides = "collect") +
     patchwork::plot_annotation(
       tag_levels = "A",
-      title = paste0(if (length(glev) > 1L) paste0(title_noun, " by group")
+      title = paste0(if (length(glev) > 1L) paste0(title_noun, " by ", group_noun)
                      else title_noun,
                      if (nzchar(panel_label)) paste0(", ", panel_label) else ""),
       # The subtitle states the measure and what every mark means, because a bar
@@ -762,11 +765,13 @@ fx_panel_key <- function(fx) {
 #' @param panel_label Marker-panel name added to the figure title; empty for none. Default `""`.
 #' @param dpi Resolution in dots per inch. May be reduced automatically to respect the raster ceiling; see [safe_ggsave()]. Default `300`.
 #' @param colors Named list of colours; defaults to the package palette. See [fcs_colors()]. Default `fcs_colors()`.
+#' @param group_noun what the groups are, completing the title; see
+#'   [fig_group_comparison()].
 #' @export
 fig_functional_markers <- function(fx, outfile, group_of = NULL, stats = NULL,
                                    reference = NULL, p_source = c("raw", "BH"),
                                    ncol = 3L, panel_label = "", dpi = 300,
-                                   colors = fcs_colors()) {
+                                   colors = fcs_colors(), group_noun = "group") {
   p_source <- match.arg(p_source)
   if (is.null(fx) || !nrow(fx)) return(invisible(NULL))
   d <- fx_panel_key(fx)
@@ -783,7 +788,8 @@ fig_functional_markers <- function(fx, outfile, group_of = NULL, stats = NULL,
       "positivity = fraction of cells above the per-sample gating threshold",
       "for that marker (thresholds_used.csv); population x marker",
       "combinations with fewer than 10 cells are omitted."),
-    title_noun = "Functional marker positivity", colors = colors)
+    title_noun = "Functional marker positivity", group_noun = group_noun,
+    colors = colors)
 }
 
 #' Derived abundance ratios (e.g. CD4:CD8), from the config's `ratios:` block
@@ -852,11 +858,13 @@ compute_population_ratios <- function(freq, ratios) {
 #' @param panel_label Marker-panel name added to the figure title; empty for none. Default `""`.
 #' @param dpi Resolution in dots per inch. May be reduced automatically to respect the raster ceiling; see [safe_ggsave()]. Default `300`.
 #' @param colors Named list of colours; defaults to the package palette. See [fcs_colors()]. Default `fcs_colors()`.
+#' @param group_noun what the groups are, completing the title; see
+#'   [fig_group_comparison()].
 #' @export
 fig_population_ratios <- function(rt, outfile, group_of = NULL, stats = NULL,
                                   reference = NULL, p_source = c("raw", "BH"),
                                   ncol = 3L, panel_label = "", dpi = 300,
-                                  colors = fcs_colors()) {
+                                  colors = fcs_colors(), group_noun = "group") {
   p_source <- match.arg(p_source)
   if (is.null(rt) || !nrow(rt)) return(invisible(NULL))
   if (is.null(group_of)) {
@@ -872,7 +880,7 @@ fig_population_ratios <- function(rt, outfile, group_of = NULL, stats = NULL,
       "ratio = numerator's pct_of_cd45_pos / denominator's pct_of_cd45_pos,",
       "per sample (population_ratios.csv); samples missing either",
       "population are dropped."),
-    title_noun = "Population ratio", colors = colors)
+    title_noun = "Population ratio", group_noun = group_noun, colors = colors)
 }
 
 # =============================================================================

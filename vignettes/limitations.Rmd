@@ -138,7 +138,7 @@ one map per cell type rather than one per file, which is the better choice when
 a detector shift moves bright and dim populations by different amounts.
 
 Two things to know. The clustering it fits is derived from the data, so a
-cohort with genuinely batch-specific biology will have that biology partly
+cohort with batch-specific biology will have that biology partly
 absorbed into the correction. And no correction is applied to the gate
 hierarchy, which is derived per sample and is already batch-local; correction is
 descriptive of intensity only.

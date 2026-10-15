@@ -4,7 +4,7 @@
 \alias{fig_marker_by_timepoint}
 \title{Every marker's median intensity per population, split by timepoint}
 \usage{
-fig_marker_by_timepoint(mfi, smap, outfile, max_pops = 8L)
+fig_marker_by_timepoint(mfi, smap, outfile, max_pops = Inf)
 }
 \arguments{
 \item{mfi}{population_marker_mfi table (median_asinh per sample x population x marker).}
@@ -13,7 +13,8 @@ fig_marker_by_timepoint(mfi, smap, outfile, max_pops = 8L)
 
 \item{outfile}{Destination PNG.}
 
-\item{max_pops}{Population cap, largest first.}
+\item{max_pops}{Population cap, largest first. \code{Inf} by default, for the
+reason given in \code{\link[=fig_timepoint_trajectories]{fig_timepoint_trajectories()}}.}
 }
 \description{
 The state heatmap asks what a population expresses; this asks whether that

@@ -17,10 +17,21 @@
 \usepackage{array}
 \usepackage{ragged2e}
 
-% The hex sticker's fill, for links and chapter rules. Sampled from
+% The hex sticker's fill, for rules and heading numbers, and its darkened form
+% for link text, which has to pass WCAG AA contrast on white. Sampled from
 % man/figures/logo.png rather than guessed.
 \usepackage{xcolor}
 \definecolor{RavenOrange}{HTML}{EC7414}
+\definecolor{RavenText}{HTML}{B4530C}
+\definecolor{RavenMuted}{HTML}{5B6470}
+
+% TYPE. Inter for text, the same face as the website, drawn for screens and
+% legible at the small sizes a phone shows an A5 page at. Source Code Pro for
+% code, which separates 1, l and I and 0 from O. Both are open licensed and
+% ship with TeX Live, so the CI runner installs them with tlmgr.
+\usepackage[sfdefault]{inter}
+\usepackage[scale=0.9]{sourcecodepro}
+\renewcommand{\familydefault}{\sfdefault}
 
 % Code blocks wrap instead of running off the page. The docker commands in the
 % usage article are long, and a reader cannot copy what was never printed.
@@ -28,27 +39,41 @@
 \DefineVerbatimEnvironment{Highlighting}{Verbatim}{
   breaklines, breakanywhere, commandchars=\\\{\}, fontsize=\small}
 
-% Chapter openings carry the brand rule rather than the default plain heading.
+% HEADINGS. A small orange number beside a bold title, and one hairline under a
+% chapter title, instead of the class default's "Chapter 3" set on a line of its
+% own. On an A5 page the default spent a third of the opening page on the word
+% "Chapter".
 \usepackage{titlesec}
-\titleformat{\chapter}[display]
-  {\normalfont\huge\bfseries}
-  {\color{RavenOrange}\chaptertitlename\ \thechapter}
-  {12pt}{\Huge}
-\titlespacing*{\chapter}{0pt}{0pt}{20pt}
+\titleformat{\chapter}[block]
+  {\normalfont\bfseries\fontsize{22}{26}\selectfont}
+  {\textcolor{RavenOrange}{\thechapter}}{0.45em}{}
+  [\vspace{5pt}{\color{black!14}\titlerule[0.6pt]}]
+\titlespacing*{\chapter}{0pt}{0pt}{14pt}
+\titleformat{\section}
+  {\normalfont\bfseries\Large}{\textcolor{RavenOrange}{\thesection}}{0.55em}{}
+\titlespacing*{\section}{0pt}{18pt}{6pt}
+\titleformat{\subsection}
+  {\normalfont\bfseries\large}{\textcolor{RavenMuted}{\thesubsection}}{0.55em}{}
+\titlespacing*{\subsection}{0pt}{14pt}{4pt}
+\titleformat{\subsubsection}
+  {\normalfont\bfseries\normalsize}{}{0pt}{}
+\titlespacing*{\subsubsection}{0pt}{10pt}{3pt}
 
 % Running header naming the chapter, so a printed copy says which article a page
 % came from.
 \usepackage{fancyhdr}
 \pagestyle{fancy}
 \fancyhf{}
-\fancyhead[L]{\footnotesize\nouppercase{\leftmark}}
-\fancyhead[R]{\footnotesize cyRAVEN}
-\fancyfoot[C]{\footnotesize\thepage}
-\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[R]{\footnotesize\color{RavenMuted}\nouppercase{\leftmark}}
+\fancyfoot[C]{\footnotesize\color{RavenMuted}\thepage}
+\renewcommand{\headrulewidth}{0pt}
+% A chapter's opening page uses the plain style; give it the same quiet footer.
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\footnotesize\color{RavenMuted}\thepage}%
+  \renewcommand{\headrulewidth}{0pt}}
 
 % A landscape page keeps the same footer, otherwise the page number rotates off
 % the visible area.
-\fancypagestyle{lscape}{\fancyhf{}\fancyfoot[C]{\footnotesize\thepage}}
+\fancypagestyle{lscape}{\fancyhf{}\fancyfoot[C]{\footnotesize\color{RavenMuted}\thepage}}
 
 % Images wider than the text block are scaled down rather than overrunning it.
 % The figures in the worked example are full-width panel grids.
@@ -122,3 +147,16 @@
 % URLs break at any character. Several in the documentation are long enough that
 % \sloppy alone leaves them protruding into the margin.
 \usepackage{xurl}
+
+% RAGGED RIGHT. On a 120mm line, justified text opens wide gaps between words
+% and hyphenates every few lines to close them. Ragged right keeps the spacing
+% even, which is what reads well on a small screen. ragged2e's version still
+% hyphenates a long word rather than leaving a ragged edge full of holes.
+\AtBeginDocument{\RaggedRight}
+
+% NUMBER CHAPTERS ONLY. Several chapters number their own headings in the text
+% ("1. One cell, one row", "2.1 Which file this is"), because the prose refers
+% to them by those numbers. LaTeX numbering on top of that printed "2.1 1. One
+% cell, one row". With only chapters numbered, every heading reads exactly as it
+% does on the website.
+\setcounter{secnumdepth}{0}

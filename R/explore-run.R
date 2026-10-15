@@ -713,8 +713,11 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
           written <<- c(written, basename(fq))
         if ("cells_absolute" %in% names(ab) && any(is.finite(ab$cells_absolute))) {
           fa <- file.path(ex_dir, sprintf("explore_absolute_vs_share%s.png", tag))
+          # Explore draws unsupervised clusters, often thirty or more, so the
+          # largest twelve are shown. A declared run shows every population.
           if (!is.null(try(fig_absolute_vs_share(ab, fa, group_of = group_of,
-                                                 panel_label = plab),
+                                                 panel_label = plab,
+                                                 max_clusters = 12L),
                            silent = TRUE)))
             written <<- c(written, basename(fa))
         }
