@@ -44,7 +44,9 @@ r <- tryCatch(tinytex::tlmgr_install(
     "float",
     # The manual's typefaces, Inter and Source Code Pro, and what their style
     # files load.
-    "inter", "sourcecodepro", "fontaxes", "mweights", "xkeyval")),
+    "inter", "sourcecodepro", "fontaxes", "mweights", "xkeyval",
+    # extreport, for a 9pt class; the standard classes stop at 10pt.
+    "extsizes")),
   error = function(e) e)
 if (inherits(r, "error")) say("TLMGR ERROR: ", conditionMessage(r))
 

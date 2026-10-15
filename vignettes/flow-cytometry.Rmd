@@ -129,9 +129,9 @@ an invented boundary.
 ```yaml
 populations:
   Granulocytes:
-    CD45: above     # it is a white blood cell
-    SSC-A: above    # it is grainy inside
-    CD15: above     # it carries CD15
+    CD45: above   # a white blood cell
+    SSC-A: above  # grainy inside
+    CD15: above   # carries CD15
 ```
 
 Read as one sentence: count a cell as a granulocyte if it is above the CD45 cut

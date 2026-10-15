@@ -242,8 +242,11 @@ header <- c(
   "      in_header:",
   sprintf("        - %s", file.path(work, "preamble.tex")),
   sprintf("        - %s", file.path(work, "titlepage.tex")),
-  "documentclass: report",
-  "fontsize: 10pt",
+  # 9pt, from extsizes: the standard classes stop at 10pt. Inter's lowercase is
+  # tall, so 10pt Inter reads like a 12pt book face and the manual looked
+  # oversized; 9pt with the face set at 94% reads like a 10pt book face.
+  "documentclass: extreport",
+  "fontsize: 9pt",
   # A5 READS ON A PHONE. A PDF is shown fit-to-width, and at that scale an A4
   # page sets 10pt text at about the size of a footnote. A5 makes the same text
   # nearly half as large again, and still prints and reads fine on a desk.
@@ -262,9 +265,9 @@ writeLines(c(
   "\\renewcommand{\\maketitle}{\\begin{titlepage}\\raggedright",
   "  \\vspace*{18mm}",
   "  \\IfFileExists{logo.png}{\\includegraphics[width=24mm]{logo.png}\\par\\vspace{9mm}}{}",
-  "  {\\fontsize{32}{36}\\selectfont\\bfseries cyRAVEN\\par}",
+  "  {\\fontsize{26}{30}\\selectfont\\bfseries cyRAVEN\\par}",
   "  \\vspace{4mm}",
-  "  {\\large\\color{RavenMuted} Flow cytometry files in, population",
+  "  {\\normalsize\\color{RavenMuted} Flow cytometry files in, population",
   "   frequencies, a UMAP and statistics out.\\par}",
   "  \\vfill",
   sprintf("  {\\small\\color{RavenMuted} Version %s \\textperiodcentered\\ %s\\par", version,

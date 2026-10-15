@@ -1648,15 +1648,17 @@ reflect the number of donors.
 
 ```{r ds}
 ids <- sprintf("S%02d", 1:12)
-mfi <- expand.grid(sample_id = ids,
-                   population = "CD4 T cells",
-                   marker = "HLA-DR",
-                   stringsAsFactors = FALSE)
+mfi <- expand.grid(
+  sample_id = ids,
+  population = "CD4 T cells",
+  marker = "HLA-DR",
+  stringsAsFactors = FALSE)
 mfi$n_cells <- 500
 mfi$median_asinh <- rnorm(12, 2, 0.3) +
   rep(c(0, 0.8), each = 6)
 mfi$pct_positive <- pmin(100, pmax(0,
-  rnorm(12, 30, 5) + rep(c(0, 10), each = 6)))
+  rnorm(12, 30, 5) +
+    rep(c(0, 10), each = 6)))
 mfi$is_control <- FALSE
 mfi$qc_status <- "pass"
 grp <- setNames(
@@ -2199,7 +2201,8 @@ clustering them again.
 Export the assignment with the sample and the event index, then hand it over.
 
 ```r
-meta <- condor@clustering$FlowSOM$metacluster
+fs <- condor@clustering$FlowSOM
+meta <- fs$metacluster
 cl <- data.frame(
   sample  = condor@anno$sample_id,
   event   = condor@anno$event_index,
