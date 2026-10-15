@@ -36,11 +36,12 @@
 -- columns of these tables hold, so each is weighted rather than counted.
 
 -- Characters across the text block, per typesetting mode. Portrait is A5 less
--- 14mm margins, a 120mm line, at 10pt; landscape is the same page turned, a
--- 180mm line, at 8pt. Inter sets about 6% wider than Latin Modern, whose
--- character width the estimates below were first measured in, and the counts
--- allow for it.
-local CHARS = { plain = 58, small = 64, foot = 72, land = 112 }
+-- 14mm margins, a 120mm line; landscape is the same page turned, a 180mm line.
+-- The class is 9pt with Inter set at 94%, so body text is about 8.5pt, \small
+-- 7.5pt and \footnotesize 6.6pt. Inter sets about 6% wider than Latin Modern,
+-- whose character width the estimates below were first measured in, and the
+-- counts allow for it.
+local CHARS = { plain = 68, small = 77, foot = 88, land = 136 }
 -- Both gutters of a column, in characters of that mode's face: 2\tabcolsep is
 -- 12pt, and pandoc's width formula subtracts it before applying the fractions.
 local PAD   = { plain = 2.4, small = 2.7, foot = 3.0, land = 3.0 }
