@@ -10,7 +10,7 @@ fig_clinical_landscape(
   outfile,
   order_by = NULL,
   value_col = NULL,
-  max_vars = 6L,
+  max_vars = Inf,
   dpi = 200,
   colors = fcs_colors()
 )
@@ -27,8 +27,9 @@ one by default.}
 
 \item{value_col}{frequency column.}
 
-\item{max_vars}{most clinical strips to draw, so the key cannot outgrow the
-figure.}
+\item{max_vars}{most clinical strips to draw. \code{Inf} by default, so every
+variable passed to \code{--clinical-columns} appears; the figure grows taller
+with each strip rather than dropping the later ones.}
 
 \item{dpi}{resolution.}
 

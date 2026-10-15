@@ -121,7 +121,7 @@ fig_total_counts_qc <- function(tc, outfile, group_of = NULL,
 #'   one figure serves both, and so a table carrying neither is skipped rather
 #'   than drawn against a column of NULL.
 #' @keywords internal
-fig_absolute_vs_share <- function(ab, outfile, group_of = NULL, max_clusters = 12L,
+fig_absolute_vs_share <- function(ab, outfile, group_of = NULL, max_clusters = Inf,
                                   share_col = NULL, panel_label = "") {
   if (is.null(ab) || !"cells_absolute" %in% names(ab)) return(invisible(NULL))
   share_col <- share_col %||%
@@ -215,7 +215,10 @@ fig_absolute_vs_share <- function(ab, outfile, group_of = NULL, max_clusters = 1
       # in the title: on a multi-panel run these figures are otherwise identical
       # furniture, and "12 samples" versus "8 samples" is the quickest way to
       # see which cohort you are looking at.
-      subtitle = paste0("top ", length(keep), " ", tolower(unit_lab),
+      subtitle = paste0(if (length(keep) < length(ord))
+                          paste0("top ", length(keep), " of ", length(ord), " ")
+                        else paste0("all ", length(keep), " "),
+                        tolower(unit_lab),
                         " by median share, ", length(unique(d$sample_id)),
                         " sample(s), log scale. Absolute = share x that",
                         " acquisition's external total",

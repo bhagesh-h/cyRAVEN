@@ -1,338 +1,199 @@
 <div class="cy-hero">
-<div class="cy-hero-text">
 <h1>cyRAVEN</h1>
 <p class="cy-hero-lede">
-A directory of FCS files becomes population frequencies, marker expression, a
-shared UMAP and between-group statistics. Every threshold is placed inside the
-sample it applies to, and every frequency carries the uncertainty of the cut and
-of the event count behind it.
+Flow cytometry files in, population frequencies, a UMAP and statistics out.
+Every sample is gated separately, and the report is one file.
 </p>
 <p class="cy-hero-actions">
-<a class="cy-btn cy-btn-primary" href="articles/cyRAVEN.html">Get started</a>
-<a class="cy-btn" href="articles/gallery.html">See every figure</a>
-<a class="cy-btn" href="articles/about.html">Why it works this way</a>
-</p>
-<p class="cy-hero-meta">
-R package &middot; GPL-3 &middot; runs through Docker on a pinned R 4.4.3, a dated
-CRAN snapshot and Bioconductor 3.20
+<a class="cy-btn cy-btn-primary" href="#quick-start">Quick start</a>
+<a class="cy-btn" href="articles/cyRAVEN.html">Get started</a>
 </p>
 </div>
-</div>
 
-<div class="cy-cards">
-<div class="cy-card">
-<h3>Gates are derived, not transferred</h3>
-<p>Every threshold is placed at a density minimum inside the sample it applies
-to. Copying one set of coordinates between samples does not remove operator
-variance. It converts that variance into a bias that tracks staining
-intensity, which is harder to see because every sample then carries the same
-apparent boundary.</p>
-</div>
-<div class="cy-card">
-<h3>Uncertainty is propagated, not discarded</h3>
-<p>Each cut is resampled from the events it was derived from and re-derived
-across the settings that placed it. The resulting spread reaches every
-frequency that reads it, so a population separated by a clean gap and one
-sitting on a shoulder are not reported to the same precision.</p>
-</div>
-<div class="cy-card">
-<h3>The specification can be refuted</h3>
-<p>Explore mode clusters every eligible channel without reference to what you
-declared, which is the only way to find a population nobody named. Six
-diagnostics exist for the sole purpose of contradicting the specification.</p>
-</div>
-</div>
+## Quick start
 
-<figure class="cy-figure">
-<img src="reference/figures/demo_gating_qc_example.png" alt="Two samples from the demonstration cohort, five markers each, with the derived threshold drawn on the distribution it came from">
-<figcaption>
+You need [Docker](https://docs.docker.com/get-docker/). Four commands, then
+open one file.
 
-**What the first claim looks like in practice.** Two samples from the
-demonstration cohort, five markers each. The dashed line is the cut applied to
-that sample, drawn on the distribution it was derived from.
-
-Read it column by column. `CD45` in the top row sits just right of the peak,
-separating leukocytes from everything below them: a real density minimum, marked
-`valley`. The second row has three cuts marked `quantile_fallback (REVIEW)`,
-where no minimum was found and the cut came from a percentile instead. Those
-populations are still reported, with the fallback recorded in
-`thresholds_used.csv`, and they are the ones to check before quoting a number.
-
-Comparing the two rows is the point. The `CD14` cut is in a different place in
-each, because these are different samples with different staining and the
-correct cut genuinely differs. A fixed coordinate copied between them would be
-right for at most one.
-
-</figcaption>
-</figure>
-
-<div class="cy-quote">
-The unit of replication is the donor, not the event.
-</div>
-
-## Quick setup
-
-Docker is the supported execution path, for a numerical reason rather than
-convenience: `uwot` is a stochastic embedder whose output varies with its own
-version and with the BLAS beneath it, and every gate is placed at a kernel
-density minimum, so a different density implementation moves thresholds and
-therefore the frequencies that would be published. The image pins R 4.4.3, a
-dated CRAN snapshot and Bioconductor 3.20.
-
-### 1. Get the image
-
-Either pull the published one or build it from source. They are the same image;
-pick by whether you intend to change the code.
-
-**Pull.** A download rather than a compile, and the image every published run
-here was produced with.
+**1. Get the image**
 
 ```bash
 docker pull bhagesh/cyraven:1.0.0
+docker tag bhagesh/cyraven:1.0.0 \
+  cyraven:1.0.0
 ```
 
-Then give it the short local name every command below uses:
+**2. Write the demo data**: 35 FCS files, a sample sheet and a config.
 
 ```bash
-docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
+docker run --rm -v "$PWD:/w" \
+  cyraven:1.0.0 --demo /w/demo
 ```
 
-That second command is only for readability. Use `bhagesh/cyraven:1.0.0`
-directly instead if you prefer.
-
-**Build.** For a modified source tree, an air-gapped host, or if you would
-rather not run a third-party image. The build context is the repository root,
-the directory holding `DESCRIPTION`.
+**3. Check the inputs.** Takes seconds. It should end with
+`no problems found`.
 
 ```bash
-git clone https://github.com/bhagesh-h/cyRAVEN.git
+docker run --rm \
+  -v "$PWD/demo:/data:ro" \
+  -v "$PWD/results:/results" \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/panel.yaml \
+  --group-column cohort \
+  --reference-group "GvHD grade 1" \
+  --outdir /results \
+  --check
+```
+
+**4. Run it.** A few minutes.
+
+```bash
+docker run --rm \
+  -v "$PWD/demo:/data:ro" \
+  -v "$PWD/results:/results" \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/panel.yaml \
+  --group-column cohort \
+  --reference-group "GvHD grade 1" \
+  --outdir /results
+```
+
+**5. Open `results/report.html`.** Every figure and table is in that one
+file.
+
+On Windows PowerShell write `${PWD}` instead of `$PWD`.
+
+## How it works
+
+```
+FCS files · sample sheet · config
+                ▼
+        1  Read the files
+                ▼
+       2  Gate each sample
+                ▼
+      3  Score populations
+                ▼
+     4  Uncertainty and UMAP
+                ▼
+        5  Compare groups
+                ▼
+           report.html
+```
+
+1. **Read.** Each file is opened and its channels are matched to markers.
+   Acquisition stability over time is checked.
+   → `acquisition_qc.csv`
+2. **Gate each sample.** Leukocytes, singlets, live cells and CD45+ cells are
+   found first. Then each marker is cut at the lowest point between its
+   negative and positive peaks, inside that sample.
+   → `thresholds_used.csv`, `gating_qc.png`
+3. **Score populations.** Cells meeting each rule in your YAML are counted,
+   for example `CD3: above` and `CD4: above`.
+   → `population_frequencies.csv`
+4. **Uncertainty and UMAP.** Each cut is re-derived on resampled events to
+   see how far it moves. A UMAP is built from an equal number of cells per
+   sample.
+   → `threshold_uncertainty.csv`, `umap_overview.png`
+5. **Compare.** Groups are tested with one value per sample. Populations are
+   correlated with clinical variables and followed across visits.
+   → `group_comparison_stats.csv`, `clinical_association.csv`
+
+If a marker shows no gap between negative and positive cells, step 2 uses a
+fixed percentile instead and labels the cut `quantile_fallback`. The
+population is still reported; check it before you use the number.
+
+## What it can do
+
+| Feature | Flag |
+|---|---|
+| A gate placed inside each sample | always on |
+| Uncertainty for every cut and frequency | always on |
+| Several smoothing levels and gate shapes | `--adaptive-gates` |
+| Skip a gate the data cannot support | `--auto-fix-gates` |
+| Tests between groups | `--group-column` |
+| Clinical scores and lab values | `--clinical-columns` |
+| Absolute cell numbers | `--total-counts` |
+| Every figure again per visit | `--split-by-timepoint` |
+| Batch check and correction | `--batch-column` |
+| Clustering, for unlisted populations | `--explore` |
+| FMO controls as gate references | `fmo_for` column |
+| Gates for FlowJo or Gating-ML | `--flowjo-export` |
+
+## Your own data
+
+You write two files: a **sample sheet** (one row per FCS file) and a
+**config** (the populations to score). Start both from a template.
+
+```bash
+docker run --rm -v "$PWD/data:/data" \
+  cyraven:1.0.0 \
+  --dir /data/fcs --recursive \
+  --write-samples /data/samples.csv
 ```
 
 ```bash
-cd cyRAVEN
+docker run --rm -v "$PWD/data:/data" \
+  cyraven:1.0.0 \
+  --write-template /data/analysis.yaml
 ```
 
-```bash
-docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
-```
+Fill in the sheet's `patient_id` and group columns, and edit the
+`populations:` section of the config. Run with `--check` until it reports no
+problems, then run without it.
+[Get started](articles/cyRAVEN.html) explains both files and every
+option.
 
-The first build compiles the dependency stack and takes 15 to 25 minutes. It
-finishes by running `--help` and printing every package version, so a broken
-image fails at build time rather than during an analysis.
+## Before you use a number
 
-Both routes pin R 4.4.3, the same dated CRAN snapshot and Bioconductor 3.20, so
-they are numerically interchangeable. Confirm what you have:
+- **Open `gating_qc.png` first.** It draws each cut on the data it came
+  from. A cut on the side of a peak, instead of in the gap, is visible there
+  and in no table.
+- **A `quantile_fallback` cut found no gap.** Look at that population before
+  you report it.
+- **Frequencies are shares.** They sum to 100%, so one population rising can
+  be another falling. Only `--total-counts` shows a change in size.
+- **The donor is the unit.** Tests use one value per sample, never single
+  cells, so a longer acquisition does not inflate significance.
 
-```bash
-docker run --rm --entrypoint Rscript cyraven:1.0.0 -e 'packageVersion("cyRAVEN")'
-```
+## Why gate each sample separately
 
-```
-[1] '1.0.0'
-```
+Manual gating varies between operators. When 38 operators gated the same
+files, the median expanded uncertainty was 3.6%, and experience made no
+significant difference (Grant et al., 2021, *PDA J Pharm Sci Technol* 75:33).
+Across 320 clinical samples analysed by six technologists, the remaining
+spread followed the operator more than the instrument (Mead et al., 2026,
+*Cytometry B*, doi:10.1002/cyto.b.70048).
 
-### 2. Run the demonstration cohort
-
-Nothing is downloaded: the data ship inside a package cyRAVEN already depends on,
-so the example is reproducible offline and cannot break when a repository moves
-or a certificate expires.
-
-Four commands, one block each. Copy and run them one at a time.
-
-**1. Make the folders.**
-
-```bash
-mkdir -p demo results
-```
-
-**2. Write the cohort, its sample sheet and its config.**
-
-```bash
-docker run --rm -v "$PWD/demo:/demo" \
- --entrypoint Rscript cyraven:1.0.0 \
-  /opt/cyraven/src/inst/scripts/demo_data.R /demo
-```
-
-Ends with:
-
-```
-wrote samples.csv, panel.yaml and sample_map.csv to /demo
-cohort: GvHD grade 1 n=7; GvHD grade 3 n=28
-```
-
-**3. Validate the inputs in seconds, without analysing anything.**
-
-```bash
-docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs \
- --samples /data/samples.csv --config /data/panel.yaml \
- --group-column cohort --reference-group "GvHD grade 1" \
- --batch-column visit --outdir /results --check
-```
-
-It should report 35 files, four resolved markers, that every marker the
-specification names is present, that the sheet covers every file, and the group
-sizes. Nothing is written and nothing is analysed. Fix anything it reports before
-running step 4, which costs minutes rather than seconds.
-
-**4. Run it.**
-
-```bash
-docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs \
- --samples /data/samples.csv --config /data/panel.yaml \
- --group-column cohort --reference-group "GvHD grade 1" \
- --batch-column visit --cluster --outdir /results
-```
-
-Every path inside a flag is a path inside the container, and `--outdir` must fall
-within a mounted volume or the output is discarded when the container exits. On
-Windows PowerShell substitute `${PWD}` for `$PWD`; on Git Bash prefix with
-`MSYS_NO_PATHCONV=1`.
-
-This writes 24 figures and 35 tables from 35 samples across five allogeneic
-transplant recipients (Brinkman et al., 2007, *Biol Blood Marrow Transplant*
-13:691; Artistic-2.0).
-
-### 3. Read the result
-
-Open `results/report.html`. It carries every figure and table the run produced,
-embedded in one self-contained file that references nothing beside it, in the
-order the outputs have to be read. Figures zoom and download at full resolution;
-each table is its own toggle, carrying a line saying what it holds, and is
-searchable, sortable, paged and exportable to CSV.
-
-Inspect `recon_diagnostics.png` and `gating_qc.png` before any quantity derived
-from them: a threshold placed on a distribution shoulder rather than a density
-minimum is visible there and in no downstream table.
-
-<img src="reference/figures/demo_gating_qc_example.png" alt="Two samples from the demonstration cohort, five markers each, with the derived threshold drawn on the distribution it came from" width="100%"/>
-
-Two samples from that run, five markers each. The full figure carries one row per
-sample; this is the top of it.
-
-Each panel is one marker in one sample, and the dashed line is the cut that was
-applied to it. Read it column by column:
-
-- **`valley` in black** is a threshold placed at a real density minimum. `CD45` in
-  the top row sits just right of the peak, separating the leukocytes from
-  everything below them.
-- **`quantile_fallback (REVIEW)` in red** means no minimum was found, so the cut
-  came from a percentile instead. The second row has three of them. Those
-  populations are still reported, with the fallback recorded in
-  `thresholds_used.csv`, and they are the ones to check before quoting a number.
-
-Comparing the two rows is the point. The `CD14` cut is in a different place in
-each, because these are different samples with different staining, and the
-correct cut genuinely differs. A fixed coordinate copied between them would be
-right for at most one.
-
-### 4. Your own data
-
-Two files besides the FCS directory: one CSV with a row per file, and one YAML
-declaring what to score.
-
-**A sheet with a row for every file, which you then fill in.**
-
-```bash
-docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
- --dir /data/fcs --recursive --write-samples /data/samples.csv
-```
-
-**The annotated config template.**
-
-```bash
-docker run --rm --entrypoint sh cyraven:1.0.0 -c \
-  'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml' \
-  > data/analysis.yaml
-```
-
-Edit both, run `--check` until it reports no problems, then run. The complete
-sequence for every task, in Docker and in R, with the situation each option is
-for, is in
-[Running cyRAVEN](https://bhagesh-h.github.io/cyRAVEN/articles/cyRAVEN.html#commands-and-every-option).
-
-### A repeated-measures study
-
-If the sample sheet carries a `timepoint` column, `--split-by-timepoint` writes
-the whole figure set once per visit into `by_timepoint/<level>/`, beside the
-pooled figures:
-
-```bash
-docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
- --dir /data/fcs --recursive --samples /data/samples.csv \
- --config /data/analysis.yaml --split-by-timepoint --outdir /data/results
-```
-
-The embedding, the gating thresholds and the statistics are **not** recomputed
-per visit -- only the rows drawn are restricted. A position on one visit's UMAP
-is therefore the same position on another's, and a threshold is the same cut.
-Running the pipeline separately per visit would give three embeddings computed
-from different cells, which cannot be compared with each other at all.
-
-Paired views that need every visit at once -- per-patient trajectories, subset
-balance, marker intensity by visit -- are written to the run directory as
-`timepoint_*.png` whether or not the flag is set, because splitting them by
-visit is what destroys them.
+Copying one set of gate coordinates to every sample does not fix this.
+Samples stain with different intensity, so a fixed cut suits some and not
+others. cyRAVEN places each cut inside its own sample and reports how
+precisely that cut is determined.
 
 ## Documentation
 
-Every page below is also available as a single PDF, one chapter per page, with a
-table of contents and continuous page numbering:
-**[cyRAVEN-manual.pdf](https://bhagesh-h.github.io/cyRAVEN/cyRAVEN-manual.pdf)**.
-It is rebuilt with the site, so it never lags behind these pages. Every column of
-every reference table is sized to the width its own content needs, so the wide
-ones read upright rather than being squeezed until the columns touch, and each
-table and figure stays on the same page as the heading above it.
-
-New to flow cytometry?
-[Flow cytometry for dummies](https://bhagesh-h.github.io/cyRAVEN/articles/flow-cytometry.html)
-explains what an event is, what a cut is, why `SSC-A` sits in a population
-definition next to two antibodies, and what the `-A` on a channel name means.
-Every other page assumes it.
-
-Before you trust a result,
-[Known limitations](https://bhagesh-h.github.io/cyRAVEN/articles/limitations.html#known-limitations)
-collects every caveat in one place: what the 1.0.0 control fix means for results
-produced by an earlier version and how to tell whether yours were affected,
-where the automated gates have and have not been validated, and which comparisons
-this package will not make. It also records what was deliberately left out and
-why, so the same arguments do not get relitigated.
-
-The documentation is six chapters, read in order. Each one assumes the chapter
-before it.
-
-| Chapter | What it covers |
+| Page | For |
 |---|---|
-| [About cyRAVEN](https://bhagesh-h.github.io/cyRAVEN/articles/about.html) | What the pipeline does and why it is built this way: the variance manual gating introduces, the ten stages a run moves through, and why unsupervised discovery is kept at arm's length from the specification it checks |
-| [About flow cytometry](https://bhagesh-h.github.io/cyRAVEN/articles/flow-cytometry.html) | What an event is, what a cut is, why `SSC-A` sits in a population definition beside two antibodies, and what the `-A` on a channel name means. Nothing in it is specific to cyRAVEN |
-| [Get started](https://bhagesh-h.github.io/cyRAVEN/articles/cyRAVEN.html) | Install it, run the demonstration cohort, then build your own two input files. Carries the sample sheet and config reference, the gating specification, and every one of the 116 options |
-| [Advanced](https://bhagesh-h.github.io/cyRAVEN/articles/advanced.html) | Beyond a first run: unsupervised discovery, the diagnostics in the order they have to be read, every output file, the statistics and their assumptions, and using cyRAVEN with cyCONDOR or from Claude Code |
-| [Gallery](https://bhagesh-h.github.io/cyRAVEN/articles/gallery.html) | Every figure a run produces, as unmodified output, with what each one measures and what that run shows |
-| [Limitations](https://bhagesh-h.github.io/cyRAVEN/articles/limitations.html) | Every caveat in one place, and nine excluded methods with the reasoning and the condition under which each becomes appropriate |
-| [Function reference](https://bhagesh-h.github.io/cyRAVEN/reference/index.html) | Every exported function, grouped by stage |
+| [Get started](articles/cyRAVEN.html) | The two input files and every option |
+| [About](articles/about.html) | What each stage does, and why |
+| [Flow cytometry](articles/flow-cytometry.html) | Events, gates and channels, for newcomers |
+| [Advanced](articles/advanced.html) | Explore mode, diagnostics, every output |
+| [Gallery](articles/gallery.html) | Every figure, and how to read it |
+| [Limitations](articles/limitations.html) | What results can and cannot support |
+| [Reference](reference/index.html) | Every exported R function |
 
-**These pages are the website, not the install.** The package sources carry all
-six chapters, but they are not built into the installed copy, so
-`browseVignettes("cyRAVEN")` returns nothing inside the image and on a plain
-install. Building them would add several megabytes of rendered HTML and figures
-to a package whose footprint is already deliberate, and the site is always
-current with `main`. Function help is installed and complete, `?run_cyraven`
-and 192 other topics work offline. For the prose, use the links above or build
-the vignettes yourself from a source checkout with
-`devtools::build_vignettes()`.
+Everything is also in one PDF:
+[cyRAVEN-manual.pdf](cyRAVEN-manual.pdf).
 
-One consequence worth knowing if you check the package yourself: because
-`inst/doc` is absent, `R CMD check` reports two warnings,
-`Files in the 'vignettes' directory but no files in 'inst/doc'` and
-`Directory 'inst/doc' does not exist`. Both are consequences of not building
-vignettes rather than defects, and every other check, including all 248 tests,
-passes.
+## Without Docker
 
-## Installation without Docker
-
-Reproducibility of numerical output is not guaranteed outside the pinned
-environment, for the reasons given under [Quick setup](#quick-setup).
+Docker pins R 4.4.3, a dated CRAN snapshot and Bioconductor 3.20. Newer
+package versions can move gates and UMAP coordinates slightly, so results
+may differ a little outside it.
 
 ```r
 install.packages("BiocManager")
@@ -342,20 +203,17 @@ remotes::install_github("bhagesh-h/cyRAVEN")
 
 ```r
 library(cyRAVEN)
-
+write_demo_cohort("demo")
 run_cyraven(list(
-  dir             = "demo/fcs",
-  outdir          = "results",
-  samples         = "demo/samples.csv",
-  config          = "demo/panel.yaml",
-  group_column    = "cohort",
-  reference_group = "GvHD grade 1"
-))
+  dir = "demo/fcs", outdir = "results",
+  samples = "demo/samples.csv",
+  config = "demo/panel.yaml",
+  group_column = "cohort",
+  reference_group = "GvHD grade 1"))
 ```
 
-`FlowSOM` is an optional dependency. When absent, self-organising map clustering
-falls back to the implementation within the package and all other behaviour is
-unchanged.
+The chapters are not installed with the package, so `browseVignettes()`
+returns nothing; function help such as `?run_cyraven` is installed.
 
 ## Citation
 
@@ -363,26 +221,18 @@ unchanged.
 citation("cyRAVEN")
 ```
 
-Cite FlowSOM (Van Gassen et al., 2015, *Cytometry A* 87:636) when using the
-unsupervised clustering, and diffcyt (Weber et al., 2019, *Commun Biol* 2:183)
-for the aggregation strategy underlying the differential state tests.
+If you use the clustering, also cite FlowSOM (Van Gassen et al., 2015,
+*Cytometry A* 87:636). For the differential state tests, also cite diffcyt
+(Weber et al., 2019, *Commun Biol* 2:183).
 
-## A note on how parts of this were written
+## How parts of this were written
 
-Commit messages and parts of the documentation, this README, the vignettes and
-the roxygen comments, were drafted with Anthropic's Claude, mostly Claude Opus 5
-through [Claude Code](https://claude.com/claude-code), with earlier sections
-written using Opus 4.1 and Sonnet 4.5.
-
-The analysis code and its results are the author's, and every number quoted in
-the documentation comes from a run rather than from a draft. Prose written this
-way can still describe the code incorrectly. If something here does not match
-what the package does, please
-[open an issue](https://github.com/bhagesh-h/cyRAVEN/issues), a documentation
-error is a bug and is worth reporting as one.
+Commit messages and parts of the documentation were drafted with Anthropic's
+Claude through [Claude Code](https://claude.com/claude-code). The code and
+its results are the author's, and every number in the documentation comes
+from a run. If the documentation and the package disagree, please
+[open an issue](https://github.com/bhagesh-h/cyRAVEN/issues).
 
 ## Licence
 
-GPL-3. The full text is in
-[LICENSE](https://github.com/bhagesh-h/cyRAVEN/blob/main/LICENSE), and on the
-documentation site under [License](https://bhagesh-h.github.io/cyRAVEN/LICENSE-text.html).
+GPL-3. See [LICENSE](https://github.com/bhagesh-h/cyRAVEN/blob/main/LICENSE).

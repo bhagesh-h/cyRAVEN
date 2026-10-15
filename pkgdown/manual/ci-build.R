@@ -41,7 +41,10 @@ r <- tryCatch(tinytex::tlmgr_install(
     "booktabs", "framed", "environ", "trimspaces", "koma-script",
     # float pins each figure where it was written instead of letting it drift
     # away from the heading above it; see preamble.tex and page-fit.lua.
-    "float")),
+    "float",
+    # The manual's typefaces, Inter and Source Code Pro, and what their style
+    # files load.
+    "inter", "sourcecodepro", "fontaxes", "mweights", "xkeyval")),
   error = function(e) e)
 if (inherits(r, "error")) say("TLMGR ERROR: ", conditionMessage(r))
 

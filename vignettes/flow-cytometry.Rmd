@@ -177,7 +177,7 @@ duration. The suffix on a channel name says which one you are looking at, so
 
 For a single cell, area and height rise and fall together. For two cells stuck in
 a clump the pulse lasts twice as long, so the area roughly doubles while the
-height barely changes. That mismatch is the only reliable way to spot a clump.
+height barely changes. That mismatch is the standard way to spot a clump.
 
 ```{r doublet, eval = TRUE, echo = FALSE, fig.alt = "One cell gives a narrow pulse; two cells stuck together give a wider one, which is how a doublet is caught"}
 if (file.exists("images/doublet-vs-singlet.png")) knitr::include_graphics("images/doublet-vs-singlet.png")

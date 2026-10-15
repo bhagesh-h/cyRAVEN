@@ -11,177 +11,126 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
 ```
 
-Everything needed to run cyRAVEN on your own data: install it, run the
-demonstration cohort, then build the two input files your own cohort needs.
+From nothing to a finished run in four commands, then how to describe your
+own cohort.
 
-Work through it in order the first time. The sequence is deliberate, because
-each step produces something the next one checks.
+Two habits save the most time:
 
-1. **Setup** puts the image on your machine.
-2. **A complete run** proves the install works, on data that ships with the
-   package and needs no download.
-3. **Inputs** builds the sample sheet and the config, the only two files you
-   write yourself.
-4. **The gating specification** says what to score.
-5. **Commands and options** is the reference for every flag.
-
-Two habits are worth forming now, because both cost seconds and save whole runs.
-
-Always run `--check` before a real run. It validates the sheet and the
-specification against the FCS headers and exits without analysing anything, so a
-marker-name mismatch costs a second rather than the run.
-
-Always open `gating_qc.png` before quoting a number. A threshold sitting on the
-shoulder of a distribution rather than in its trough is visible there and in no
-table the run writes.
+- **Run `--check` first.** It reads only the file headers and stops, so a
+  misspelled marker costs seconds instead of a whole run.
+- **Open `gating_qc.png` before using a number.** It draws each cut on the
+  data it came from, so a cut on the side of a peak shows there and in no
+  table.
 
 ## Setup
 
-Docker is the supported path, for a numerical reason rather than convenience:
-`uwot` is a stochastic embedder whose output varies with its own version and with
-the BLAS beneath it, and every gate is placed at a kernel density minimum, so a
-different density implementation moves thresholds and therefore the frequencies
-that would be published. The image pins R 4.4.3, a dated CRAN snapshot and
-Bioconductor 3.20.
-
-Two routes to the same image. Which you want turns on one question: **are you
-going to change the source?**
-
-| Situation | Route |
-|---|---|
-| Running cyRAVEN as released | **Pull.** A download, not a 20-minute compile |
-| Reproducing the worked example or a published run | **Pull.** It is the image those were produced with |
-| You edited `R/`, the Dockerfile or the config templates | **Build.** A pull cannot contain your changes |
-| Air-gapped host, or policy against third-party images | **Build** |
-| Rate-limited by Docker Hub | **Build**, or authenticate with `docker login` |
-
-**Pull.** A download rather than a compile, and the image the worked example and
-every published run here was produced with.
+You need [Docker](https://docs.docker.com/get-docker/).
 
 ```bash
 docker pull bhagesh/cyraven:1.0.0
+docker tag bhagesh/cyraven:1.0.0 \
+  cyraven:1.0.0
 ```
 
-```bash
-docker tag bhagesh/cyraven:1.0.0 cyraven:1.0.0
-```
+The image fixes R 4.4.3, a dated CRAN snapshot and Bioconductor 3.20. Gates
+sit at density minima and the UMAP is stochastic, so other package versions
+can move both slightly.
 
-`bhagesh/cyraven:latest` tracks the most recent release. Pin the version for
-anything you intend to publish: `latest` moving under you is the reproducibility
-failure the pinned image exists to prevent.
-
-The `docker tag` line only exists so every command on this site can say
-`cyraven:1.0.0`. Substitute `bhagesh/cyraven:1.0.0` throughout instead if you
-prefer.
-
-**Build.** For a modified source tree, an air-gapped host, or if you would rather
-not run a third-party image.
+To build the image yourself instead, for example after changing the source:
 
 ```bash
-git clone https://github.com/bhagesh-h/cyRAVEN.git
-```
-
-```bash
+git clone \
+  https://github.com/bhagesh-h/cyRAVEN
 cd cyRAVEN
+docker build -t cyraven:1.0.0 \
+  -f inst/scripts/Dockerfile .
 ```
+
+The first build compiles every R dependency and takes tens of minutes.
+
+To install without Docker, see the
+[README](https://github.com/bhagesh-h/cyRAVEN#without-docker).
+
+## Quick start
+
+**1. Write the demo data.** 35 FCS files from five transplant recipients, a
+sample sheet and a config. They ship inside the image, so nothing is
+downloaded.
 
 ```bash
-docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
+docker run --rm -v "$PWD:/w" \
+  cyraven:1.0.0 --demo /w/demo
 ```
 
-The build context is the repository root, the directory holding `DESCRIPTION`.
-The first build compiles the dependency stack and takes 15 to 25 minutes. It ends
-by running `--help` and printing every package version, so a broken image fails
-at build time rather than during an analysis.
-
-Both pin R 4.4.3, the same dated CRAN snapshot and Bioconductor 3.20, so they are
-numerically interchangeable. Check what you have with:
+**2. Check the inputs.** It should end with `no problems found`.
 
 ```bash
-docker run --rm --entrypoint Rscript cyraven:1.0.0 \
-  -e 'cat(as.character(packageVersion("cyRAVEN")), R.version.string)'
+docker run --rm \
+  -v "$PWD/demo:/data:ro" \
+  -v "$PWD/results:/results" \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/panel.yaml \
+  --group-column cohort \
+  --reference-group "GvHD grade 1" \
+  --outdir /results \
+  --check
 ```
 
-Prints:
-
-```
-1.0.0 R version 4.4.3 (2025-02-28)
-```
-
-Local installation, for development or where Docker is unavailable, is in the
-[README](https://github.com/bhagesh-h/cyRAVEN#installation-without-docker).
-
-## A complete run in five minutes
-
-No data of your own required, and nothing downloaded: the demonstration cohort
-ships inside a package cyRAVEN already depends on.
-
-Four commands, one block each. Copy and run them one at a time.
-
-**1. Make the folders.**
+**3. Run it.** A few minutes.
 
 ```bash
-mkdir -p demo results
+docker run --rm \
+  -v "$PWD/demo:/data:ro" \
+  -v "$PWD/results:/results" \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/panel.yaml \
+  --group-column cohort \
+  --reference-group "GvHD grade 1" \
+  --outdir /results
 ```
 
-**2. Write the cohort, its sample sheet and its config.**
+**4. Open `results/report.html`.** Every figure and table is in that one file,
+in the order to read them.
 
-```bash
-docker run --rm -v "$PWD/demo:/demo" \
-  --entrypoint Rscript cyraven:1.0.0 \
-  /opt/cyraven/src/inst/scripts/demo_data.R /demo
-```
+Paths in the flags are paths inside the container, and `--outdir` must be in a
+mounted folder or the results vanish when the container exits. On Windows
+PowerShell write `${PWD}` for `$PWD`.
 
-**3. Validate the inputs, in seconds, without analysing anything.**
-
-```bash
-docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs \
-  --samples /data/samples.csv --config /data/panel.yaml \
-  --group-column cohort --reference-group "GvHD grade 1" \
-  --batch-column visit --outdir /results --check
-```
-
-**4. Run it, then open `results/report.html`.**
-
-```bash
-docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs \
-  --samples /data/samples.csv --config /data/panel.yaml \
-  --group-column cohort --reference-group "GvHD grade 1" \
-  --batch-column visit --cluster --outdir /results
-```
-
-On Windows PowerShell substitute `${PWD}` for `$PWD`; on Git Bash prefix with
-`MSYS_NO_PATHCONV=1`.
-
-This writes 24 figures and 35 tables from 35 samples across five allogeneic
-transplant recipients. `report.html` carries all of them embedded in one
-self-contained file, in the order they have to be read.
+About this cohort: both groups are transplant recipients, so the comparison is
+GvHD grade 1 against grade 3, not disease against health, and the groups are
+one patient against four.
 
 ## Your own data
 
-Two files besides the FCS directory: one CSV with a row per file, and one YAML
-declaring what to score.
+Two files besides the FCS folder:
 
-A sheet with a row for every file, which you then fill in:
+| File | Holds |
+|---|---|
+| Sample sheet, `samples.csv` | One row per FCS file: sample, patient, group, timepoint, batch |
+| Config, `analysis.yaml` | One entry per population: its marker rule, e.g. `CD3: above` |
 
-```bash
-docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
-  --dir /data/fcs --recursive --write-samples /data/samples.csv
-```
-
-The config template:
+Start both from a template:
 
 ```bash
-docker run --rm --entrypoint sh cyraven:1.0.0 -c \
-  'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml' \
-  > data/analysis.yaml
+docker run --rm -v "$PWD/data:/data" \
+  cyraven:1.0.0 \
+  --dir /data/fcs --recursive \
+  --write-samples /data/samples.csv
 ```
 
-Then `--check` until it reports no problems, then run. The full sequence, and
-every option with the situation it is for, is in
-[Commands and every option](cyRAVEN.html#commands-and-every-option).
+```bash
+docker run --rm -v "$PWD/data:/data" \
+  cyraven:1.0.0 \
+  --write-template /data/analysis.yaml
+```
+
+Fill in the sheet, edit the `populations:` section of the config, run with
+`--check` until it reports no problems, then run without it. The rest of this
+page explains each file and every option.
 
 ## Inputs: the sample sheet and the config
 
@@ -200,17 +149,21 @@ rows to disagree about it.
 Both templates ship with the package:
 
 ```bash
-docker run --rm --entrypoint sh cyraven:1.0.0 -c \
-  'cat /usr/local/lib/R/site-library/cyRAVEN/examples/samples_template.csv'
+docker run --rm \
+  --entrypoint sh \
+  cyraven:1.0.0 \
+  -c 'cat /usr/local/lib/R/site-library/cyRAVEN/examples/samples_template.csv'
 ```
 
 ```bash
-docker run --rm --entrypoint sh cyraven:1.0.0 -c \
-  'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml'
+docker run --rm -v "$PWD/data:/data" \
+  cyraven:1.0.0 \
+  --write-template /data/analysis.yaml
 ```
 
-From R, `system.file("examples", "samples_template.csv", package = "cyRAVEN")`
-and `system.file("examples", "analysis_template.yaml", package = "cyRAVEN")`.
+From R, `write_config_template("analysis.yaml")`, and
+`system.file("examples", "samples_template.csv", package = "cyRAVEN")` for the
+sheet.
 
 ### 1. Build the sheet
 
@@ -222,8 +175,11 @@ if (file.exists("images/two-input-files.png")) knitr::include_graphics("images/t
 ```
 
 ```bash
-docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
-  --dir /data/fcs --write-samples /data/samples.csv
+docker run --rm \
+  -v "$PWD/data:/data" \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --write-samples /data/samples.csv
 ```
 
 Every acquisition gets a row with its filename and a derived identifier, so the
@@ -235,9 +191,15 @@ patient is not visible in any output.
 Then check it, which costs seconds because it reads FCS headers and not events:
 
 ```bash
-docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
-  --config /data/analysis.yaml --outdir /results --check
+docker run --rm \
+  -v "$PWD/data:/data:ro" \
+  -v "$PWD/results:/results" \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --outdir /results \
+  --check
 ```
 
 `--check` reports the markers it resolved from the files, the specification
@@ -394,8 +356,11 @@ is the same five steps for any cohort.
 **1. A sheet with a row for every file.**
 
 ```bash
-docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
-  --dir /data/fcs --write-samples /data/samples.csv
+docker run --rm \
+  -v "$PWD/data:/data" \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --write-samples /data/samples.csv
 ```
 
 **2. Fill in `patient_id`, the study group, and any variable you want to test.**
@@ -405,9 +370,9 @@ delete what you do not have rather than filling it in.
 **3. Start the config from the shipped template.**
 
 ```bash
-docker run --rm --entrypoint sh cyraven:1.0.0 -c \
-  'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml' \
-  > data/analysis.yaml
+docker run --rm -v "$PWD/data:/data" \
+  cyraven:1.0.0 \
+  --write-template /data/analysis.yaml
 ```
 
 Edit `populations:` to match the panel. `--check` lists the marker names the
@@ -416,19 +381,32 @@ files actually carry, which is what a population has to use.
 **4. Validate, in seconds, writing nothing.**
 
 ```bash
-docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
-  --config /data/analysis.yaml --outdir /results --check
+docker run --rm \
+  -v "$PWD/data:/data:ro" \
+  -v "$PWD/results:/results" \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --outdir /results \
+  --check
 ```
 
 **5. Run it.**
 
 ```bash
-docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
-  --config /data/analysis.yaml --group-column cohort \
-  --reference-group "Healthy controls" --batch-column acquisition_date \
-  --cluster --outdir /results
+docker run --rm \
+  -v "$PWD/data:/data:ro" \
+  -v "$PWD/results:/results" \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --group-column cohort \
+  --reference-group "Healthy controls" \
+  --batch-column acquisition_date \
+  --cluster \
+  --outdir /results
 ```
 
 Open `results/report.html`. It carries every figure and table the run produced,
@@ -923,8 +901,12 @@ mkdir -p data results
 **2. Write a sheet with a row for every file.**
 
 ```bash
-docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
-  --dir /data/fcs --recursive --write-samples /data/samples.csv
+docker run --rm \
+  -v "$PWD/data:/data" \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --recursive \
+  --write-samples /data/samples.csv
 ```
 
 **3. Edit `data/samples.csv`** and fill in `patient_id`, `cohort` and any study
@@ -933,9 +915,9 @@ variable. No command; open it in a spreadsheet or a text editor.
 **4. Start the config from the shipped template.**
 
 ```bash
-docker run --rm --entrypoint sh cyraven:1.0.0 -c \
-  'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml' \
-  > data/analysis.yaml
+docker run --rm -v "$PWD/data:/data" \
+  cyraven:1.0.0 \
+  --write-template /data/analysis.yaml
 ```
 
 **5. Edit `populations:` in `data/analysis.yaml`** to match your panel. Again an
@@ -944,19 +926,31 @@ edit, not a command.
 **6. Validate, in seconds, analysing nothing.**
 
 ```bash
-docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs --recursive \
-  --samples /data/samples.csv --config /data/analysis.yaml \
-  --outdir /results --check
+docker run --rm \
+  -v "$PWD/data:/data:ro" \
+  -v "$PWD/results:/results" \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --recursive \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --outdir /results \
+  --check
 ```
 
 **7. Repeat steps 5 and 6** until `--check` reports no problems. Then run it.
 
 ```bash
-docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs --recursive \
-  --samples /data/samples.csv --config /data/analysis.yaml \
-  --group-column cohort --reference-group "Healthy controls" \
+docker run --rm \
+  -v "$PWD/data:/data:ro" \
+  -v "$PWD/results:/results" \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --recursive \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --group-column cohort \
+  --reference-group "Healthy controls" \
   --outdir /results
 ```
 
@@ -984,13 +978,20 @@ Batch diagnostics and the unsupervised check are opt-in because each adds
 outputs and runtime.
 
 ```bash
-docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
+docker run --rm \
+  -v "$PWD/data:/data:ro" \
+  -v "$PWD/results:/results" \
   cyraven:1.0.0 \
-  --dir /data/fcs --recursive \
-  --samples /data/samples.csv --config /data/analysis.yaml \
-  --group-column cohort --reference-group "Healthy controls" \
-  --batch-column acquisition_date --cluster \
-  --covariates age,sex --reference-date 2025-01-01 \
+  --dir /data/fcs \
+  --recursive \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --group-column cohort \
+  --reference-group "Healthy controls" \
+  --batch-column acquisition_date \
+  --cluster \
+  --covariates age,sex \
+  --reference-date 2025-01-01 \
   --no-session \
   --outdir /results
 ```
@@ -1000,13 +1001,19 @@ docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
 Peak memory is set by the events held at once, not by the number of files.
 
 ```bash
-docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
+docker run --rm \
+  -v "$PWD/data:/data:ro" \
+  -v "$PWD/results:/results" \
   cyraven:1.0.0 \
-  --dir /data --recursive \
-  --samples /data/samples.csv --config /data/analysis.yaml \
+  --dir /data \
+  --recursive \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
   --max-events-per-file 300000 \
-  --cells-per-sample 6000 --max-cells 150000 \
-  --no-session --outdir /results
+  --cells-per-sample 6000 \
+  --max-cells 150000 \
+  --no-session \
+  --outdir /results
 ```
 
 Run one analysis at a time. The stages are already multi-threaded, so nothing is
@@ -1022,20 +1029,31 @@ parent-gate count each frequency is a fraction of.
 **Once, on the run being adopted as the reference.**
 
 ```bash
-docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results:/results" \
-  cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
-  --config /data/analysis.yaml --outdir /results \
+docker run --rm \
+  -v "$PWD/data:/data:ro" \
+  -v "$PWD/results:/results" \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --outdir /results \
   --write-baseline /results/baseline.rds
 ```
 
 **On every later run.**
 
 ```bash
-docker run --rm -v "$PWD/data:/data:ro" -v "$PWD/results2:/results" \
+docker run --rm \
+  -v "$PWD/data:/data:ro" \
+  -v "$PWD/results2:/results" \
   -v "$PWD/results/baseline.rds:/baseline.rds:ro" \
-  cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv \
-  --config /data/analysis.yaml --outdir /results \
-  --baseline /baseline.rds --fail-on-drift
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --outdir /results \
+  --baseline /baseline.rds \
+  --fail-on-drift
 ```
 
 `--fail-on-drift` exits non-zero after every output has been written, so it can
@@ -1043,7 +1061,7 @@ gate a pipeline without costing the diagnostics that explain the failure.
 
 #### 1.7 The demonstration cohort
 
-See [A complete run in five minutes](#a-complete-run-in-five-minutes). Nothing is
+See [Quick start](#quick-start). Nothing is
 downloaded: the data ship inside a package cyRAVEN already depends on, so the
 example is reproducible offline.
 
@@ -1054,9 +1072,14 @@ Mount a checkout and set `CYRAVEN_SOURCE`; the entrypoint loads that tree throug
 a rebuild.
 
 ```bash
-docker run --rm -v "$PWD:/src:ro" -v "$PWD/data:/data:ro" \
-  -v "$PWD/results:/results" -e CYRAVEN_SOURCE=/src \
-  cyraven:1.0.0 --dir /data/fcs --outdir /results
+docker run --rm \
+  -v "$PWD:/src:ro" \
+  -v "$PWD/data:/data:ro" \
+  -v "$PWD/results:/results" \
+  -e CYRAVEN_SOURCE=/src \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --outdir /results
 ```
 
 #### 1.9 Paths, mounts and platforms
@@ -1110,10 +1133,14 @@ separation. Try the transform first, because for dim markers it decides whether 
 stable threshold exists at all.
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
-  --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
+docker run --rm $D \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
   --transform logicle \
-  --group-column cohort --reference-group "Healthy controls" \
+  --group-column cohort \
+  --reference-group "Healthy controls" \
   --outdir /results
 ```
 
@@ -1130,10 +1157,15 @@ The declared populations are only ever what was declared. Clustering is the one
 output that can contradict them.
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
-  --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
-  --cluster --explain-clusters \
-  --group-column cohort --reference-group "Healthy controls" \
+docker run --rm $D \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --cluster \
+  --explain-clusters \
+  --group-column cohort \
+  --reference-group "Healthy controls" \
   --outdir /results
 ```
 
@@ -1148,10 +1180,14 @@ edit to the config, and the next run reads it.
 ##### Samples were acquired on several days or instruments
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
-  --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
+docker run --rm $D \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
   --batch-column acquisition_date \
-  --group-column cohort --reference-group "Healthy controls" \
+  --group-column cohort \
+  --reference-group "Healthy controls" \
   --outdir /results
 ```
 
@@ -1165,10 +1201,15 @@ the finding. cyRAVEN refuses correction above 0.6 for that reason. Where *V* is
 low and the drift is real, add correction:
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
-  --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
-  --batch-column acquisition_date --correct-batch \
-  --group-column cohort --reference-group "Healthy controls" \
+docker run --rm $D \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --batch-column acquisition_date \
+  --correct-batch \
+  --group-column cohort \
+  --reference-group "Healthy controls" \
   --outdir /results
 ```
 
@@ -1187,9 +1228,13 @@ HC-01.fcs,HC-01,HC-01,Healthy controls,3810,1650
 ```
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
-  --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
-  --group-column cohort --reference-group "Healthy controls" \
+docker run --rm $D \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --group-column cohort \
+  --reference-group "Healthy controls" \
   --outdir /results
 ```
 
@@ -1204,18 +1249,27 @@ instrument exports its own sheet and transcription is not worth it, use
 Record where the accepted run placed its thresholds:
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
-  --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
-  --outdir /results --write-baseline /results/baseline.rds
+docker run --rm $D \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --outdir /results \
+  --write-baseline /results/baseline.rds
 ```
 
 Then test every later run against it:
 
 ```bash
-docker run --rm $D -v "$PWD/results/baseline.rds:/baseline.rds:ro" \
+docker run --rm $D \
+  -v "$PWD/results/baseline.rds:/baseline.rds:ro" \
   cyraven:1.0.0 \
-  --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
-  --outdir /results --baseline /baseline.rds --fail-on-drift
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --outdir /results \
+  --baseline /baseline.rds \
+  --fail-on-drift
 ```
 
 The within-run peer check already finds one deviant tube among its peers. It
@@ -1227,10 +1281,15 @@ the diagnostics that explain the failure. Omit it while investigating.
 ##### A longitudinal or paired design
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
-  --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
-  --paired-column patient_id --condition-column timepoint \
-  --group-column cohort --reference-group "Healthy controls" \
+docker run --rm $D \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --paired-column patient_id \
+  --condition-column timepoint \
+  --group-column cohort \
+  --reference-group "Healthy controls" \
   --outdir /results
 ```
 
@@ -1248,9 +1307,13 @@ single timepoint, and a box per timepoint averages exactly that away.
 ##### A cohort with clinical scores and outcomes
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
-  --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
-  --group-column infection_focus --reference-group Pulmonary \
+docker run --rm $D \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --group-column infection_focus \
+  --reference-group Pulmonary \
   --clinical-columns sofa,survival_28d,crp_mg_l,age_years \
   --outdir /results
 ```
@@ -1289,10 +1352,15 @@ Uniform sampling reproduces each sample's composition, so a population at 0.1%
 contributes 0.1% of the drawn cells and forms no cluster.
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
-  --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
-  --subsample rare --cluster \
-  --group-column cohort --reference-group "Healthy controls" \
+docker run --rm $D \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --subsample rare \
+  --cluster \
+  --group-column cohort \
+  --reference-group "Healthy controls" \
   --outdir /results
 ```
 
@@ -1304,9 +1372,15 @@ on the drawn subset.
 ##### Gates are needed on the instrument or in FlowJo
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
-  --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
-  --cluster --explain-clusters --export-gates --flowjo-export \
+docker run --rm $D \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --cluster \
+  --explain-clusters \
+  --export-gates \
+  --flowjo-export \
   --outdir /results
 ```
 
@@ -1318,8 +1392,12 @@ against UMAP-2, and the populations are there as channels.
 ##### Intensities must be comparable across instruments or over months
 
 ```bash
-docker run --rm $D -v "$PWD/beads:/beads:ro" cyraven:1.0.0 \
-  --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
+docker run --rm $D \
+  -v "$PWD/beads:/beads:ro" \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
   --calibration-beads /beads/rainbow.fcs \
   --calibration-values /beads/lot_values.csv \
   --outdir /results
@@ -1333,9 +1411,13 @@ than converted on a fit that does not hold, and the log says which.
 ##### Labels from another tool
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
-  --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
-  --external-labels /data/cycondor_labels.csv --export-gates \
+docker run --rm $D \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --external-labels /data/cycondor_labels.csv \
+  --export-gates \
   --outdir /results
 ```
 
@@ -1351,18 +1433,28 @@ In this order, because the first costs nothing analytically:
 **Skip the session file: often most of the wall-clock, none of the results.**
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
-  --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
-  --no-session --outdir /results
+docker run --rm $D \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --no-session \
+  --outdir /results
 ```
 
 **Bound the events read per file, then the cells embedded.**
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
-  --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
-  --no-session --max-events-per-file 300000 \
-  --cells-per-sample 6000 --max-cells 150000 --outdir /results
+docker run --rm $D \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --no-session \
+  --max-events-per-file 300000 \
+  --cells-per-sample 6000 \
+  --max-cells 150000 \
+  --outdir /results
 ```
 
 `--no-session` changes no number. `--max-events-per-file` does: it raises every
@@ -1379,19 +1471,32 @@ complement: every event, every eligible channel, no specification.
 **Alongside the declared analysis. Writes to results/explore/ and changes NOTHING in the existing output.**
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
-  --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
-  --group-column cohort --reference-group "Healthy controls" \
-  --cluster --explore --outdir /results
+docker run --rm $D \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --group-column cohort \
+  --reference-group "Healthy controls" \
+  --cluster \
+  --explore \
+  --outdir /results
 ```
 
 **...and let the two sides inform each other. The declared run lends explore its per-sample thresholds, so clusters are NAMED rather than guessed at; explore lends the declared run spec_gaps.csv, naming populations that span several clusters and clusters nothing covers.**
 
 ```bash
-docker run --rm $D cyraven:1.0.0 \
-  --dir /data/fcs --samples /data/samples.csv --config /data/analysis.yaml \
-  --group-column cohort --reference-group "Healthy controls" \
-  --cluster --explore --maybe-learn --outdir /results
+docker run --rm $D \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --samples /data/samples.csv \
+  --config /data/analysis.yaml \
+  --group-column cohort \
+  --reference-group "Healthy controls" \
+  --cluster \
+  --explore \
+  --maybe-learn \
+  --outdir /results
 ```
 
 Without `--maybe-learn` the two are computed in complete isolation, which is the
@@ -1402,8 +1507,11 @@ specification to be worth anything.
 
 ```bash
 # no --config, no --samples. A folder of FCS files is the whole input.
-docker run --rm $D cyraven:1.0.0 \
-  --dir /data/fcs --explore-only --outdir /results
+docker run --rm $D \
+  cyraven:1.0.0 \
+  --dir /data/fcs \
+  --explore-only \
+  --outdir /results
 ```
 
 Read `results/explore/explore_report.html`, then curate
@@ -1485,7 +1593,7 @@ The earlier three-file form:
 
 The panel fingerprint is the set of marker names a file resolves. Files sharing
 a set form one panel, and each panel gets its own cofactor, its own embedding
-and its own thresholds. That is correct when panels genuinely differ, and
+and its own thresholds. That is correct when panels differ, and
 destructive when they do not.
 
 Spectral unmixing is where it usually goes wrong. Unmixing writes the extracted
@@ -1551,7 +1659,7 @@ than inventing one:
 
 | Method | For |
 |---|---|
-| mindensity over a bandwidth ladder | a genuinely bimodal marker, at whatever smoothing resolves it |
+| mindensity over a bandwidth ladder | a bimodal marker, at whatever smoothing resolves it |
 | tailgate | one real mode with a positive tail. The cut sits a robust spread above the mode, estimated by mirroring the half the tail cannot reach |
 | Otsu | two classes of comparable size |
 
@@ -1628,7 +1736,7 @@ has already applied that marker.
 
 | Option | Default | Effect |
 |---|---|---|
-| `--cluster` | off | Self-organising map clustering and the cross-check against the specification. The only output that can find a population the specification does not describe |
+| `--cluster` | off | Self-organising map clustering and the cross-check against the specification. One of two outputs, with `--explore`, that can find a population the specification does not describe |
 | `--cluster-k` | 12 | Metaclusters |
 | `--cluster-grid` | 10 | SOM grid side; the map has grid<sup>2</sup> nodes |
 | `--auto-subcluster-k` | off | Choose the subcluster count per population by mean silhouette. Changes the subcluster lettering, so it is opt-in |

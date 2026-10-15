@@ -336,3 +336,49 @@ write_samplesheet_template <- function(fcs_files, path, sample_ids = NULL,
           "--check validates the sheet without running the analysis")
   invisible(tmpl)
 }
+
+#' Write the demonstration cohort
+#'
+#' Writes 35 FCS files from the graft-versus-host disease cohort that ships with
+#' flowCore, together with `samples.csv`, `panel.yaml` and `sample_map.csv`, so
+#' a first run needs no data of your own and no download. This is the same
+#' script the documentation has always used; the flag only saves typing its path
+#' inside the image.
+#'
+#' @param dir directory to write into; created if absent.
+#' @return invisibly, `dir`.
+#' @export
+write_demo_cohort <- function(dir) {
+  script <- system.file("scripts", "demo_data.R", package = "cyRAVEN")
+  if (!nzchar(script) || !file.exists(script))
+    stop("demo_data.R is not installed with this copy of cyRAVEN", call. = FALSE)
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  status <- system2(file.path(R.home("bin"), "Rscript"), c(shQuote(script), shQuote(dir)))
+  if (!identical(as.integer(status), 0L))
+    stop("writing the demonstration cohort failed (exit status ", status, ")",
+         call. = FALSE)
+  invisible(dir)
+}
+
+#' Write the annotated config template
+#'
+#' Copies the commented example configuration, which declares populations,
+#' functional marker blocks and ratios, to `path` so it can be edited.
+#'
+#' @param path file to write; an existing file is not overwritten.
+#' @return invisibly, `path`.
+#' @export
+write_config_template <- function(path) {
+  src <- system.file("examples", "analysis_template.yaml", package = "cyRAVEN")
+  if (!nzchar(src) || !file.exists(src))
+    stop("analysis_template.yaml is not installed with this copy of cyRAVEN",
+         call. = FALSE)
+  if (file.exists(path))
+    stop(path, " already exists; remove it or choose another name", call. = FALSE)
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  if (!file.copy(src, path))
+    stop("could not write ", path, call. = FALSE)
+  message("wrote the config template to ", path,
+          "\nedit the populations: section, then run with --check")
+  invisible(path)
+}

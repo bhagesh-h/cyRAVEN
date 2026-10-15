@@ -19,6 +19,7 @@ fig_group_comparison(
   value_label = NULL,
   value_caveat = NULL,
   title_noun = "Population abundance",
+  group_noun = "group",
   panel_order = c("abundance", "name"),
   colors = fcs_colors()
 )
@@ -54,6 +55,9 @@ derived population ratio.}
 \item{title_noun}{the figure title's subject, e.g. "Population abundance"
 or "Functional marker positivity"; " by group" is appended automatically
 when 2+ groups are plotted.}
+
+\item{group_noun}{what the x-axis groups are, completing the title as
+"<title_noun> by <group_noun>". \code{"group"} by default.}
 
 \item{panel_order}{\code{"abundance"} orders panels common to rare; \code{"name"} groups
 them by the part of the panel name before the first comma -- the cell type,

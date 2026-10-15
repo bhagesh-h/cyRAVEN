@@ -8,7 +8,7 @@ fig_absolute_vs_share(
   ab,
   outfile,
   group_of = NULL,
-  max_clusters = 12L,
+  max_clusters = Inf,
   share_col = NULL,
   panel_label = ""
 )

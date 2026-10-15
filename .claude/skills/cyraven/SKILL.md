@@ -196,8 +196,8 @@ PowerShell use `${PWD}`; on Git Bash prefix with `MSYS_NO_PATHCONV=1`.
 Annotated templates for both files:
 
 ```bash
-docker run --rm --entrypoint sh cyraven:1.0.0 -c \
-  'cat /usr/local/lib/R/site-library/cyRAVEN/examples/analysis_template.yaml'
+docker run --rm -v "$PWD/data:/data" cyraven:1.0.0 \
+  --write-template /data/analysis.yaml
 ```
 
 ```bash
@@ -220,14 +220,13 @@ A blank is not a disagreement; it is filled from the rows that have a value.
 When the user has no data to hand, or wants to see the output shape first:
 
 ```bash
-mkdir -p demo results
+docker run --rm -v "$PWD:/w" cyraven:1.0.0 --demo /w/demo
 ```
 
-```bash
-docker run --rm -v "$PWD/demo:/demo" \
-  --entrypoint Rscript cyraven:1.0.0 \
-  /opt/cyraven/src/inst/scripts/demo_data.R /demo
-```
+`--demo` and `--write-template` need no `--dir`; both exit after writing. They
+exist in images built from source after 15 October 2026. On an older image use
+`--entrypoint Rscript cyraven:1.0.0 /opt/cyraven/src/inst/scripts/demo_data.R
+/demo` instead.
 
 No download is needed: this writes 35 samples from the graft-versus-host disease
 cohort that ships with flowCore, five allogeneic transplant recipients across
