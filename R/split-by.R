@@ -256,8 +256,17 @@ split_figures_by_timepoint <- function(ctx, outdir) {
     # an association pooled over visits is an average of two questions. Every
     # variable except the timepoint itself, which is constant here by
     # construction and would empty the figure.
+    # A categorical variable carries the whole cohort's categories with it, so
+    # each category is coloured the same on every visit's figure as on the
+    # pooled one. Built from the subset alone, a visit missing one organism
+    # shifted every colour after it, and Klebsiella was purple on d0 and red
+    # on d7.
     sub$clin <- if (!is.null(ctx$clin))
-      lapply(ctx$clin, function(v) v[names(v) %in% ids]) else NULL
+      lapply(ctx$clin, function(v) {
+        s_ <- v[names(v) %in% ids]
+        attr(s_, "levels_all") <- clin_levels_all(v)
+        s_
+      }) else NULL
     if (!is.null(sub$clin)) {
       keep <- vapply(sub$clin, function(v)
         length(unique(v[!is.na(v)])) > 1L, logical(1))

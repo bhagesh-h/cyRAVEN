@@ -281,3 +281,32 @@ test_that("collapsing to the patient narrows nothing that was not already narrow
   expect_true(all(per_smp$n == 16L))
   expect_true(all(per_pat$n == 8L))
 })
+
+test_that("a category keeps its colour when a figure shows only some samples", {
+  set.seed(1)
+  ids <- sprintf("S%02d", 1:8)
+  org <- stats::setNames(c("Escherichia spp", "Klebsiella spp", "Pseudomonas spp",
+                           "Staphylococcus aureus", "Streptococcus spp",
+                           "Providencia stuartii", "Escherichia spp",
+                           "Klebsiella spp"), ids)
+  freq <- data.frame(sample_id = ids, population = "T cells",
+                     pct_of_cd45_pos = stats::runif(8, 1, 50),
+                     is_control = FALSE, qc_status = "pass",
+                     stringsAsFactors = FALSE)
+  colour_of <- function(clin, category) {
+    f <- fig_clinical_detail(freq[freq$sample_id %in% names(clin), ], clin,
+                             "microbiology", tempfile(fileext = ".png"))
+    sc <- ggplot2::ggplot_build(f)$plot$scales$get_scales("colour")
+    sc$map(category)
+  }
+  pooled <- colour_of(org, "Klebsiella spp")
+
+  # One visit's figure: the Escherichia samples are absent, which used to move
+  # every later category one colour along.
+  visit <- org[!grepl("^Escherichia", org)]
+  attr(visit, "levels_all") <- clin_levels_all(org)
+  expect_identical(colour_of(visit, "Klebsiella spp"), pooled)
+
+  expect_null(clin_levels_all(c(a = 1, b = 2)))
+  expect_identical(clin_levels_all(c(a = "y", b = "", c = NA, d = "x")), c("x", "y"))
+})

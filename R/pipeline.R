@@ -2217,11 +2217,13 @@ run_cyraven_impl <- function(opt) {
             p_source = p_src, panel_label = plabel,
             value_col = "pct_of_cd45_pos",
             value_label = "% of CD45+ (cell type / CD45+ x 100)",
-            value_caveat = paste(
-              "Visits are the same patients, so no between-visit test is drawn;",
-              "read direction per patient in timepoint_trajectories_*.png.",
-              "A share cannot show a change in size: see",
-              "absolute_vs_share_by_timepoint.png."),
+            # Two short lines, not one long one: the long form ran off the
+            # right edge of the figure.
+            value_caveat = paste0(
+              "Same patients at each visit, so no test is drawn; ",
+              "per-patient lines are in timepoint_trajectories_*.png.\n",
+              "A share cannot show a change in size; ",
+              "see absolute_vs_share_by_timepoint.png."),
             title_noun = "Cell type as a ratio of CD45+",
             group_noun = "timepoint")
         })

@@ -191,6 +191,22 @@ cap_wrap <- function(txt, width_in) {
   paste(strwrap(paste(txt, collapse = " "), width = n), collapse = "\n")
 }
 
+#' Every category a clinical variable takes
+#'
+#' Sorted, blanks and missing values dropped. A figure that shows a subset of
+#' the samples builds its palette from this full list, so a category keeps
+#' its colour from one figure to the next.
+#' @param v the variable, one value per sample.
+#' @return a character vector, or NULL for a numeric variable.
+#' @keywords internal
+clin_levels_all <- function(v) {
+  # The categories of a clinical variable across every sample it was given,
+  # in sorted order. NULL for a numeric variable, which has no categories.
+  if (clin_is_numeric(v)) return(NULL)
+  x <- trimws(as.character(v))
+  sort(unique(x[!is.na(x) & nzchar(x)]))
+}
+
 #' Well-separated colours for a small set of categories
 #'
 #' WHY NOT `population_colours()`. That spreads the population palette by index,
@@ -529,6 +545,13 @@ fig_clinical_detail <- function(freq, clin_values, var_name, outfile,
   } else {
     d$.x <- factor(trimws(as.character(d$cv)))
     lev <- levels(d$.x)
+    # ONE COLOUR PER CATEGORY ACROSS FIGURES. The palette is built from every
+    # category the variable has in the cohort, carried in from the caller when
+    # it has subset the samples (one visit's figure), and only then cut down to
+    # the categories present here. Each organism therefore keeps its colour on
+    # the pooled figure, on every visit's figure and in the landscape strip.
+    lev_all <- attr(clin_values, "levels_all") %||% clin_levels_all(clin_values)
+    lev_all <- union(lev_all, lev)
     # LABELS UNDER THE PANEL, OR A LEGEND. Short levels such as d0/d3/d7 or
     # Yes/No fit beneath a 2.6-inch panel and read best there. Organism names do
     # not: seven of them, the longest 36 characters, were written over one
@@ -536,9 +559,11 @@ fig_clinical_detail <- function(freq, clin_values, var_name, outfile,
     # characters of label per panel (levels times the longest one, at the
     # axis text size) the categories are colour-coded instead and named once,
     # in a shared legend that also carries how many samples each holds.
-    use_legend <- length(lev) * max(nchar(lev)) > 48L
+    # Decided on the full list, so a visit whose organisms happen to have short
+    # names does not switch to axis labels while the others use a legend.
+    use_legend <- length(lev_all) * max(nchar(lev_all)) > 48L
     if (use_legend) {
-      pal <- clin_cat_palette(lev, colors = colors)
+      pal <- clin_cat_palette(lev_all, colors = colors)[lev]
       n_of <- table(d$.x[!duplicated(d$sample_id)])
       key <- stats::setNames(sprintf("%s (n = %d)", lev, as.integer(n_of[lev])), lev)
       fig <- ggplot(d, aes(.x, .y)) +
@@ -1047,8 +1072,22 @@ fig_clinical_landscape <- function(freq, clin, outfile, order_by = NULL,
         theme(legend.position = "right", legend.key.size = grid::unit(0.32, "cm"),
               legend.text = element_text(size = 6.5),
               legend.title = element_text(size = 7)))
+  # TALL ENOUGH FOR THE KEYS, NOT ONLY THE TILES. The keys are stacked in one
+  # column beside the figure, one per variable plus the z-score scale. With six
+  # variables the tiles set the height and the keys fitted; with eleven the key
+  # column grew past the top of the figure and cut off the first key's title.
+  # Each key's height is estimated from what it holds: a colour bar is about an
+  # inch, a list of categories a fifth of an inch plus one line per category
+  # (NA included), and the larger of that and the tiles' height is used.
+  key_in <- vapply(vars, function(cv) {
+    v <- clin[[cv]][ids]
+    if (clin_is_numeric(v)) 1.05
+    else 0.32 + 0.14 * (length(unique(trimws(as.character(stats::na.omit(v))))) +
+                          any(is.na(v) | !nzchar(trimws(as.character(v)))))
+  }, numeric(1))
+  keys_height <- sum(key_in) + 1.05 + 0.12 * (length(key_in) + 1) + 1.0
   safe_ggsave(outfile, plot = fig, width = wd,
-              height = 0.235 * npop + 0.46 * length(strips) + 3.2,
+              height = max(0.235 * npop + 0.46 * length(strips) + 3.2, keys_height),
               dpi = dpi, limitsize = FALSE)
   log_msg("[fig] wrote ", outfile)
   invisible(fig)
