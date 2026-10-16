@@ -65,7 +65,9 @@ docker run --rm \
 **5. Open `results/report.html`.** Every figure and table is in that one
 file.
 
-On Windows PowerShell write `${PWD}` instead of `$PWD`.
+On Windows, run these in Git Bash or WSL with `MSYS_NO_PATHCONV=1` in front
+of each command. In PowerShell, end each continued line with a backtick
+instead of `\`, and write `${PWD}` for `$PWD`.
 
 ## How it works
 
@@ -100,7 +102,7 @@ FCS files · sample sheet · config
    sample.
    → `threshold_uncertainty.csv`, `umap_overview.png`
 5. **Compare.** Groups are tested with one value per sample. Populations are
-   correlated with clinical variables and followed across visits.
+   tested against clinical variables and followed across visits.
    → `group_comparison_stats.csv`, `clinical_association.csv`
 
 If a marker shows no gap between negative and positive cells, step 2 uses a
@@ -112,17 +114,18 @@ population is still reported; check it before you use the number.
 | Feature | Flag |
 |---|---|
 | A gate placed inside each sample | always on |
-| Uncertainty for every cut and frequency | always on |
+| Uncertainty for every cut and frequency | on by default |
 | Several smoothing levels and gate shapes | `--adaptive-gates` |
 | Skip a gate the data cannot support | `--auto-fix-gates` |
 | Tests between groups | `--group-column` |
 | Clinical scores and lab values | `--clinical-columns` |
 | Absolute cell numbers | `--total-counts` |
 | Every figure again per visit | `--split-by-timepoint` |
-| Batch check and correction | `--batch-column` |
+| Batch check, and correction | `--batch-column`, `--correct-batch` |
 | Clustering, for unlisted populations | `--explore` |
 | FMO controls as gate references | `fmo_for` column |
-| Gates for FlowJo or Gating-ML | `--flowjo-export` |
+| FCS files with gate columns, for FlowJo | `--flowjo-export` |
+| Gating-ML 2.0 gate export | `--export-gates` |
 
 ## Your own data
 
@@ -155,10 +158,13 @@ option.
   and in no table.
 - **A `quantile_fallback` cut found no gap.** Look at that population before
   you report it.
-- **Frequencies are shares.** They sum to 100%, so one population rising can
-  be another falling. Only `--total-counts` shows a change in size.
-- **The donor is the unit.** Tests use one value per sample, never single
-  cells, so a longer acquisition does not inflate significance.
+- **Frequencies are shares of CD45+ cells.** One population's share can rise
+  because another fell, with no change in its cell number. Only
+  `--total-counts` shows a change in size.
+- **Tests use one value per sample**, never single cells, so a longer
+  acquisition does not inflate significance. With several samples per
+  patient, pair them with `--paired-column patient_id` and
+  `--condition-column timepoint`.
 
 ## Why gate each sample separately
 

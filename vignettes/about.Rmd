@@ -32,10 +32,12 @@ Staining intensity differs between samples, so a fixed cut is right for some and
 wrong for others, and the error then follows staining intensity. cyRAVEN places
 each cut inside its own sample and reports how precisely that cut is determined.
 
-Statistics follow one rule: **the donor is the unit, not the cell.** A tube run
+Statistics follow one rule: **the sample is the unit, not the cell.** A tube run
 for longer gives more events but no more information about the study, so every
-test first reduces each sample to one value. Anything that cannot be reduced
-that way is reported as an effect size without a p-value.
+test first reduces each sample to one value. Several samples from one donor are
+not independent either; `--paired-column` and `--condition-column` pair them.
+Anything that cannot be reduced to one value per sample is reported as an effect
+size without a p-value.
 
 ## Two ways to use it
 
@@ -44,7 +46,7 @@ that way is reported as an effect size without a p-value.
 | You supply | A list of populations and their marker rules | Only the FCS files |
 | You get | Named populations, with uncertainty and statistics | Numbered clusters over every usable channel |
 | It can find | Only what you listed | Populations nobody listed |
-| Cells used | The CD45+ parent gate | Every event in the file |
+| Cells used | The CD45+ parent gate | Every event, after its own debris and dead-cell screen |
 
 Explore writes to `<outdir>/explore/` and changes nothing else, so adding it to
 a run is safe. `--explore-only` needs no population list at all. The two halves
@@ -73,7 +75,7 @@ function, so you can run or replace a single step.
 | Stage | In plain words | Function |
 |---|---|---|
 | 1 Read | Open each file and work out which channel is which marker | `read_fcs_resolved()` |
-| 2 Transform | Put intensities on an arcsinh scale so negative and positive cells separate | `derive_cofactor()` |
+| 2 Transform | Put intensities on an arcsinh scale, which spreads the dim end and compresses the bright end | `derive_cofactor()` |
 | 3 Gate | In each sample, cut each marker at the lowest point between its negative and positive peaks | `density_valley()`, `resolve_threshold()` |
 | 4 Score | Count the cells that meet each population's rule from your YAML | `score_populations()` |
 | 5 Uncertainty | Re-derive every cut on resampled events to see how far it moves | `threshold_uncertainty()` |
