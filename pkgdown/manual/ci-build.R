@@ -45,8 +45,11 @@ r <- tryCatch(tinytex::tlmgr_install(
     # The manual's typefaces, Inter and Source Code Pro, and what their style
     # files load.
     "inter", "sourcecodepro", "fontaxes", "mweights", "xkeyval",
-    # extreport, for a 9pt class; the standard classes stop at 10pt.
-    "extsizes")),
+    # extreport, for an 8pt class; the standard classes stop at 10pt.
+    "extsizes",
+    # The two-column layout and the smaller, muted figure captions. multicol.sty
+    # ships in the "tools" bundle; "multicol" is not a package name to tlmgr.
+    "tools", "caption")),
   error = function(e) e)
 if (inherits(r, "error")) say("TLMGR ERROR: ", conditionMessage(r))
 

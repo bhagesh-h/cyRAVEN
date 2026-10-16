@@ -111,11 +111,15 @@ The site uses Inter and a lighter stylesheet written for phones first: tables
 wrap and scroll inside their own box instead of pushing the page sideways, and
 the source link and repeated logo are hidden on small screens.
 
-The PDF manual is now A5, which reads at nearly half as large again when a
-phone shows the page fit-to-width. It uses Inter and Source Code Pro, ragged
-right text, a plain title page, and numbers chapters only, so every heading
-reads as it does on the site. The PDF build also had a bug that left an empty
-heading level and numbered sections 1.0.1; fixed.
+The PDF manual is A4 in two columns, with 7.5pt body text (Inter, whose
+x-height matches 9pt Times). It is 66 pages instead of 181. A table or figure
+that fits a column stays in it, kept with its heading; wider tables and wide
+strip figures span both columns. It uses Inter and Source Code Pro, ragged
+right text, a plain title page, a two-column contents page, and numbers
+chapters only, so every heading reads as it does on the site. Code is never
+hyphenated. The build no longer reports a single overfull line. The PDF build
+also had a bug that left an empty heading level and numbered sections 1.0.1;
+fixed.
 
 ## A control is checked before it is trusted
 
