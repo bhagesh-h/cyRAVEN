@@ -61,6 +61,25 @@ two steps are `write_demo_cohort()` and `write_config_template()` from R.
 The ratio and functional-marker figures drawn by visit were titled "by group".
 They now say "by timepoint".
 
+## Corrections from a read-through of the front pages
+
+- Windows instructions now say to use Git Bash or WSL with `MSYS_NO_PATHCONV=1`,
+  or in PowerShell to end continued lines with a backtick. The commands use
+  `\` continuations, which PowerShell does not accept.
+- "Frequencies sum to 100%" was wrong for a panel whose populations overlap.
+  They are shares of CD45+ cells, which is the constraint that matters.
+- The statistics rule now says the sample is the unit and names the pairing
+  flags, `--paired-column` and `--condition-column`, for several samples from
+  one donor.
+- The feature table names `--correct-batch` and `--export-gates`, which it had
+  folded into other flags.
+- The arcsinh transform is described as spreading the dim end and compressing
+  the bright end, not as separating positive from negative cells; explore mode
+  is described as screening debris and dead cells rather than using every
+  event.
+- Get started walked through the same first-run commands three times; once in
+  full and once as a summary remain.
+
 ## A comparison-table correction
 
 The table comparing cyRAVEN with other tools marked FlowSOM and CATALYST as

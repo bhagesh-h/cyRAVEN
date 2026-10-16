@@ -97,8 +97,10 @@ docker run --rm \
 in the order to read them.
 
 Paths in the flags are paths inside the container, and `--outdir` must be in a
-mounted folder or the results vanish when the container exits. On Windows
-PowerShell write `${PWD}` for `$PWD`.
+mounted folder or the results vanish when the container exits. On Windows, run
+these in Git Bash or WSL with `MSYS_NO_PATHCONV=1` in front of each command. In
+PowerShell, end each continued line with a backtick instead of `\`, and write
+`${PWD}` for `$PWD`.
 
 About this cohort: both groups are transplant recipients, so the comparison is
 GvHD grade 1 against grade 3, not disease against health, and the groups are
@@ -129,42 +131,18 @@ docker run --rm -v "$PWD/data:/data" \
 ```
 
 Fill in the sheet, edit the `populations:` section of the config, run with
-`--check` until it reports no problems, then run without it. The rest of this
-page explains each file and every option.
+`--check` until it reports no problems, then run without it. Step by step, that
+is [A first run on a new cohort](#a-first-run-on-a-new-cohort); the rest of
+this page explains each file and every option.
 
 ## Inputs: the sample sheet and the config
 
-A run takes two files besides the FCS directory:
+Anything that varies per sample belongs in the sheet; anything that is one
+decision for the whole study belongs in the config. A study-wide choice put in
+the sheet would repeat on every row, and the rows could then disagree about it.
 
-| | |
-|---|---|
-| `samples.csv` | one row per FCS file: what it is, whose it is, which group and batch it belongs to, and any externally measured counts for it |
-| `analysis.yaml` | what to score and how: the populations, and every choice shared by all samples |
-
-Between them they specify a run completely. Anything varying per sample belongs
-in the CSV; anything that is one decision for the whole study belongs in the
-YAML. An analysis choice put in the CSV would repeat on every row and invite the
-rows to disagree about it.
-
-Start the sheet from your own files, so it already has a row for each one,
-and the config from the annotated template:
-
-```bash
-docker run --rm -v "$PWD/data:/data" \
-  cyraven:1.0.0 \
-  --dir /data/fcs --recursive \
-  --write-samples /data/samples.csv
-```
-
-```bash
-docker run --rm -v "$PWD/data:/data" \
-  cyraven:1.0.0 \
-  --write-template /data/analysis.yaml
-```
-
-From R, `write_config_template("analysis.yaml")`, and
-`system.file("examples", "samples_template.csv", package = "cyRAVEN")` for the
-sheet.
+From R, the two templates are `write_config_template("analysis.yaml")` and
+`system.file("examples", "samples_template.csv", package = "cyRAVEN")`.
 
 ### 1. Build the sheet
 
@@ -351,67 +329,9 @@ Which to use:
 
 ### 5. Worked example
 
-Setup is in [Setup](#setup); this is the sequence once the image is in place. It
-is the same five steps for any cohort.
-
-**1. A sheet with a row for every file.**
-
-```bash
-docker run --rm \
-  -v "$PWD/data:/data" \
-  cyraven:1.0.0 \
-  --dir /data/fcs \
-  --write-samples /data/samples.csv
-```
-
-**2. Fill in `patient_id`, the study group, and any variable you want to test.**
-An edit, not a command. Every reserved column is already present and blank;
-delete what you do not have rather than filling it in.
-
-**3. Start the config from the shipped template.**
-
-```bash
-docker run --rm -v "$PWD/data:/data" \
-  cyraven:1.0.0 \
-  --write-template /data/analysis.yaml
-```
-
-Edit `populations:` to match the panel. `--check` lists the marker names the
-files actually carry, which is what a population has to use.
-
-**4. Validate, in seconds, writing nothing.**
-
-```bash
-docker run --rm \
-  -v "$PWD/data:/data:ro" \
-  -v "$PWD/results:/results" \
-  cyraven:1.0.0 \
-  --dir /data/fcs \
-  --samples /data/samples.csv \
-  --config /data/analysis.yaml \
-  --outdir /results \
-  --check
-```
-
-**5. Run it.**
-
-```bash
-docker run --rm \
-  -v "$PWD/data:/data:ro" \
-  -v "$PWD/results:/results" \
-  cyraven:1.0.0 \
-  --dir /data/fcs \
-  --samples /data/samples.csv \
-  --config /data/analysis.yaml \
-  --group-column cohort \
-  --reference-group "Healthy controls" \
-  --batch-column acquisition_date \
-  --cluster \
-  --outdir /results
-```
-
-Open `results/report.html`. It carries every figure and table the run produced,
-embedded, and needs no other file.
+The full sequence for a new cohort, with the two edits that come between the
+commands, is in
+[A first run on a new cohort](#a-first-run-on-a-new-cohort) under Commands.
 
 ### 6. When it goes wrong
 
