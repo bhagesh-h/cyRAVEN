@@ -58,7 +58,11 @@ populations:
 # standing choice, a flag is this run's.
 samples:
   group_column: cohort        # the comparison; any column of the sheet
-  batch_column: batch         # acquisition occasion, for the batch diagnostics
+  # batch_column: batch       # acquisition occasion, for the batch diagnostics.
+  #                           # Add a batch column to the sheet, then uncomment.
+  #                           # Left on by default it named a column that
+  #                           # --write-samples does not write, so a first
+  #                           # --check reported a problem nobody had made.
   count_unit: cells/uL        # units of the count.<population> columns
                               # (cells/mL is accepted and divided by 1000)
 
