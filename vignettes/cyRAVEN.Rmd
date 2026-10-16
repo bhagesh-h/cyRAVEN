@@ -19,8 +19,7 @@ Two habits save the most time:
 - **Run `--check` first.** It reads only the file headers and stops, so a
   misspelled marker costs seconds instead of a whole run.
 - **Open `gating_qc.png` before using a number.** It draws each cut on the
-  data it came from, so a cut on the side of a peak shows there and in no
-  table.
+  data it came from. A cut on the side of a peak shows there, and in no table.
 
 ## Setup
 
@@ -102,8 +101,8 @@ these in Git Bash or WSL with `MSYS_NO_PATHCONV=1` in front of each command. In
 PowerShell, end each continued line with a backtick instead of `\`, and write
 `${PWD}` for `$PWD`.
 
-About this cohort: both groups are transplant recipients, so the comparison is
-GvHD grade 1 against grade 3, not disease against health, and the groups are
+About this cohort: both groups are transplant recipients. The comparison is
+GvHD grade 1 against grade 3, not disease against health. The groups are small,
 one patient against four.
 
 ## Your own data
@@ -130,9 +129,9 @@ docker run --rm -v "$PWD/data:/data" \
   --write-template /data/analysis.yaml
 ```
 
-Fill in the sheet, edit the `populations:` section of the config, run with
-`--check` until it reports no problems, then run without it. Step by step, that
-is [A first run on a new cohort](#a-first-run-on-a-new-cohort); the rest of
+Fill in the sheet and edit the `populations:` section of the config. Run with
+`--check` until it reports no problems, then run without it. The full sequence
+is in [A first run on a new cohort](#a-first-run-on-a-new-cohort). The rest of
 this page explains each file and every option.
 
 ## Inputs: the sample sheet and the config

@@ -79,6 +79,11 @@ They now say "by timepoint".
   event.
 - Get started walked through the same first-run commands three times; once in
   full and once as a summary remain.
+- The config template no longer turns on a batch column by default. It named
+  `batch`, which `--write-samples` does not write, so a newcomer following the
+  documented steps exactly got a `--check` problem they had not caused. Found
+  by running the documented path from an empty folder; after the two edits the
+  documentation asks for, `--check` now reports no problems.
 
 ## A comparison-table correction
 
