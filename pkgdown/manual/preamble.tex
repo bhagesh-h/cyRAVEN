@@ -7,9 +7,41 @@
 \usepackage{pdflscape}
 
 % Tables that run past one page continue with their header repeated rather than
-% being silently truncated, which is what happens to a plain tabular.
+% being silently truncated, which is what happens to a plain tabular. Only a
+% table set across the full page is a longtable; one set inside a column is a
+% plain tabular, because longtable cannot be used inside multicols. See
+% page-fit.lua.
 \usepackage{longtable}
 \usepackage{booktabs}
+% 4pt rather than 6pt between table columns: in an 88mm column the gutters of a
+% three-column table were otherwise a tenth of the width.
+\setlength{\tabcolsep}{4pt}
+
+% TWO COLUMNS. The body is set in two columns, chapter titles and wide tables
+% and figures across both. multicol rather than the class's twocolumn option,
+% because twocolumn floats every full-width table and figure to the top of a
+% later page, away from the text that discusses it, and refuses longtable
+% outright. multicols can be closed above a wide table and opened again below
+% it, and balances the two columns where it closes. page-fit.lua does the
+% opening and closing.
+%
+% Ragged columns: a block that must not break (a table, or a figure with its
+% heading) moves whole to the next column, and the space it leaves is left at
+% the foot of the column rather than spread between the paragraphs above.
+\usepackage{multicol}
+\setlength{\columnsep}{6mm}
+\raggedcolumns
+\setlength{\multicolsep}{6pt plus 2pt minus 2pt}
+
+% KEEPING A BLOCK IN ONE COLUMN. page-fit.lua wraps each in-column table and
+% figure, with the heading and line above it, in these two. Inside, no line of
+% a paragraph may end a column, so the heading, the line and the table move
+% together. \cyneed (below) cannot do this inside multicols: it reads the space
+% left on the page, and multicols collects both columns as one long page.
+\newcommand{\cykeepbegin}{\par\begingroup
+  \interlinepenalty=10000 \clubpenalty=10000 \widowpenalty=10000
+  \brokenpenalty=10000 }
+\newcommand{\cykeepend}{\par\endgroup}
 
 % Wrapping inside a cell. Without it a long cell sets on one line and pushes the
 % table past the page edge. page-fit.lua decides how wide each column should be;
@@ -26,12 +58,21 @@
 \definecolor{RavenMuted}{HTML}{5B6470}
 
 % TYPE. Inter for text, the same face as the website, drawn for screens and
-% legible at the small sizes a phone shows an A5 page at. Source Code Pro for
+% legible at small sizes. Its lowercase is tall, so 7.5pt Inter has the
+% x-height of 9pt Times, the size of a two-column journal page. Source Code Pro for
 % code, which separates 1, l and I and 0 from O. Both are open licensed and
 % ship with TeX Live, so the CI runner installs them with tlmgr.
 \usepackage[sfdefault,scale=0.94]{inter}
 \usepackage[scale=0.9]{sourcecodepro}
 \renewcommand{\familydefault}{\sfdefault}
+% Never hyphenate code. A hyphen inside `system.file()` printed it as
+% "sys-tem.file", which is not what anyone should type. The class sets this for
+% Computer Modern's typewriter face; a face loaded through fontspec comes
+% without it, so \ttfamily sets it on every font it selects.
+\makeatletter
+\DeclareRobustCommand\ttfamily{\not@math@alphabet\ttfamily\mathtt
+  \fontfamily\ttdefault\selectfont\hyphenchar\font=\m@ne}
+\makeatother
 
 % Code blocks wrap instead of running off the page. The docker commands in the
 % usage article are long, and a reader cannot copy what was never printed.
@@ -41,23 +82,38 @@
 
 % HEADINGS. A small orange number beside a bold title, and one hairline under a
 % chapter title, instead of the class default's "Chapter 3" set on a line of its
-% own. On an A5 page the default spent a third of the opening page on the word
-% "Chapter".
+% own, which spent a third of the opening page on the word "Chapter". Sizes are
+% set in points: at 8pt the class's \Large is too close to the body to mark a
+% section in a narrow column.
 \usepackage{titlesec}
 \titleformat{\chapter}[block]
-  {\normalfont\bfseries\fontsize{17}{21}\selectfont}
+  {\normalfont\bfseries\fontsize{20}{24}\selectfont}
   {\textcolor{RavenOrange}{\thechapter}}{0.45em}{}
   [\vspace{5pt}{\color{black!14}\titlerule[0.6pt]}]
-\titlespacing*{\chapter}{0pt}{0pt}{14pt}
+\titlespacing*{\chapter}{0pt}{0pt}{12pt}
 \titleformat{\section}
-  {\normalfont\bfseries\Large}{\textcolor{RavenOrange}{\thesection}}{0.55em}{}
-\titlespacing*{\section}{0pt}{18pt}{6pt}
+  {\normalfont\bfseries\fontsize{11.5}{14}\selectfont}{\textcolor{RavenOrange}{\thesection}}{0.55em}{}
+\titlespacing*{\section}{0pt}{12pt}{4pt}
 \titleformat{\subsection}
-  {\normalfont\bfseries\large}{\textcolor{RavenMuted}{\thesubsection}}{0.55em}{}
-\titlespacing*{\subsection}{0pt}{14pt}{4pt}
+  {\normalfont\bfseries\fontsize{9.5}{12}\selectfont}{\textcolor{RavenMuted}{\thesubsection}}{0.55em}{}
+\titlespacing*{\subsection}{0pt}{10pt}{3pt}
 \titleformat{\subsubsection}
   {\normalfont\bfseries\normalsize}{}{0pt}{}
-\titlespacing*{\subsubsection}{0pt}{10pt}{3pt}
+\titlespacing*{\subsubsection}{0pt}{8pt}{2pt}
+
+% THE CONTENTS IN TWO COLUMNS, like the text. In one column on an A4 page the
+% entries are short lines with a long run of dots to a page number.
+\makeatletter
+\renewcommand{\tableofcontents}{%
+  \chapter*{\contentsname}\@mkboth{\contentsname}{\contentsname}%
+  \begin{multicols}{2}\@starttoc{toc}\end{multicols}}
+\makeatother
+
+% Captions smaller than the text and in the muted grey, so a long caption reads
+% as a caption and not as the next paragraph.
+\usepackage{caption}
+\DeclareCaptionFont{cymuted}{\color{RavenMuted}}
+\captionsetup{font={small,cymuted}, labelfont=bf, skip=4pt}
 
 % Running header naming the chapter, so a printed copy says which article a page
 % came from.
@@ -82,15 +138,16 @@
 % to the full text height, and a figure exactly as tall as the page leaves
 % nowhere for the heading and the line above it: they stay on the page before and
 % the figure is on its own, which is the split this cap exists to prevent. At
-% 0.82 there is room left for the heading, the line describing it, the caption
-% and the space a float leaves around itself. Verified on the built manual: all
-% 31 figures that have a heading of their own keep it on their own page.
+% 0.72 there is room left for the heading, the line describing it, the caption
+% and the space a float leaves around itself. In a column this matters more: a
+% figure kept with its heading cannot break, and a block taller than the column
+% would run into the footer.
 %
 % It binds only on a figure taller than it is wide, which here is six of
 % forty-seven: the panel grids are wider than they are tall and are limited by
 % the line width, not by this.
 \usepackage{graphicx}
-\setkeys{Gin}{width=\linewidth, height=0.82\textheight, keepaspectratio}
+\setkeys{Gin}{width=\linewidth, height=0.72\textheight, keepaspectratio}
 
 % Figures are printed where they are written rather than floated to wherever
 % they next fit. These are documentation figures discussed by the sentence above
@@ -148,11 +205,21 @@
 % \sloppy alone leaves them protruding into the margin.
 \usepackage{xurl}
 
-% RAGGED RIGHT. On a 120mm line, justified text opens wide gaps between words
+% RAGGED RIGHT. On an 88mm column, justified text opens wide gaps between words
 % and hyphenates every few lines to close them. Ragged right keeps the spacing
 % even, which is what reads well on a small screen. ragged2e's version still
 % hyphenates a long word rather than leaving a ragged edge full of holes.
 \AtBeginDocument{\RaggedRight}
+% A short line is only raggedness here, not a gap between words, so TeX may
+% accept one rather than push an unbreakable word into the margin. Without this,
+% `write_config_template("analysis.yaml")` after five words of prose ran 20pt
+% past the edge of its column: the short line it needed was rejected as too bad.
+% multicol sets its own \emergencystretch, 4pt per column, at the start of every
+% multicols, through \setemergencystretch; setting the length here alone is
+% overwritten there, so the hook is redefined too.
+\tolerance=9999
+\emergencystretch=3em
+\def\setemergencystretch#1#2{\emergencystretch=3em}
 
 % NUMBER CHAPTERS ONLY. Several chapters number their own headings in the text
 % ("1. One cell, one row", "2.1 Which file this is"), because the prose refers

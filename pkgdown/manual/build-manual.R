@@ -206,10 +206,10 @@ for (nm in names(CHAPTERS)) {
   setwd(old)
   txt <- readLines(md, warn = FALSE)
   txt <- relink(unhtml_img(unwrap_figure(demote(drop_nav(strip_yaml(txt))))))
-  # \clearpage rather than a page break inside the chapter: a chapter that starts
-  # halfway down a page reads as a section of the one before it.
-  body <- c(body, "", "\\clearpage", "",
-            paste("#", CHAPTERS[[nm]]), "", txt, "")
+  # No \clearpage here: a chapter starts its own page, and page-fit.lua has to
+  # close the two columns before the chapter title. A \clearpage between the
+  # columns and the title would be issued inside them.
+  body <- c(body, "", paste("#", CHAPTERS[[nm]]), "", txt, "")
   message("  chapter: ", CHAPTERS[[nm]], " (", length(txt), " lines)")
 }
 
@@ -242,15 +242,18 @@ header <- c(
   "      in_header:",
   sprintf("        - %s", file.path(work, "preamble.tex")),
   sprintf("        - %s", file.path(work, "titlepage.tex")),
-  # 9pt, from extsizes: the standard classes stop at 10pt. Inter's lowercase is
+  # 8pt, from extsizes: the standard classes stop at 10pt. Inter's lowercase is
   # tall, so 10pt Inter reads like a 12pt book face and the manual looked
-  # oversized; 9pt with the face set at 94% reads like a 10pt book face.
+  # oversized. 8pt with the face set at 94% is 7.5pt, with the x-height of 9pt
+  # Times: the size of a two-column journal page.
   "documentclass: extreport",
-  "fontsize: 9pt",
-  # A5 READS ON A PHONE. A PDF is shown fit-to-width, and at that scale an A4
-  # page sets 10pt text at about the size of a footnote. A5 makes the same text
-  # nearly half as large again, and still prints and reads fine on a desk.
-  "geometry: a5paper, top=16mm, bottom=18mm, left=14mm, right=14mm, headsep=5mm, footskip=8mm",
+  "fontsize: 8pt",
+  # A4 IN TWO COLUMNS. An A5 page read well on a phone but showed the text
+  # large on a desk, which is where a manual of this length is read. Two
+  # columns on A4 keep each line at about 56 characters, the length that reads
+  # comfortably, at the smaller size. preamble.tex sets the columns up and
+  # page-fit.lua decides what spans both.
+  "geometry: a4paper, top=16mm, bottom=18mm, left=14mm, right=14mm, headsep=5mm, footskip=8mm",
   "colorlinks: true",
   "linkcolor: RavenText",
   "urlcolor: RavenText",
@@ -263,14 +266,14 @@ header <- c(
 writeLines(c(
   "\\makeatletter",
   "\\renewcommand{\\maketitle}{\\begin{titlepage}\\raggedright",
-  "  \\vspace*{18mm}",
-  "  \\IfFileExists{logo.png}{\\includegraphics[width=24mm]{logo.png}\\par\\vspace{9mm}}{}",
-  "  {\\fontsize{26}{30}\\selectfont\\bfseries cyRAVEN\\par}",
+  "  \\vspace*{30mm}",
+  "  \\IfFileExists{logo.png}{\\includegraphics[width=30mm]{logo.png}\\par\\vspace{10mm}}{}",
+  "  {\\fontsize{34}{38}\\selectfont\\bfseries cyRAVEN\\par}",
   "  \\vspace{4mm}",
-  "  {\\normalsize\\color{RavenMuted} Flow cytometry files in, population",
+  "  {\\fontsize{12}{15}\\selectfont\\color{RavenMuted} Flow cytometry files in, population",
   "   frequencies, a UMAP and statistics out.\\par}",
   "  \\vfill",
-  sprintf("  {\\small\\color{RavenMuted} Version %s \\textperiodcentered\\ %s\\par", version,
+  sprintf("  {\\fontsize{9}{12}\\selectfont\\color{RavenMuted} Version %s \\textperiodcentered\\ %s\\par", version,
           format(Sys.Date(), "%d %B %Y")),
   "  \\smallskip https://bhagesh-h.github.io/cyRAVEN\\par}",
   "\\end{titlepage}}",
