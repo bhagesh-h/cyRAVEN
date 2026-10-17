@@ -3,25 +3,35 @@ url: https://bhagesh-h.github.io/cyRAVEN
 template:
   bootstrap: 5
   light-switch: true
-  # Inter for text and headings: a typeface drawn for screens, with tall
-  # lowercase letters that stay legible at phone sizes. JetBrains Mono for code,
-  # because it tells 1, l and I apart, and 0 from O, which matters in marker
-  # names and file paths. Both are open licensed, and `local: true` bundles them
-  # into the site instead of fetching them from Google on every page view.
+  # The design language of the author's portfolio site: Bricolage Grotesque for
+  # text and headings, IBM Plex Mono for code, ink on a paper ground and the
+  # logo orange. The typefaces are served from this site (pkgdown/assets/fonts,
+  # declared in extra.css) rather than fetched from Google through bslib, which
+  # can ask for weights but not for Bricolage's optical-size axis. extra.css
+  # holds the colours for both themes; the values here are the same ones, so
+  # Bootstrap's compiled components (buttons, focus rings) agree with it.
   bslib:
-    base_font: {google: {family: "Inter", wght: [400, 500, 600, 700], local: true}}
-    heading_font: {google: {family: "Inter", wght: [600, 700, 800], local: true}}
-    code_font: {google: {family: "JetBrains Mono", wght: [400, 500], local: true}}
-    primary: "#B4530C"
-    link-color: "#B4530C"
+    base_font: "Bricolage Grotesque"
+    heading_font: "Bricolage Grotesque"
+    code_font: "IBM Plex Mono"
+    primary: "#B04A00"
+    link-color: "#B04A00"
+    body-bg: "#F2F4F7"
+    body-color: "#12151B"
+    body-bg-dark: "#0E1014"
+    body-color-dark: "#ECEEF2"
     font-size-base: "1rem"
-    line-height-base: 1.65
+    line-height-base: 1.6
     headings-font-weight: 700
-    border-radius: "0.6rem"
-    # The sticker orange at full strength fails WCAG AA on white for body text,
-    # so `primary` is its darkened form; the bright original is kept in
-    # extra.css for decoration only.
-    bs-body-color: "#1f2328"
+    border-radius: "0.875rem"
+  # The browser chrome takes the paper colour on phones, as on the portfolio, and
+  # the text face is requested before the stylesheet asks for it. The preload
+  # URL is absolute because the same header goes on pages at three depths.
+  includes:
+    in_header: |
+      <meta name="theme-color" content="#F2F4F7" media="(prefers-color-scheme: light)">
+      <meta name="theme-color" content="#0E1014" media="(prefers-color-scheme: dark)">
+      <link rel="preload" href="https://bhagesh-h.github.io/cyRAVEN/fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
 
 # The licence in the sidebar is the GPLv3 BADGE, not a string and not a text
 # link. pkgdown prints the DESCRIPTION License field verbatim, and "GPL (>= 3)"

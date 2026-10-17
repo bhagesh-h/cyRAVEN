@@ -1,13 +1,20 @@
 <div class="cy-hero">
+<div class="cy-hero-copy">
 <h1>cyRAVEN</h1>
-<p class="cy-hero-lede">
+<p class="cy-hero-role">
 Flow cytometry files in, population frequencies, a UMAP and statistics out.
+</p>
+<p class="cy-hero-lede">
 Every sample is gated separately, and the report is one file.
 </p>
 <p class="cy-hero-actions">
 <a class="cy-btn cy-btn-primary" href="#quick-start">Quick start</a>
 <a class="cy-btn" href="articles/cyRAVEN.html">Get started</a>
 </p>
+</div>
+<div class="cy-hero-logo">
+<img src="img/logo-hero-560.webp" srcset="img/logo-hero-360.webp 360w, img/logo-hero-560.webp 560w, img/logo-hero-840.webp 840w" sizes="(min-width: 768px) 22rem, 64vw" width="560" height="653" alt="The cyRAVEN logo: an engraved raven on an orange hexagon" fetchpriority="high" decoding="async">
+</div>
 </div>
 
 ## Quick start

@@ -107,19 +107,26 @@ R examples are reflowed with their evaluated results unchanged; printed R
 output wraps at 44 characters. The prose was swept for overstatement and
 filler, and every double hyphen used as a dash was rewritten.
 
-The site uses Inter and a lighter stylesheet written for phones first: tables
-wrap and scroll inside their own box instead of pushing the page sideways, and
-the source link and repeated logo are hidden on small screens.
+The site and the PDF follow the design of the author's portfolio site:
+Bricolage Grotesque for text, IBM Plex Mono for code, ink on a fine-grained
+paper ground, the logo orange for links and buttons and a navy second colour,
+in light and dark themes. The home page opens like the portfolio's, with the
+name and a one-line summary on the left and the logo large on the right, or
+above the name on a phone. The fonts are served from the site itself. The
+stylesheet is written for phones first: tables wrap and scroll inside their own
+box instead of pushing the page sideways, and the source link and repeated logo
+are hidden on small screens.
 
-The PDF manual is A4 in two columns, with 7.5pt body text (Inter, whose
-x-height matches 9pt Times). It is 66 pages instead of 181. A table or figure
-that fits a column stays in it, kept with its heading; wider tables and wide
-strip figures span both columns. It uses Inter and Source Code Pro, ragged
-right text, a plain title page, a two-column contents page, and numbers
+The PDF manual is A4 in two columns, with 7.7pt body text in Bricolage
+Grotesque, about the size of 9pt Times. It is 65 pages instead of 181. A table
+or figure that fits a column stays in it, kept with its heading; wider tables
+and wide strip figures span both columns. It is set on the site's paper colour
+with white code blocks, uses the site's syntax colours, ragged right text, a
+title page laid out like the home page, a two-column contents page, and numbers
 chapters only, so every heading reads as it does on the site. Code is never
-hyphenated. The build no longer reports a single overfull line. The PDF build
-also had a bug that left an empty heading level and numbered sections 1.0.1;
-fixed.
+hyphenated. No line runs past its column by more than a quarter of a point
+(under 0.1 mm). The PDF build also had a bug that left an empty heading level
+and numbered sections 1.0.1; fixed.
 
 ## A control is checked before it is trusted
 

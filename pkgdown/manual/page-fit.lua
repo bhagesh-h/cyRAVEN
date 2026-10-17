@@ -49,11 +49,12 @@
 -- it leaves its column, and rotated only when the full width has run out.
 --
 -- The page is A4 less 14mm margins, a 182mm line, split into two 88mm columns
--- 6mm apart. The class is 8pt with Inter set at 94%, so body text is about
--- 7.5pt and \small about 6.6pt. One character of Inter at that scale averages
--- about a fifth of its point size in millimetres, measured on the earlier A5
--- build (68 characters on a 120mm line at 8.5pt), so a column holds 56
--- characters of body text. Landscape is the same page turned, a 263mm line.
+-- 6mm apart. The class is 8pt with Bricolage Grotesque set at 96%, so body text
+-- is about 7.7pt and \small about 6.7pt. The scale was chosen so that one
+-- character averages the same width as the Inter it replaced: about a fifth of
+-- Inter's point size in millimetres, measured on the earlier A5 build (68
+-- characters on a 120mm line at 8.5pt). A column holds 56 characters of body
+-- text. Landscape is the same page turned, a 263mm line.
 -- \footnotesize is not offered: at 5.6pt it is smaller than anyone should be
 -- asked to read.
 --

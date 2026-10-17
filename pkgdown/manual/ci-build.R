@@ -42,9 +42,9 @@ r <- tryCatch(tinytex::tlmgr_install(
     # float pins each figure where it was written instead of letting it drift
     # away from the heading above it; see preamble.tex and page-fit.lua.
     "float",
-    # The manual's typefaces, Inter and Source Code Pro, and what their style
-    # files load.
-    "inter", "sourcecodepro", "fontaxes", "mweights", "xkeyval",
+    # fontspec loads the manual's typefaces, Bricolage Grotesque and IBM Plex
+    # Mono, from pkgdown/manual/fonts; TeX Live ships neither face.
+    "fontspec", "xkeyval",
     # extreport, for an 8pt class; the standard classes stop at 10pt.
     "extsizes",
     # The two-column layout and the smaller, muted figure captions. multicol.sty
