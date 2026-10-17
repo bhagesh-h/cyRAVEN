@@ -1,0 +1,597 @@
+/* cyRAVEN site styles, in the design language of the author's portfolio site:
+ * Bricolage Grotesque for text, IBM Plex Mono for code, ink on a fine-grained
+ * paper ground, the logo orange for accents and a navy second colour. The
+ * values below are the portfolio's own, so moving between the two sites does
+ * not look like leaving one.
+ *
+ * Written for a phone first. Base rules target a narrow screen; the media
+ * queries at the end widen them. Three rules decided most of this file:
+ *   - A command must be readable on a 390 px screen. Code blocks use a smaller
+ *     monospace on phones, and the commands themselves are written one flag
+ *     per line, no wider than 44 characters.
+ *   - A table must not push the page sideways. Cells wrap, and a table wider
+ *     than the screen scrolls inside its own box.
+ *   - Colour comes from one set of variables, redefined for dark mode, so the
+ *     two themes cannot drift apart. Bootstrap's own variables are pointed at
+ *     them, so its menus, search box and navbar follow too.
+ */
+
+/* ---- fonts --------------------------------------------------------------
+ * Served from this site (pkgdown/assets/fonts), not from a font CDN. Bricolage
+ * Grotesque is one variable file with its optical-size axis kept, so small
+ * text gets the open, sturdier text cut and headings the tighter display cut,
+ * as on the portfolio. Unlike the portfolio's copy it keeps arrows and maths
+ * signs (→, ≥, ±), which these pages use. The Plex Mono files are IBM's own,
+ * unmodified: "Plex" is a reserved font name. Licences sit beside the files. */
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("fonts/bricolage-grotesque.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("fonts/IBMPlexMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("fonts/IBMPlexMono-Medium.woff2") format("woff2");
+  font-weight: 500 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("fonts/IBMPlexMono-Italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* ---- tokens ------------------------------------------------------------- */
+:root {
+  --cy-paper: #F2F4F7;
+  --cy-surface: #FFFFFF;
+  --cy-ink: #12151B;
+  --cy-muted: #566072;
+  --cy-line: #DCE0E7;
+  --cy-orange: #EE6F0F;        /* the logo hexagon; decoration and buttons */
+  --cy-orange-text: #B04A00;   /* the orange that passes WCAG AA as text on paper */
+  --cy-orange-rgb: 176, 74, 0;
+  --cy-navy: #2D3A55;
+  --cy-on-orange: #12151B;
+  --cy-danger: #B42318;
+  --cy-shadow: 18 21 27;
+
+  /* An even, fine grain over the flat paper colour, generated, no request. */
+  --cy-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='g' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .07 0 0 0 0 .08 0 0 0 0 .11 .42 0 0 0 -.17'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23g)'/%3E%3C/svg%3E");
+  /* The portfolio's film grain. There it lies over everything; here it lies
+     under the content, so figures and code stay sharp. */
+  --cy-film-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='f' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1.8 0 0 0 -.4 1.8 0 0 0 -.4 1.8 0 0 0 -.4 0 0 0 0 .1'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23f)'/%3E%3C/svg%3E");
+  --cy-film-opacity: 0.6;
+
+  --cy-font-sans: "Bricolage Grotesque", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --cy-font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Fluid type, the portfolio's scale: a rem floor and a small vw slope, so
+     200% zoom still works. */
+  --cy-step--1: clamp(0.8125rem, 0.79rem + 0.1vw, 0.875rem);
+  --cy-step-0: clamp(1rem, 0.96rem + 0.18vw, 1.125rem);
+  --cy-step-1: clamp(1.125rem, 1.05rem + 0.4vw, 1.375rem);
+  --cy-step-2: clamp(1.375rem, 1.2rem + 0.9vw, 1.875rem);
+  --cy-step-3: clamp(1.75rem, 1.4rem + 1.8vw, 3rem);
+  --cy-step-4: clamp(2.875rem, 1.7rem + 5.6vw, 6rem);
+
+  --cy-radius: 14px;
+  --cy-ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  /* Bootstrap's variables, pointed at the tokens. */
+  --bs-body-bg: var(--cy-paper);
+  --bs-body-color: var(--cy-ink);
+  --bs-emphasis-color: var(--cy-ink);
+  --bs-secondary-color: var(--cy-muted);
+  --bs-tertiary-color: var(--cy-muted);
+  --bs-border-color: var(--cy-line);
+  --bs-secondary-bg: var(--cy-surface);
+  --bs-tertiary-bg: var(--cy-surface);
+  --bs-link-color: var(--cy-orange-text);
+  --bs-link-color-rgb: var(--cy-orange-rgb);
+  --bs-link-hover-color: var(--cy-ink);
+  --bs-link-hover-color-rgb: 18, 21, 27;
+  --bs-code-color: var(--cy-ink);
+  --bs-body-font-family: var(--cy-font-sans);
+  --bs-font-sans-serif: var(--cy-font-sans);
+  --bs-font-monospace: var(--cy-font-mono);
+  color-scheme: light;
+}
+
+[data-bs-theme="dark"] {
+  --cy-paper: #0E1014;
+  --cy-surface: #161A21;
+  --cy-ink: #ECEEF2;
+  --cy-muted: #9AA3B3;
+  --cy-line: #272C36;
+  --cy-orange: #F07A1E;
+  --cy-orange-text: #FF9A52;
+  --cy-orange-rgb: 255, 154, 82;
+  --cy-navy: #93A9D1;
+  --cy-danger: #FF8A80;
+  --cy-shadow: 0 0 0;
+  --cy-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='g' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 .3 0 0 0 -.125'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23g)'/%3E%3C/svg%3E");
+  --cy-film-opacity: 0.85;
+
+  --bs-body-bg: var(--cy-paper);
+  --bs-body-color: var(--cy-ink);
+  --bs-emphasis-color: var(--cy-ink);
+  --bs-secondary-color: var(--cy-muted);
+  --bs-tertiary-color: var(--cy-muted);
+  --bs-border-color: var(--cy-line);
+  --bs-secondary-bg: var(--cy-surface);
+  --bs-tertiary-bg: var(--cy-surface);
+  --bs-link-color: var(--cy-orange-text);
+  --bs-link-color-rgb: var(--cy-orange-rgb);
+  --bs-link-hover-color: var(--cy-ink);
+  --bs-link-hover-color-rgb: 236, 238, 242;
+  --bs-code-color: var(--cy-ink);
+  color-scheme: dark;
+}
+
+/* ---- page ground --------------------------------------------------------- */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+body {
+  background-color: var(--cy-paper);
+  background-image: var(--cy-grain);
+  color: var(--cy-ink);
+  font-family: var(--cy-font-sans);
+  font-size: var(--cy-step-0);
+  font-optical-sizing: auto;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--cy-film-grain);
+  background-size: 220px 220px;
+  opacity: var(--cy-film-opacity);
+}
+@media print {
+  body { background-image: none; }
+  body::before { display: none; }
+}
+
+::selection { background: var(--cy-orange); color: var(--cy-on-orange); }
+:focus-visible {
+  outline: 2px solid var(--cy-orange-text);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+strong, b { font-weight: 650; }
+
+/* ---- navbar: blurred paper, one hairline --------------------------------- */
+.navbar {
+  background-color: var(--cy-paper) !important;
+  background-color: color-mix(in srgb, var(--cy-paper) 86%, transparent) !important;
+  background-image: var(--cy-grain);
+  -webkit-backdrop-filter: saturate(1.5) blur(14px);
+  backdrop-filter: saturate(1.5) blur(14px);
+  border-bottom: 1px solid var(--cy-line);
+  box-shadow: none;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+.navbar .navbar-brand {
+  font-weight: 760;
+  font-size: 1.25rem;
+  letter-spacing: -0.03em;
+  color: var(--cy-ink) !important;
+}
+.navbar .nav-text.text-muted {
+  font-family: var(--cy-font-mono);
+  font-size: 0.75rem;
+  color: var(--cy-muted) !important;
+}
+/* Links are pills, and the page you are on is the filled one, as in the
+   portfolio's menu. */
+.navbar .nav-link {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 0.85rem !important;
+  border-radius: 999px;
+  color: var(--cy-muted) !important;
+  font-size: 0.9375rem;
+  font-weight: 560;
+  white-space: nowrap;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+.navbar .nav-link:hover { color: var(--cy-ink) !important; }
+.navbar .nav-item.active > .nav-link,
+.navbar .nav-link.active {
+  background: var(--cy-ink);
+  color: var(--cy-paper) !important;
+}
+.navbar-toggler {
+  border: 1px solid var(--cy-line);
+  border-radius: 999px;
+  padding: 0.4rem 0.7rem;
+  background: var(--cy-surface);
+}
+.navbar-toggler:focus { box-shadow: none; }
+[data-bs-theme="dark"] .navbar-toggler-icon { filter: invert(1); }
+/* Search: a pill on the surface colour. */
+.navbar .form-control,
+.navbar .form-control:focus {
+  border: 1px solid var(--cy-line);
+  border-radius: 999px;
+  background: var(--cy-surface);
+  color: var(--cy-ink);
+  font-size: 0.9rem;
+  box-shadow: none;
+}
+.navbar .form-control:focus { border-color: var(--cy-muted); }
+/* The light switch: the portfolio's round theme button. */
+#dropdown-lightswitch {
+  justify-content: center;
+  width: 40px;
+  min-height: 40px;
+  padding: 0 !important;
+  border: 1px solid var(--cy-line);
+  border-radius: 50%;
+  background: var(--cy-surface);
+}
+#dropdown-lightswitch::after { display: none; }
+.dropdown-menu {
+  --bs-dropdown-bg: var(--cy-surface);
+  --bs-dropdown-border-color: var(--cy-line);
+  --bs-dropdown-link-color: var(--cy-ink);
+  --bs-dropdown-link-hover-bg: var(--cy-paper);
+  --bs-dropdown-link-active-bg: var(--cy-ink);
+  --bs-dropdown-link-active-color: var(--cy-paper);
+  border-radius: var(--cy-radius);
+  padding: 0.35rem;
+  box-shadow: 0 12px 32px -14px rgb(var(--cy-shadow) / 0.45);
+}
+.dropdown-item { border-radius: 8px; }
+/* Search results, from pkgdown's autocomplete. */
+.aa-dropdown-menu {
+  background: var(--cy-surface) !important;
+  border: 1px solid var(--cy-line) !important;
+  border-radius: var(--cy-radius) !important;
+  box-shadow: 0 12px 32px -14px rgb(var(--cy-shadow) / 0.45);
+}
+
+/* ---- page header ------------------------------------------------------- */
+/* "Source: vignettes/x.Rmd" is for the maintainer, not the reader. */
+.page-header small.dont-index { display: none; }
+.page-header { margin-bottom: 1.25rem; border: 0; padding-bottom: 0; }
+.page-header img.logo { width: 72px; height: auto; }
+
+/* ---- type ---------------------------------------------------------------- */
+main { color: var(--cy-ink); }
+main h1, main h2, main h3, main h4, main h5 { color: var(--cy-ink); text-wrap: balance; }
+main h1 {
+  font-size: var(--cy-step-3);
+  font-weight: 760;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+main h2 {
+  font-size: var(--cy-step-2);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin-top: 2.75rem;
+  margin-bottom: 0.9rem;
+  border: 0;
+  padding: 0;
+}
+main h3 {
+  font-size: var(--cy-step-1);
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  margin-top: 2rem;
+  margin-bottom: 0.6rem;
+}
+main h4, main h5 { font-size: 1rem; font-weight: 650; margin-top: 1.6rem; margin-bottom: 0.5rem; }
+main p { margin-bottom: 1rem; }
+main ul, main ol { margin-bottom: 1.1rem; padding-left: 1.25rem; }
+main li { margin-bottom: 0.35rem; }
+main li > p { margin-bottom: 0.4rem; }
+main li::marker { color: var(--cy-muted); }
+main a {
+  color: var(--cy-orange-text);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+main a:hover { color: var(--cy-ink); text-decoration-color: var(--cy-orange); }
+/* Heading anchors are navigation, not links in the prose. */
+main a.anchor { text-decoration: none; }
+
+main blockquote {
+  margin: 1.4rem 0;
+  padding: 0.2rem 0 0.2rem 1rem;
+  border-left: 3px solid var(--cy-orange);
+  color: var(--cy-muted);
+}
+main blockquote p:last-child { margin-bottom: 0; }
+
+/* ---- code ---------------------------------------------------------------- */
+main div.sourceCode, main pre {
+  margin: 0.9rem 0 1.2rem;
+  border-radius: var(--cy-radius);
+}
+:root main pre {
+  background: var(--cy-surface);
+  border: 1px solid var(--cy-line);
+  padding: 0.8rem 0.9rem;
+  font-family: var(--cy-font-mono);
+  font-size: 0.8rem;
+  line-height: 1.55;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+:root main pre code { color: var(--cy-ink); background: transparent; }
+main div.sourceCode pre { margin: 0; }
+main div.sourceCode + div.sourceCode { margin-top: -0.4rem; }
+main :not(pre) > code {
+  font-family: var(--cy-font-mono);
+  font-size: 0.86em;
+  padding: 0.1em 0.36em;
+  border-radius: 6px;
+  background: rgb(var(--cy-shadow) / 0.07);
+  color: inherit;
+  word-break: break-word;
+}
+[data-bs-theme="dark"] main :not(pre) > code { background: rgb(255 255 255 / 0.08); }
+/* Syntax colours from the same palette: commands in ink, flags and numbers in
+   navy, strings and variables in orange, punctuation and comments muted. The
+   :root prefix outranks pkgdown's dark theme, which is written as
+   [data-bs-theme="dark"] pre code span.xx and would otherwise win in dark mode. */
+:root main pre code span.ex, :root main pre code span.fu, :root main pre code span.bu { color: var(--cy-ink); font-weight: 500; }
+:root main pre code span.kw, :root main pre code span.cf { color: var(--cy-navy); font-weight: 500; }
+:root main pre code span.at, :root main pre code span.dv, :root main pre code span.fl,
+:root main pre code span.bn, :root main pre code span.cn, :root main pre code span.im { color: var(--cy-navy); }
+:root main pre code span.st, :root main pre code span.ch, :root main pre code span.ss,
+:root main pre code span.vs, :root main pre code span.va, :root main pre code span.sc { color: var(--cy-orange-text); }
+:root main pre code span.op, :root main pre code span.dt, :root main pre code span.ot,
+:root main pre code span.an, :root main pre code span.in { color: var(--cy-muted); }
+:root main pre code span.co, :root main pre code span.cv, :root main pre code span.do,
+:root main pre code span.wa { color: var(--cy-muted); font-style: italic; }
+:root main pre code span.al, :root main pre code span.er { color: var(--cy-danger); background: transparent; }
+/* pkgdown's copy button: present, quiet until hovered. */
+.btn-copy-ex {
+  opacity: 0.55;
+  border: 0;
+  background: transparent;
+  color: var(--cy-muted);
+}
+.btn-copy-ex:hover, .btn-copy-ex:focus { opacity: 1; color: var(--cy-ink); }
+
+/* ---- tables -------------------------------------------------------------- */
+main table {
+  display: block;            /* lets a wide table scroll inside its own box */
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-collapse: collapse;
+  margin: 1.1rem 0 1.6rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+/* Bootstrap paints a table in the flat body colour, which hides the grain. */
+main .table, main table {
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--cy-ink);
+  --bs-table-border-color: var(--cy-line);
+}
+main table th {
+  font-size: 0.75rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cy-muted);
+  text-align: left;
+  border-bottom: 1px solid var(--cy-line);
+  padding: 0.5rem 0.65rem 0.45rem 0;
+}
+main table td {
+  border-bottom: 1px solid var(--cy-line);
+  padding: 0.55rem 0.65rem 0.55rem 0;
+  vertical-align: top;
+}
+main table tr:last-child td { border-bottom: 0; }
+main table td:first-child { font-weight: 600; }
+main table td:first-child code { font-weight: 500; }
+
+/* ---- figures ------------------------------------------------------------- */
+main img { max-width: 100%; height: auto; }
+main .figure img, main p > img {
+  border: 1px solid var(--cy-line);
+  border-radius: var(--cy-radius);
+  background: #fff;
+}
+main .figure, main p:has(> img) { margin: 1.4rem 0 1.8rem; }
+main .caption, main figcaption { color: var(--cy-muted); font-size: 0.9rem; }
+
+/* ---- sidebars ------------------------------------------------------------ */
+aside h2, #toc > h2 {
+  font-size: 0.8125rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cy-muted);
+}
+aside a { color: var(--cy-ink); text-underline-offset: 0.2em; }
+aside a:hover { color: var(--cy-orange-text); }
+#toc .nav-link {
+  font-size: 0.875rem;
+  color: var(--cy-muted);
+  padding-top: 0.15rem;
+  padding-bottom: 0.15rem;
+}
+#toc .nav-link:hover { color: var(--cy-ink); }
+#toc .nav-link.active { color: var(--cy-orange-text); font-weight: 600; }
+
+/* ---- home page ----------------------------------------------------------- */
+/* The hero is the portfolio's, with the logo where its portrait is: the name,
+   one line in navy saying what it is, a muted sentence and a filled orange
+   pill on the left, the logo large on the right. On a phone the logo comes
+   first, centred above the name, as the portrait does there. Same proportions
+   and the same breakpoint logic: two columns at 1.2 : 0.8 once the column is
+   wide enough, one column below that. */
+.readme-only { display: none; }
+.cy-hero {
+  display: grid;
+  gap: clamp(1.75rem, 5vw, 3rem);
+  align-items: center;
+  padding-block: clamp(0.5rem, 3vw, 2.5rem) clamp(1rem, 3vw, 2rem);
+}
+.cy-hero-copy {
+  display: grid;
+  gap: 1.1rem;
+  min-width: 0;
+  container-type: inline-size;
+}
+/* pkgdown puts its small logo beside the first heading; the large one replaces it. */
+.cy-hero .page-header { margin: 0; }
+.cy-hero .page-header img.logo { display: none !important; }
+.cy-hero h1 {
+  margin: 0;
+  /* the name never runs past its column: "cyRAVEN" is about 4.3em wide */
+  font-size: min(var(--cy-step-4), 22cqi);
+  font-weight: 760;
+  letter-spacing: -0.035em;
+  line-height: 0.92;
+}
+.cy-hero-logo {
+  order: -1;
+  justify-self: center;
+  width: min(64vw, 18rem);
+  margin-top: 0.5rem;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+/* pandoc wraps the image in a paragraph, which the figure rules above would
+   frame as a white card. */
+.cy-hero-logo p { margin: 0; }
+main .cy-hero-logo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  filter: drop-shadow(0 10px 16px rgb(var(--cy-shadow) / 0.2));
+  -webkit-user-drag: none;
+}
+@media (min-width: 768px) {
+  .cy-hero {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+    column-gap: clamp(2rem, 5vw, 4rem);
+  }
+  .cy-hero-logo { order: 0; justify-self: end; width: min(100%, 22rem); margin-top: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cy-hero-logo img { animation: cy-rise 0.9s 0.1s var(--cy-ease-out) both; }
+  .cy-hero-copy > * { animation: cy-fade-up 0.7s var(--cy-ease-out) both; }
+  .cy-hero-copy > :nth-child(2) { animation-delay: 0.08s; }
+  .cy-hero-copy > :nth-child(3) { animation-delay: 0.16s; }
+  .cy-hero-copy > :nth-child(4) { animation-delay: 0.24s; }
+}
+/* Movement only, never opacity: the text and logo are readable on the first frame. */
+@keyframes cy-rise { from { transform: translateY(18px) scale(0.96); } to { transform: none; } }
+@keyframes cy-fade-up { from { transform: translateY(12px); } to { transform: none; } }
+.cy-hero-role {
+  margin: 0;
+  max-width: 36rem;
+  font-size: var(--cy-step-2);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+  color: var(--cy-navy);
+}
+.cy-hero-lede { margin: 0; max-width: 34rem; color: var(--cy-muted); }
+.cy-hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 0.4rem 0 0; }
+.cy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 22px;
+  border: 1px solid var(--cy-line);
+  border-radius: 999px;
+  background: var(--cy-surface);
+  font-weight: 600;
+  color: var(--cy-ink) !important;
+  text-decoration: none;
+  transition: transform 0.2s var(--cy-ease-out), border-color 0.2s ease, box-shadow 0.25s ease;
+}
+.cy-btn:active { transform: scale(0.97); }
+.cy-btn-primary {
+  background: var(--cy-orange);
+  border-color: var(--cy-orange);
+  color: var(--cy-on-orange) !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  .cy-btn:hover { border-color: var(--cy-muted); }
+  .cy-btn-primary:hover {
+    border-color: var(--cy-orange);
+    box-shadow: 0 10px 24px -10px var(--cy-orange);
+    transform: translateY(-1px);
+  }
+}
+
+/* ---- footer ---------------------------------------------------------------- */
+footer {
+  border-top: 1px solid var(--cy-line);
+  color: var(--cy-muted);
+  font-size: var(--cy-step--1);
+}
+footer a { color: var(--cy-ink); }
+
+/* ---- small screens: hide what a phone does not need --------------------- */
+@media (max-width: 767.98px) {
+  .page-header img.logo { display: none; }
+  main h2 { margin-top: 2.25rem; }
+  /* the on-this-page list sits below the article on a phone, where it is noise */
+  aside #toc { display: none; }
+}
+/* The collapsed menu on a phone: the pills stack, the icons sit in one row. */
+@media (max-width: 991.98px) {
+  .navbar-collapse { padding: 0.5rem 0 0.25rem; }
+  .navbar .navbar-nav { gap: 2px; }
+  .navbar .navbar-nav:last-child { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .navbar .navbar-nav:last-child .nav-item:has(form) { flex: 1 1 100%; }
+}
+
+/* ---- wider screens -------------------------------------------------------- */
+@media (min-width: 576px) {
+  :root main pre { font-size: 0.84rem; padding: 0.9rem 1.05rem; }
+}
+@media (min-width: 992px) {
+  .container, .container-lg { max-width: 1120px; }
+  main table { font-size: 0.93rem; }
+  .navbar .navbar-nav { gap: 2px; }
+}
+
+/* ---- motion ---------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

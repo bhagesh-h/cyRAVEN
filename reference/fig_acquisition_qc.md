@@ -1,0 +1,57 @@
+# Event rate across the acquisition, with the flagged intervals marked
+
+One panel per sample. The line is how many events the instrument
+recorded in each equal-width slice of the acquisition, and the marked
+points are the slices whose rate or whose channel medians departed from
+the rest of that file.
+
+## Usage
+
+``` r
+fig_acquisition_qc(
+  bins,
+  outfile,
+  summary = NULL,
+  dpi = 200,
+  colors = fcs_colors()
+)
+```
+
+## Arguments
+
+- bins:
+
+  the `bins` element of
+  [`run_acquisition_qc()`](https://bhagesh-h.github.io/cyRAVEN/reference/run_acquisition_qc.md)
+
+- outfile:
+
+  Path to write the figure to.
+
+- summary:
+
+  the `summary` element, used for the subtitle
+
+- dpi:
+
+  Resolution in dots per inch. Default `200`.
+
+- colors:
+
+  Named list of colours; defaults to the package palette. Default
+  [`fcs_colors()`](https://bhagesh-h.github.io/cyRAVEN/reference/fcs_colors.md).
+
+## Details
+
+WHAT TO LOOK FOR. A clean acquisition is a roughly flat line: the
+instrument delivered cells at a steady rate and the signal did not move.
+A sustained trough is a partial clog. A spike is usually a bubble or a
+sample that was disturbed. A step is a settings change part-way through
+the tube.
+
+WHY THE RATE AND NOT THE SIGNAL IS PLOTTED. Both are tested, and the
+flag on each point reflects whichever failed, but the rate is the one
+quantity that is on a single comparable axis for every panel and every
+instrument. The channel that drove each flag is named in
+`acquisition_qc.csv` rather than drawn here, because one panel per
+sample per channel is not a figure anyone reads.

@@ -1,0 +1,61 @@
+# Staining QC verdict per file
+
+WHY: an unstained or failed-staining file has essentially no CD45+
+events. Embedding it silently places a cloud of background-only cells in
+the shared space and corrupts every frequency table. Flag and exclude,
+but still report.
+
+## Usage
+
+``` r
+staining_verdict(
+  gate,
+  declared_control = NA,
+  min_cd45_pct = 5,
+  force_include = FALSE
+)
+```
+
+## Arguments
+
+- gate:
+
+  The gate.
+
+- declared_control:
+
+  The declared control. Default `NA`.
+
+- min_cd45_pct:
+
+  The min cd45 pct. Default `5`.
+
+- force_include:
+
+  when TRUE (–include-qc-failed), a DECLARED sample (not a control) that
+  would otherwise fail is included anyway, using whatever threshold was
+  already computed. It is still excluded when the sample map itself says
+  this is a control tube – that case is an unstained reference, and
+  embedding it puts a cloud of background-only events in the shared
+  space regardless of this flag. Only meant for the "too few samples to
+  afford losing any" situation; the verdict text still records the
+  forcing so it stays auditable in staining_qc.csv.
+
+## Value
+
+list(..., qc_status, is_control, is_reference). The three differ and
+every difference is load-bearing: qc_status – "pass" \| "control" \|
+"failed". The REPORTING category. "control" is an unstained reference
+tube; "failed" is a biological sample whose staining or CD45 gate did
+not work. Both are excluded, for different reasons, and a figure that
+calls a failed patient sample a "control" is simply wrong. is_control –
+TRUE only for an actual control tube. NOT an exclusion flag: exclusion
+is `!include`, which covers failures too. is_reference – additionally
+usable as the UNSTAINED REFERENCE from which thresholds for unimodal
+markers are taken. Only a sample the operator DECLARED as a control
+earns is_reference. A biological sample that merely failed staining is
+excluded, never promoted to reference: its distributions are a broken
+assay, and adopting them as the negative reference propagates one bad
+tube's failure into every threshold in the panel. When no sample map
+declares controls at all (declared = NA) the inference may still
+promote, because then it is the only signal available.
