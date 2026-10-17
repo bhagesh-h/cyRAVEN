@@ -242,10 +242,9 @@ header <- c(
   "      in_header:",
   sprintf("        - %s", file.path(work, "preamble.tex")),
   sprintf("        - %s", file.path(work, "titlepage.tex")),
-  # 8pt, from extsizes: the standard classes stop at 10pt. Inter's lowercase is
-  # tall, so 10pt Inter reads like a 12pt book face and the manual looked
-  # oversized. 8pt with the face set at 94% is 7.5pt, with the x-height of 9pt
-  # Times: the size of a two-column journal page.
+  # 8pt, from extsizes: the standard classes stop at 10pt. preamble.tex sets
+  # the text face at 96%, 7.7pt, which in Bricolage Grotesque reads at about
+  # the size of 9pt Times: the size of a two-column journal page.
   "documentclass: extreport",
   "fontsize: 8pt",
   # A4 IN TWO COLUMNS. An A5 page read well on a phone but showed the text
@@ -257,21 +256,25 @@ header <- c(
   "colorlinks: true",
   "linkcolor: RavenText",
   "urlcolor: RavenText",
-  "toccolor: black",
+  "toccolor: RavenInk",
   "---",
   "")
 
-# A plain title page: the logo, the name, one line saying what it is, and the
+# The title page follows the website's home page: the logo, the name in the
+# display cut, one line in navy saying what it is, one muted sentence, and the
 # version. Written per build because the version and date change.
 writeLines(c(
   "\\makeatletter",
   "\\renewcommand{\\maketitle}{\\begin{titlepage}\\raggedright",
   "  \\vspace*{30mm}",
-  "  \\IfFileExists{logo.png}{\\includegraphics[width=30mm]{logo.png}\\par\\vspace{10mm}}{}",
-  "  {\\fontsize{34}{38}\\selectfont\\bfseries cyRAVEN\\par}",
-  "  \\vspace{4mm}",
-  "  {\\fontsize{12}{15}\\selectfont\\color{RavenMuted} Flow cytometry files in, population",
+  "  \\IfFileExists{logo.png}{\\includegraphics[width=32mm]{logo.png}\\par\\vspace{10mm}}{}",
+  "  {\\cydisplay\\fontsize{46}{46}\\selectfont cyRAVEN\\par}",
+  "  \\vspace{6mm}",
+  "  {\\fontsize{15}{19}\\selectfont\\color{RavenNavy} Flow cytometry files in, population",
   "   frequencies, a UMAP and statistics out.\\par}",
+  "  \\vspace{3mm}",
+  "  {\\fontsize{10.5}{14}\\selectfont\\color{RavenMuted} Every sample is gated separately,",
+  "   and the report is one file.\\par}",
   "  \\vfill",
   sprintf("  {\\fontsize{9}{12}\\selectfont\\color{RavenMuted} Version %s \\textperiodcentered\\ %s\\par", version,
           format(Sys.Date(), "%d %B %Y")),
@@ -285,6 +288,10 @@ file.copy(file.path(pkg_root, "pkgdown", "manual", "preamble.tex"), work,
           overwrite = TRUE)
 file.copy(file.path(pkg_root, "pkgdown", "manual", "page-fit.lua"), work,
           overwrite = TRUE)
+# The typefaces. preamble.tex loads them from fonts/ beside the document, by
+# file name, because TeX Live ships neither.
+file.copy(file.path(pkg_root, "pkgdown", "manual", "fonts"), work,
+          recursive = TRUE, overwrite = TRUE)
 logo <- file.path(pkg_root, "man", "figures", "logo.png")
 if (file.exists(logo)) file.copy(logo, work, overwrite = TRUE)
 

@@ -49,22 +49,55 @@
 \usepackage{array}
 \usepackage{ragged2e}
 
-% The hex sticker's fill, for rules and heading numbers, and its darkened form
-% for link text, which has to pass WCAG AA contrast on white. Sampled from
-% man/figures/logo.png rather than guessed.
+% COLOUR, from the author's portfolio site, which the website follows too: ink
+% on a pale paper ground, the logo orange for chapter numbers, its darkened form
+% for links (it passes WCAG AA as text on the paper), a muted grey for captions
+% and running heads, and the portfolio's navy for the title page's tagline and
+% for flags in code.
 \usepackage{xcolor}
-\definecolor{RavenOrange}{HTML}{EC7414}
-\definecolor{RavenText}{HTML}{B4530C}
-\definecolor{RavenMuted}{HTML}{5B6470}
+\definecolor{RavenPaper}{HTML}{F2F4F7}
+\definecolor{RavenInk}{HTML}{12151B}
+\definecolor{RavenOrange}{HTML}{EE6F0F}
+\definecolor{RavenText}{HTML}{B04A00}
+\definecolor{RavenMuted}{HTML}{566072}
+\definecolor{RavenNavy}{HTML}{2D3A55}
+\definecolor{RavenLine}{HTML}{DCE0E7}
+% The paper colour on every page, as on the site. Figures and code blocks are
+% white, so they sit on it as the site's white cards do.
+\pagecolor{RavenPaper}
+\AtBeginDocument{\color{RavenInk}}
+\definecolor{shadecolor}{HTML}{FFFFFF}
 
-% TYPE. Inter for text, the same face as the website, drawn for screens and
-% legible at small sizes. Its lowercase is tall, so 7.5pt Inter has the
-% x-height of 9pt Times, the size of a two-column journal page. Source Code Pro for
-% code, which separates 1, l and I and 0 from O. Both are open licensed and
-% ship with TeX Live, so the CI runner installs them with tlmgr.
-\usepackage[sfdefault,scale=0.94]{inter}
-\usepackage[scale=0.9]{sourcecodepro}
-\renewcommand{\familydefault}{\sfdefault}
+% TYPE. Bricolage Grotesque for text and IBM Plex Mono for code, the faces of
+% the website and the portfolio. TeX Live ships neither, so the files are in
+% pkgdown/manual/fonts and build-manual.R copies them next to the document.
+% Bricolage is a variable font and XeTeX reads static ones, so the folder holds
+% three static cuts of it: a text cut at its smallest optical size, regular and
+% bold, for body text, and a display cut for chapter titles and the title page,
+% matching what the browser picks for the same sizes on the site. Bricolage has
+% no italic; emphasis is slanted.
+%
+% Scale 0.96 of the 8pt class is 7.7pt. At that size Bricolage sets the same
+% average character width as the 7.5pt Inter it replaced, so the 56 characters
+% a column that page-fit.lua is calibrated for still hold. Plex Mono is as wide
+% as Source Code Pro was, 0.6em a character, so code keeps its 0.9.
+\usepackage{fontspec}
+\setmainfont{BricolageGrotesque}[
+  Path=fonts/, Extension=.ttf, Scale=0.96,
+  UprightFont=*-Text-Regular, BoldFont=*-Text-Bold,
+  ItalicFont=*-Text-Regular, ItalicFeatures={FakeSlant=0.18},
+  BoldItalicFont=*-Text-Bold, BoldItalicFeatures={FakeSlant=0.18}]
+\setsansfont{BricolageGrotesque}[
+  Path=fonts/, Extension=.ttf, Scale=0.96,
+  UprightFont=*-Text-Regular, BoldFont=*-Text-Bold,
+  ItalicFont=*-Text-Regular, ItalicFeatures={FakeSlant=0.18},
+  BoldItalicFont=*-Text-Bold, BoldItalicFeatures={FakeSlant=0.18}]
+\setmonofont{IBMPlexMono}[
+  Path=fonts/, Extension=.ttf, Scale=0.9,
+  UprightFont=*-Regular, BoldFont=*-SemiBold, ItalicFont=*-Italic]
+% Headings are drawn tight, as on the site.
+\newfontfamily\cydisplay{BricolageGrotesque-Display-Bold}[
+  Path=fonts/, Extension=.ttf, Scale=0.96, LetterSpace=-2.5]
 % Never hyphenate code. A hyphen inside `system.file()` printed it as
 % "sys-tem.file", which is not what anyone should type. The class sets this for
 % Computer Modern's typewriter face; a face loaded through fontspec comes
@@ -73,6 +106,43 @@
 \DeclareRobustCommand\ttfamily{\not@math@alphabet\ttfamily\mathtt
   \fontfamily\ttdefault\selectfont\hyphenchar\font=\m@ne}
 \makeatother
+
+% Syntax colours, the website's: commands in ink, flags and numbers in navy,
+% strings and variables in orange, punctuation and comments muted. pandoc
+% defines these only when the document holds highlighted code, so each is
+% provided first and then redefined.
+\newcommand{\cytok}[2]{\providecommand{#1}[1]{}\renewcommand{#1}[1]{#2}}
+\cytok{\NormalTok}{#1}
+\cytok{\ExtensionTok}{#1}
+\cytok{\FunctionTok}{#1}
+\cytok{\BuiltInTok}{#1}
+\cytok{\KeywordTok}{\textcolor{RavenNavy}{#1}}
+\cytok{\ControlFlowTok}{\textcolor{RavenNavy}{#1}}
+\cytok{\AttributeTok}{\textcolor{RavenNavy}{#1}}
+\cytok{\DecValTok}{\textcolor{RavenNavy}{#1}}
+\cytok{\FloatTok}{\textcolor{RavenNavy}{#1}}
+\cytok{\BaseNTok}{\textcolor{RavenNavy}{#1}}
+\cytok{\ConstantTok}{\textcolor{RavenNavy}{#1}}
+\cytok{\ImportTok}{\textcolor{RavenNavy}{#1}}
+\cytok{\StringTok}{\textcolor{RavenText}{#1}}
+\cytok{\CharTok}{\textcolor{RavenText}{#1}}
+\cytok{\SpecialStringTok}{\textcolor{RavenText}{#1}}
+\cytok{\VerbatimStringTok}{\textcolor{RavenText}{#1}}
+\cytok{\VariableTok}{\textcolor{RavenText}{#1}}
+\cytok{\SpecialCharTok}{\textcolor{RavenText}{#1}}
+\cytok{\OperatorTok}{\textcolor{RavenMuted}{#1}}
+\cytok{\DataTypeTok}{\textcolor{RavenMuted}{#1}}
+\cytok{\OtherTok}{\textcolor{RavenMuted}{#1}}
+\cytok{\AnnotationTok}{\textcolor{RavenMuted}{#1}}
+\cytok{\InformationTok}{\textcolor{RavenMuted}{#1}}
+\cytok{\PreprocessorTok}{\textcolor{RavenMuted}{#1}}
+\cytok{\RegionMarkerTok}{\textcolor{RavenMuted}{#1}}
+\cytok{\CommentTok}{\textcolor{RavenMuted}{\textit{#1}}}
+\cytok{\CommentVarTok}{\textcolor{RavenMuted}{\textit{#1}}}
+\cytok{\DocumentationTok}{\textcolor{RavenMuted}{\textit{#1}}}
+\cytok{\WarningTok}{\textcolor{RavenMuted}{\textit{#1}}}
+\cytok{\AlertTok}{\textcolor[HTML]{B42318}{#1}}
+\cytok{\ErrorTok}{\textcolor[HTML]{B42318}{#1}}
 
 % Code blocks wrap instead of running off the page. The docker commands in the
 % usage article are long, and a reader cannot copy what was never printed.
@@ -87,9 +157,9 @@
 % section in a narrow column.
 \usepackage{titlesec}
 \titleformat{\chapter}[block]
-  {\normalfont\bfseries\fontsize{20}{24}\selectfont}
+  {\normalfont\cydisplay\fontsize{20}{22}\selectfont}
   {\textcolor{RavenOrange}{\thechapter}}{0.45em}{}
-  [\vspace{5pt}{\color{black!14}\titlerule[0.6pt]}]
+  [\vspace{5pt}{\color{RavenLine}\titlerule[0.6pt]}]
 \titlespacing*{\chapter}{0pt}{0pt}{12pt}
 \titleformat{\section}
   {\normalfont\bfseries\fontsize{11.5}{14}\selectfont}{\textcolor{RavenOrange}{\thesection}}{0.55em}{}
