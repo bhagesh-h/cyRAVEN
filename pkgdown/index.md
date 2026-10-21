@@ -105,8 +105,8 @@ FCS files · sample sheet · config
    for example `CD3: above` and `CD4: above`.
    → `population_frequencies.csv`
 4. **Uncertainty and UMAP.** Each cut is re-derived on resampled events to
-   see how far it moves. A UMAP is built from an equal number of cells per
-   sample.
+   see how far it moves. A UMAP is built with about the same number of cells
+   from each sample, or every gated cell with `--no-equalise`.
    → `threshold_uncertainty.csv`, `umap_overview.png`
 5. **Compare.** Groups are tested with one value per sample. Populations are
    tested against clinical variables and followed across visits.

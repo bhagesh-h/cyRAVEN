@@ -23,7 +23,11 @@ derive_scatter_gate <- function(ex, sc, fsc_hi_q = 0.999,
     stop("FSC-A and SSC-A are required for the scatter gate but were not found")
   lf <- log10(pmax(ex[, sc[["FSC-A"]]], 1))
   ls <- log10(pmax(ex[, sc[["SSC-A"]]], 1))
-  v <- density_valley(lf, bins = 240L, smooth = 5, min_gap_frac = 0.10)
+  # The LOWEST qualifying valley, not the deepest: this boundary separates debris
+  # from cells, and in whole blood the deepest FSC valley can be a near-empty gap
+  # between two groups of cells above the debris. Taking it rejected the cells
+  # below the gap, granulocytes included; see density_valley(prefer =).
+  v <- density_valley(lf, bins = 240L, smooth = 5, min_gap_frac = 0.10, prefer = "lowest")
   if (!is.finite(v)) {
     v <- as.numeric(quantile(lf, 0.60, na.rm = TRUE))
     warning("no FSC-A density valley found; using the 60th percentile (",
@@ -35,6 +39,41 @@ derive_scatter_gate <- function(ex, sc, fsc_hi_q = 0.999,
   list(fsc_lo = v, fsc_hi = fsc_hi, ssc_lo = sb[1], ssc_hi = sb[2],
        mask = inw & ls > sb[1] & ls < sb[2],
        fsc_log10 = lf, ssc_log10 = ls)
+}
+
+#' A CD45-negative reference from the events the scatter gate rejected
+#'
+#' Events well below the scatter gate's FSC boundary are sub-cellular debris
+#' and carry no CD45, so the upper tail of their CD45 values is where
+#' CD45-negative ends in this tube, measured under the same staining and the
+#' same settings.
+#' @param cd45_x Transformed CD45 values for every event.
+#' @param in_gate Logical, `TRUE` for events NOT to use as debris. The caller
+#'   passes everything except the debris core, the events well below the FSC
+#'   boundary.
+#' @param q Quantile taken. Default `0.995`.
+#' @param min_events Fewer rejected events than this gives `NA`. Default `500L`.
+#' @return The reference value, or `NA_real_`.
+#' @keywords internal
+cd45_negative_reference <- function(cd45_x, in_gate, q = 0.995, min_events = 500L) {
+  x <- cd45_x[!in_gate]
+  x <- x[is.finite(x)]
+  if (length(x) < min_events) return(NA_real_)
+  as.numeric(stats::quantile(x, q, names = FALSE))
+}
+
+#' Whether a CD45 cut excludes a population that is CD45-positive
+#'
+#' @param x CD45 values of the gate's parent.
+#' @param cut The proposed cut.
+#' @param neg_ref The negative reference from [cd45_negative_reference()].
+#' @param max_frac More than this fraction of the parent between `neg_ref` and
+#'   `cut` means the cut is splitting positive cells. Default `0.10`.
+#' @return `TRUE`, `FALSE`, or `NA` when either value is missing.
+#' @keywords internal
+cd45_cut_splits_positive <- function(x, cut, neg_ref, max_frac = 0.10) {
+  if (!is.finite(cut) || !is.finite(neg_ref) || cut <= neg_ref) return(FALSE)
+  mean(x > neg_ref & x < cut, na.rm = TRUE) > max_frac
 }
 
 #' Derive the singlet band from the FSC-H/FSC-A ridge
@@ -158,7 +197,7 @@ apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,
     rr <- resolve_threshold(vmk, vx[sb$mask], cfg_threshold(cfg[[vmk]]),
                             control_ref[[vmk]], fallback_q = 0.90,
                             override = sample_override(list(x = overrides), "x", vmk),
-                            adaptive = adaptive)
+                            adaptive = adaptive, floor = tr$fn(0, vmk))
     v_thr <- rr$threshold; v_src <- rr$source
     # The candidate mask is built BEFORE the gate is judged, because one of the
     # two things being judged is how much it keeps. A "below" gate on a fallback
@@ -191,8 +230,36 @@ apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,
     rr <- resolve_threshold(cd45_name, cd45_x[live], cfg_threshold(cfg[[cd45_name]]),
                             control_ref[[cd45_name]],
                             override = sample_override(list(x = overrides), "x", cd45_name),
-                            adaptive = adaptive)
+                            adaptive = adaptive, floor = tr$fn(0, cd45_name),
+                            # remove only CD45-negative events: CD45-dim
+                            # granulocytes are leukocytes too
+                            prefer = "lowest")
     c_thr <- rr$threshold; c_src <- rr$source
+    # A CD45 CUT MUST NOT SPLIT THE CD45+ CELLS. The gate exists to remove
+    # CD45-negative events. In whole blood the CD45 distribution has a dim mode
+    # (granulocytes) and a bright one (lymphocytes), and where the scatter gate
+    # has already removed nearly all the debris there is no negative mode left
+    # in the parent: the only valley is then the dim/bright one, and taking it
+    # removed the granulocytes. On one cohort that happened in 4 of 21 samples,
+    # which reported granulocytes at 4-10% of CD45+ cells where clustering found
+    # 51-70%.
+    #
+    # The events the scatter gate rejected are debris, and debris is
+    # CD45-negative, so their CD45 values are a negative reference measured in
+    # the same tube. When a valley-derived cut would leave more than 10% of the
+    # parent between that reference's 99.5th percentile and the cut -- cells
+    # positive by the reference, excluded by the cut -- the cut is replaced by
+    # the reference's 99.5th percentile and the source says so.
+    # Only the debris CORE: events well below the FSC boundary. Cells just under
+    # the boundary are rejected by the scatter gate too, carry CD45, and a few
+    # hundred of them were enough to put the reference among the CD45+ cells.
+    .neg_ref <- cd45_negative_reference(cd45_x, !(sg$fsc_log10 < sg$fsc_lo - 0.15))
+    .split <- cd45_cut_splits_positive(cd45_x[live], c_thr, .neg_ref)
+    if (isTRUE(.split) && !c_src %in% c("manual", "config")) {
+      log_msg("  CD45 valley at ", round(c_thr, 2), " would exclude CD45-dim cells; ",
+              "using the debris events' 99.5th percentile, ", round(.neg_ref, 2), ", instead")
+      c_thr <- .neg_ref; c_src <- "debris_reference"
+    }
     # An "above" gate on the same fallback keeps exactly 1 - fallback_q, 10%.
     # In PBMC every cell is a leukocyte, so CD45 has no negative mode to find
     # and the 10% is entirely an artefact of the constant. Judged on retention
@@ -235,6 +302,7 @@ apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,
   list(masks = masks, counts = counts, scatter_gate = sg, singlet = sb,
        viability_marker = vmk, viability_threshold = v_thr, viability_source = v_src,
        cd45_threshold = c_thr, cd45_source = c_src, cd45_x = cd45_x,
+       cd45_floor = if (cd45_name %in% names(mc)) tr$fn(0, cd45_name) else -Inf,
        cofactor = cofactor,
        # Empty on a run without --auto-fix-gates, and on any sample whose gates
        # rested on a density minimum. Collected by the caller into

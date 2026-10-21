@@ -9,7 +9,9 @@ best_threshold(
   ladder = c(4, 6, 8, 12, 16, 24, 32, 48, 64),
   bins = 400L,
   min_quality = 0.05,
-  fallback_q = 0.9
+  fallback_q = 0.9,
+  floor = -Inf,
+  prefer = c("deepest", "lowest")
 )
 }
 \arguments{
@@ -23,6 +25,14 @@ best_threshold(
 preferred over the tail rule. Default \code{0.05}.}
 
 \item{fallback_q}{quantile used only when nothing else is usable.}
+
+\item{floor}{no candidate at or below this value is considered; see
+\code{\link[=density_valley]{density_valley()}}. Default \code{-Inf}.}
+
+\item{prefer}{\code{"deepest"} (default) scores every candidate by the trough it
+sits in. \code{"lowest"}, for a gate that removes only the negative mode, takes
+the lowest density valley that sits in a real trough, and falls back to the
+scored choice when no valley does; see \code{\link[=density_valley]{density_valley()}}.}
 }
 \value{
 \code{list(threshold, source, quality)}, where \code{source} names the method

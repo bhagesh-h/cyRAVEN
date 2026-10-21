@@ -479,14 +479,16 @@ stats_paired_comparison <- function(freq, pair_of, cond_of, reference = NULL,
     vn <- paste0(value_col, ".", conds)
     have <- intersect(vn, names(w))
     if (length(have) < 2L) next
-    complete <- stats::complete.cases(w[, have, drop = FALSE])
-    n_drop <- sum(!complete)
-    w <- w[complete, , drop = FALSE]
-    if (nrow(w) < min_pairs) next
 
+    # THE OMNIBUS NEEDS EVERY CONDITION, EACH PAIRWISE TEST ONLY ITS TWO. Friedman
+    # is computed on the donors seen at every condition. Each Wilcoxon against
+    # the reference uses every donor seen at both of its conditions. Requiring
+    # all conditions for the pairwise tests too dropped, in a d0/d3/d7 design
+    # where 10 donors had d0 and d3 but only 7 all three, 3 of the 10 d3 pairs.
     p_omni <- NA_real_
-    if (length(conds) > 2L && length(have) == length(conds)) {
-      fr <- try(stats::friedman.test(as.matrix(w[, have, drop = FALSE])), silent = TRUE)
+    all_c <- stats::complete.cases(w[, have, drop = FALSE])
+    if (length(conds) > 2L && length(have) == length(conds) && sum(all_c) >= min_pairs) {
+      fr <- try(stats::friedman.test(as.matrix(w[all_c, have, drop = FALSE])), silent = TRUE)
       if (!inherits(fr, "try-error")) p_omni <- fr$p.value
     }
     rcol <- paste0(value_col, ".", reference)
@@ -494,12 +496,15 @@ stats_paired_comparison <- function(freq, pair_of, cond_of, reference = NULL,
     for (cd in setdiff(conds, reference)) {
       ccol <- paste0(value_col, ".", cd)
       if (!ccol %in% names(w)) next
-      a <- w[[rcol]]; b <- w[[ccol]]
+      in_a <- is.finite(w[[rcol]]); in_b <- is.finite(w[[ccol]])
+      ok <- in_a & in_b
+      if (sum(ok) < min_pairs) next
+      a <- w[[rcol]][ok]; b <- w[[ccol]][ok]
       wt <- try(stats::wilcox.test(a, b, paired = TRUE, exact = FALSE), silent = TRUE)
       rows[[length(rows) + 1L]] <- data.frame(
         population = pop, measure = value_col,
         reference_condition = reference, comparison_condition = cd,
-        n_pairs = nrow(w), n_incomplete_pairs_dropped = n_drop,
+        n_pairs = sum(ok), n_incomplete_pairs_dropped = sum(xor(in_a, in_b)),
         median_reference = stats::median(a), median_comparison = stats::median(b),
         median_paired_difference = stats::median(b - a),
         # Matched-pairs rank-biserial: the share of pairs moving up minus the

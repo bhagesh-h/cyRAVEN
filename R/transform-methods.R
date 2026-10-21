@@ -109,17 +109,28 @@ derive_logicle_pooled <- function(reads, sids, markers = NULL, m = 4.5, a = 0,
   }, add = TRUE)
   set.seed(seed)
 
-  use <- if (length(sids) > max_samples)
-    sids[round(seq(1, length(sids), length.out = max_samples))] else sids
-  if (is.null(markers)) markers <- names(reads[[use[1]]]$marker_cols)
+  pick <- function(x) if (length(x) > max_samples)
+    x[round(seq(1, length(x), length.out = max_samples))] else x
+  use <- pick(sids)
+  # EVERY MARKER OF THE PANEL, POOLED FROM THE FILES THAT CARRY IT. The list used
+  # to come from the first file alone, and marker_cols is a named integer vector,
+  # where [[ on an absent name is an error rather than NULL. Under
+  # --panel-optional-markers some files lack a marker, so a run with logicle
+  # stopped with "subscript out of bounds", and a marker absent from the first
+  # file got no parameters at all. For a marker every file carries the files
+  # pooled are exactly those pooled before.
+  has_mk <- function(s, mk) mk %in% names(reads[[s]]$marker_cols)
+  if (is.null(markers))
+    markers <- unique(unlist(lapply(sids, function(s) names(reads[[s]]$marker_cols))))
 
   out <- list()
   for (mk in markers) {
-    vals <- unlist(lapply(use, function(s) {
+    carriers <- sids[vapply(sids, has_mk, logical(1), mk = mk)]
+    from <- if (length(carriers) == length(sids)) use else pick(carriers)
+    vals <- unlist(lapply(from, function(s) {
       rd <- reads[[s]]
-      j <- rd$marker_cols[[mk]]
-      if (is.null(j)) return(NULL)
-      v <- rd$exprs[, j]
+      if (is.null(rd$exprs) || !has_mk(s, mk)) return(NULL)
+      v <- rd$exprs[, rd$marker_cols[[mk]]]
       if (length(v) > max_events) v <- v[sort(sample(length(v), max_events))]
       v
     }), use.names = FALSE)

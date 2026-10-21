@@ -580,14 +580,13 @@ fig_population_marker_heatmap <- function(mfi, outfile, scale_by = c("marker", "
           plot.subtitle = element_text(lineheight = 1.15),
           plot.caption = element_text(size = 7, hjust = 0, lineheight = 1.2,
                                       colour = colors$caption_text),
-          # Top-left rather than right: this heatmap grows with the panel, and
-          # on a wide one the colour key ends up far from the cells it explains.
-          # A horizontal bar under the title sits where reading starts and costs
-          # height rather than width, which this figure has more of.
-          legend.position = "top", legend.justification = "left",
-          legend.direction = "horizontal",
-          legend.key.height = unit(9, "pt"),
-          legend.key.width = unit(26, "pt"),
+          # Beside the heatmap, at its top, as every legend in the package is:
+          # a key above the figure pushes the cells down and is read before the
+          # thing it explains.
+          legend.position = "right", legend.justification = "top",
+          legend.direction = "vertical",
+          legend.key.height = unit(26, "pt"),
+          legend.key.width = unit(9, "pt"),
           legend.margin = margin(b = 2))
 
   h <- h + 0.16 * (lengths(regmatches(fig$labels$subtitle,

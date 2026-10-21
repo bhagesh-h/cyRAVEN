@@ -11,8 +11,9 @@ plan_subsample(n_per_sample, cap = 20000L, equalise = TRUE, total_cap = NULL)
 
 \item{cap}{maximum cells to take from any one sample.}
 
-\item{equalise}{if TRUE, take min(cap, smallest sample's N) from every sample
-so all samples contribute equally; if FALSE, take min(cap, N) per sample.}
+\item{equalise}{if TRUE, take min(cap, lower quartile of N) from every sample,
+or all of a sample's cells where it has fewer; if FALSE, take min(cap, N)
+per sample.}
 
 \item{total_cap}{optional overall ceiling on embedded cells; the per-sample
 allowance is reduced proportionally if the total would exceed it.}
@@ -24,7 +25,16 @@ named integer vector: sample_id -> number of cells to draw.
 WHAT: returns row indices, per sample, capped so no sample dominates.
 WHY:  event counts differ by orders of magnitude between files. Embedding all
 cells lets the largest file dictate the manifold and makes "sample"
-structure indistinguishable from acquisition depth. Equal-N per sample
-(or the smallest sample's N, whichever is smaller) makes cross-sample
-comparison of the shared embedding meaningful.
+structure indistinguishable from acquisition depth. Drawing about the
+same number from each sample makes the shared embedding comparable
+between samples.
+}
+\details{
+WHY THE LOWER QUARTILE AND NOT THE SMALLEST SAMPLE. The level used to be the
+smallest sample's count, so one sample with few cells shrank every other
+sample to its size. On one cohort a sample with 393 CD45+ cells cut a map that
+could have held 59,000 cells down to 5,895, and the populations on it broke
+into sparse specks. The level is now the lower quartile of the counts: no
+sample contributes more than it, so none dominates, and the quarter of samples
+below it contribute every cell they have.
 }

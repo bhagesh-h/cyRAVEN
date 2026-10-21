@@ -824,7 +824,10 @@ run_cyraven_impl <- function(opt) {
                               if (.cc_ok) cx else NULL, override = .ov,
                               control_kind = .kind,
                               control_threshold = if (.cc_ok) .cc$threshold else NULL,
-                              adaptive = isTRUE(opt$adaptive_gates))
+                              adaptive = isTRUE(opt$adaptive_gates),
+                              # zero signal on this marker's scale; scatter is
+                              # log10 and strictly positive, so it has no floor
+                              floor = if (m %in% names(rd$marker_cols)) tr$fn(0, m) else -Inf)
       thr[[m]] <- rr$threshold; tdet[[m]] <- rr
       qdens[[m]] <- tmat[g$masks$cd45_pos, m]
       thr_rows[[length(thr_rows) + 1L]] <- data.frame(
@@ -874,11 +877,56 @@ run_cyraven_impl <- function(opt) {
       rd <- NULL
     }
   }
+  # ---- --auto-fix-gates: population cuts the sample could not measure ---------
+  # A quantile fallback, or a tail-rule cut far from what the other samples'
+  # density minima gave, is replaced by the median of those minima, and the
+  # sample is scored again. See peer_cut_replacements() in gate-autofix.R.
+  if (isTRUE(opt$auto_fix_gates) && length(thr_rows)) {
+    .thr_df <- do.call(rbind, thr_rows)
+    .rep <- peer_cut_replacements(.thr_df)
+    if (!is.null(.rep)) {
+      .row_of <- setNames(seq_along(thr_rows), paste(.thr_df$sample_id, .thr_df$marker, sep = "\r"))
+      for (r in seq_len(nrow(.rep))) {
+        s <- .rep$sample_id[r]; m <- .rep$marker[r]; k <- .row_of[[paste(s, m, sep = "\r")]]
+        thr_rows[[k]]$derived_threshold <- thr_rows[[k]]$threshold
+        thr_rows[[k]]$derived_source <- thr_rows[[k]]$source
+        thr_rows[[k]]$threshold <- .rep$threshold[r]
+        thr_rows[[k]]$source <- "peer_median"
+        pops[[s]]$thresholds[[m]] <- .rep$threshold[r]
+        pops[[s]]$details[[m]]$threshold <- .rep$threshold[r]
+        pops[[s]]$details[[m]]$source <- "peer_median"
+        qc_recon[[s]]$thresholds[[m]] <- pops[[s]]$details[[m]]
+      }
+      for (s in unique(.rep$sample_id)) {
+        P <- pops[[s]]; cd45 <- gates[[s]]$masks$cd45_pos
+        hi <- derive_intermediate_bounds(P$tmat, P$thresholds, cd45, spec)
+        pops[[s]]$scored <- score_populations(P$tmat, P$thresholds, cd45, spec, hi_thr = hi)
+        pops[[s]]$hi_thresholds <- hi
+      }
+      .padj <- do.call(rbind, lapply(seq_len(nrow(.rep)), function(r)
+        gate_adjustment_row(.rep$sample_id[r], "population cut", .rep$marker[r],
+                            .rep$old_source[r], .rep$old_threshold[r],
+                            sprintf("replaced by %.3f", .rep$threshold[r]),
+                            .rep$reason[r], NA_real_, NA_real_)))
+      .gadj <- if (!is.null(.gadj) && nrow(.gadj)) rbind(.gadj, .padj) else .padj
+      write.csv(.gadj, file.path(opt$outdir, "gate_adjustments.csv"), row.names = FALSE)
+      log_msg("--auto-fix-gates: ", nrow(.rep), " population cut(s) in ",
+              length(unique(.rep$sample_id)), " sample(s) replaced by the median of ",
+              "the other samples' density minima (gate_adjustments.csv):")
+      for (r in seq_len(nrow(.rep)))
+        log_msg("    ", .rep$sample_id[r], " / ", .rep$marker[r], ": ",
+                round(.rep$old_threshold[r], 3), " (", .rep$old_source[r], ") -> ",
+                round(.rep$threshold[r], 3))
+    }
+  }
+
   # The controls held back above are released now that every sample that could
   # reference them has been scored.
   if (!isTRUE(opt$keep_exprs))
     for (.cs in unlist(ctrl_by_panel)) if (!is.null(.cs)) reads[[.cs]]$exprs <- NULL
-  fig_gating_qc(qc_recon, file.path(opt$outdir, "gating_qc.png"))
+  .tr_lab <- unique(vapply(transforms, function(t) t$label %||% "transformed intensity", ""))
+  fig_gating_qc(qc_recon, file.path(opt$outdir, "gating_qc.png"),
+                x_label = if (length(.tr_lab) == 1L) .tr_lab else "transformed intensity")
 
   if (!is.null(opt$write_config)) {
     derived <- list()
@@ -1069,7 +1117,12 @@ run_cyraven_impl <- function(opt) {
       lineage_only = !isTRUE(opt$umap_markers_all))
     navail <- vapply(inc, function(s) sum(gates[[s]]$masks$cd45_pos), integer(1))
     planned <- plan_subsample(setNames(navail, inc), cap = opt$cells_per_sample,
+                              equalise = !isTRUE(opt$no_equalise),
                               total_cap = opt$max_cells)
+    if (any(planned < navail[names(planned)]))
+      log_msg("  embedding draws ", sum(planned), " of ", sum(navail), " gated cells: ",
+              "at most ", max(planned), " per sample",
+              if (!isTRUE(opt$no_equalise)) " (pass --no-equalise to embed every cell)" else "")
     .rare <- identical(opt$subsample %||% "uniform", "rare")
     rows <- list()
     for (s in inc) {
@@ -1189,7 +1242,7 @@ run_cyraven_impl <- function(opt) {
       }
     }
     if (is.null(emb))
-      emb <- run_umap(.fmat,
+      emb <- run_umap(.fmat, scale_method = umap_scale_method(opt),
                       n_neighbors = opt$n_neighbors, min_dist = opt$min_dist,
                       n_threads = if (opt$threads > 0) opt$threads else NULL,
                       seed = opt$seed,
@@ -1298,6 +1351,9 @@ run_cyraven_impl <- function(opt) {
     fig_umap_overview(embeddings[[p$name]]$cells,
                       file.path(opt$outdir, paste0("umap_overview", sfx, ".png")),
                       panel_label = p$name, feature_cols = fcols)
+    fig_umap_populations(embeddings[[p$name]]$cells,
+                         file.path(opt$outdir, paste0("umap_populations", sfx, ".png")),
+                         panel_label = p$name)
     fig_marker_grid(embeddings[[p$name]]$cells, fcols,
                     file.path(opt$outdir, paste0("umap_markers", sfx, ".png")),
                     panel_label = p$name)
@@ -2752,8 +2808,10 @@ run_cyraven_impl <- function(opt) {
         if (!is.null(ps)) {
           write.csv(ps, file.path(opt$outdir, "paired_comparison_stats.csv"),
                     row.names = FALSE)
-          log_msg("wrote paired_comparison_stats.csv (", nrow(ps), " tests, ",
-                  max(ps$n_pairs), " complete pairs; ",
+          np <- tapply(ps$n_pairs, ps$comparison_condition, max)
+          log_msg("wrote paired_comparison_stats.csv (", nrow(ps), " tests; pairs: ",
+                  paste0(names(np), " vs ", ps$reference_condition[1], " ", np,
+                         collapse = ", "), "; ",
                   sum(ps$n_incomplete_pairs_dropped), " incomplete pair-slots dropped)")
         } else {
           log_msg("  NOTE paired test produced nothing, check that every pairing ",
@@ -2932,7 +2990,8 @@ run_cyraven_impl <- function(opt) {
         ec <- embeddings[[pn]]$cells
         uc <- run_unsupervised_clusters(ec, embeddings[[pn]]$features,
                                         n_clusters = opt$cluster_k,
-                                        grid = opt$cluster_grid, seed = opt$seed)
+                                        grid = opt$cluster_grid, seed = opt$seed,
+                                        scale_method = umap_scale_method(opt))
         if (!is.null(uc)) {
           out <- data.frame(sample_id = ec$sample_id,
                             event_index = ec$event_index,

@@ -4,7 +4,14 @@
 \alias{fig_gating_qc}
 \title{Per-gate QC figure: every applied gate shown per sample with its threshold}
 \usage{
-fig_gating_qc(recon, outfile, dpi = 200, colors = fcs_colors())
+fig_gating_qc(
+  recon,
+  outfile,
+  dpi = 200,
+  colors = fcs_colors(),
+  x_label = "transformed intensity",
+  per_sample = TRUE
+)
 }
 \arguments{
 \item{recon}{The recon.}
@@ -14,6 +21,12 @@ fig_gating_qc(recon, outfile, dpi = 200, colors = fcs_colors())
 \item{dpi}{Resolution in dots per inch. May be reduced automatically to respect the raster ceiling; see \code{\link[=safe_ggsave]{safe_ggsave()}}. Default \code{200}.}
 
 \item{colors}{Named list of colours; defaults to the package palette. See \code{\link[=fcs_colors]{fcs_colors()}}. Default \code{fcs_colors()}.}
+
+\item{x_label}{Axis label naming the scale the cuts are on, e.g. the run's
+\code{transform$label}. Default \code{"transformed intensity"}.}
+
+\item{per_sample}{Also write one page per sample into a folder named after
+\code{outfile} (\verb{gating_qc/} for \code{gating_qc.png}). Default \code{TRUE}.}
 }
 \description{
 WHY THIS IS A DELIVERABLE: a gated analysis is only as trustworthy as its

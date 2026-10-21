@@ -55,14 +55,23 @@ select_umap_features <- function(marker_cols, prefer = NULL, exclude = NULL,
 #' WHAT: returns row indices, per sample, capped so no sample dominates.
 #' WHY:  event counts differ by orders of magnitude between files. Embedding all
 #'       cells lets the largest file dictate the manifold and makes "sample"
-#'       structure indistinguishable from acquisition depth. Equal-N per sample
-#'       (or the smallest sample's N, whichever is smaller) makes cross-sample
-#'       comparison of the shared embedding meaningful.
+#'       structure indistinguishable from acquisition depth. Drawing about the
+#'       same number from each sample makes the shared embedding comparable
+#'       between samples.
+#'
+#' WHY THE LOWER QUARTILE AND NOT THE SMALLEST SAMPLE. The level used to be the
+#' smallest sample's count, so one sample with few cells shrank every other
+#' sample to its size. On one cohort a sample with 393 CD45+ cells cut a map that
+#' could have held 59,000 cells down to 5,895, and the populations on it broke
+#' into sparse specks. The level is now the lower quartile of the counts: no
+#' sample contributes more than it, so none dominates, and the quarter of samples
+#' below it contribute every cell they have.
 #'
 #' @param n_per_sample named integer vector: sample_id -> number of gated cells.
 #' @param cap maximum cells to take from any one sample.
-#' @param equalise if TRUE, take min(cap, smallest sample's N) from every sample
-#'   so all samples contribute equally; if FALSE, take min(cap, N) per sample.
+#' @param equalise if TRUE, take min(cap, lower quartile of N) from every sample,
+#'   or all of a sample's cells where it has fewer; if FALSE, take min(cap, N)
+#'   per sample.
 #' @param total_cap optional overall ceiling on embedded cells; the per-sample
 #'   allowance is reduced proportionally if the total would exceed it.
 #' @return named integer vector: sample_id -> number of cells to draw.
@@ -72,15 +81,16 @@ plan_subsample <- function(n_per_sample, cap = 20000L, equalise = TRUE,
   n_per_sample <- n_per_sample[n_per_sample > 0]
   if (!length(n_per_sample)) stop("no sample has any gated cells to embed")
   take <- if (equalise) {
-    rep(min(cap, min(n_per_sample)), length(n_per_sample))
+    level <- min(cap, floor(stats::quantile(n_per_sample, 0.25, names = FALSE)))
+    pmin(level, n_per_sample)
   } else {
     pmin(cap, n_per_sample)
   }
   names(take) <- names(n_per_sample)
   if (!is.null(total_cap) && sum(take) > total_cap) {
     take <- pmax(1L, floor(take * total_cap / sum(take)))
-    message("[subsample] total cap ", total_cap, " applied -> ",
-            unique(take)[1], " cells/sample")
+    message("[subsample] total cap ", total_cap, " applied -> at most ",
+            max(take), " cells/sample")
   }
   as.integer(take) -> v; names(v) <- names(take); v
 }

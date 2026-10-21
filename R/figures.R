@@ -458,12 +458,16 @@ fig_umap_overview <- function(cells, outfile, panel_label = "",
     # Capping the rows spends the surplus sideways instead -- ten samples make
     # one column, twenty make two, forty make four -- and every key stays inside
     # the image.
+    .cnt <- table(cells$sample_id)
+    .per <- if (length(unique(as.integer(.cnt))) == 1L) "equal cells per sample"
+            else sprintf("%s to %s cells per sample", format(min(.cnt), big.mark = ","),
+                         format(max(.cnt), big.mark = ","))
     .p <- umap_discrete(
       cells, "sample_id", title = "Sample",
       subtitle = if (nsmp > .smp_cap)
-        paste0(format(nsmp, big.mark = ","), " samples, equal cells each; ",
+        paste0(format(nsmp, big.mark = ","), " samples, ", .per, "; ",
                "key omitted at this count, see cells_umap.csv")
-      else "equal cells per sample",
+      else .per,
       legend_rows = min(10L, nsmp), colors = colors)
     if (nsmp > .smp_cap) .p <- .p + theme(legend.position = "none")
     plots[["sample"]] <- .p
@@ -496,6 +500,75 @@ fig_umap_overview <- function(cells, outfile, panel_label = "",
   safe_ggsave(outfile, plot = fig, width = width, height = height, dpi = dpi,
              limitsize = FALSE)
   message("[fig] wrote ", outfile)
+  invisible(fig)
+}
+
+#' One large UMAP coloured by population, with the names on the map
+#'
+#' WHAT: a single panel, every population in its own colour, its name printed at
+#' its median position, and a key beside the panel giving each population's
+#' share of the embedded cells.
+#'
+#' WHY: umap_overview.png answers several questions at once, sample mixing, sex,
+#' age, cohort, and to fit six panels in one image each is small, the points are
+#' specks and nothing is labelled. The first question anyone asks of a UMAP is
+#' which island is which population, and that needs one panel large enough to
+#' read, with the answer written on it rather than matched by eye against a key.
+#'
+#' @param cells Embedded cell table with `umap_1`, `umap_2`, `population_label`.
+#' @param outfile Path to write the figure to.
+#' @param panel_label Panel name for the title. Default `""`.
+#' @param width,height Size in inches. Defaults `11` and `8.5`.
+#' @param dpi Resolution. Default `300`.
+#' @param colors Named list of colours. Default `fcs_colors()`.
+#' @return The ggplot object, invisibly.
+#' @keywords internal
+fig_umap_populations <- function(cells, outfile, panel_label = "", width = 11,
+                                 height = 8.5, dpi = 300, colors = fcs_colors()) {
+  if (!all(c("umap_1", "umap_2", "population_label") %in% names(cells)) || !nrow(cells))
+    return(invisible(NULL))
+  n <- table(cells$population_label)
+  keylab <- stats::setNames(sprintf("%s  (%.1f%%)", names(n), 100 * as.numeric(n) / sum(n)),
+                            names(n))
+  fig <- umap_discrete(cells, "population_label", colors = colors,
+                       point_size = auto_point_aes(nrow(cells))$size * 1.6,
+                       title = paste0("Gated populations on the shared CD45+ UMAP",
+                                      if (nzchar(panel_label)) paste0(", ", panel_label) else ""),
+                       subtitle = paste0(format(nrow(cells), big.mark = ","),
+                                         " cells; names at each population's median position, ",
+                                         "share of the embedded cells in the key")) +
+    scale_colour_manual(values = population_colours(names(n), colors = colors),
+                        labels = keylab, name = NULL, drop = FALSE) +
+    theme(legend.position = "right", legend.justification = "top")
+  # Names at the median, skipping populations too small to place one reliably.
+  big <- names(n)[as.numeric(n) >= max(30, 0.002 * sum(n)) &
+                  !grepl("^Other|unclassified", names(n), ignore.case = TRUE)]
+  if (length(big)) {
+    ctr <- do.call(rbind, lapply(big, function(l) {
+      d <- cells[cells$population_label == l, , drop = FALSE]
+      data.frame(lab = l, umap_1 = stats::median(d$umap_1), umap_2 = stats::median(d$umap_2))
+    }))
+    # Nudge labels apart where two would overprint: populations that share an
+    # island (dendritic cells inside the monocytes, for example) have medians a
+    # few points apart. Each label is moved down, in median order, until it
+    # clears every label already placed.
+    xr <- diff(range(cells$umap_1)); yr <- diff(range(cells$umap_2))
+    ctr <- ctr[order(-ctr$umap_2), , drop = FALSE]
+    for (i in seq_len(nrow(ctr))[-1]) for (j in seq_len(i - 1L)) {
+      while (abs(ctr$umap_1[i] - ctr$umap_1[j]) < 0.16 * xr &&
+             abs(ctr$umap_2[i] - ctr$umap_2[j]) < 0.035 * yr)
+        ctr$umap_2[i] <- ctr$umap_2[i] - 0.01 * yr
+    }
+    halo <- 0.06 * diff(range(cells$umap_1)) / 20
+    for (o in list(c(1, 1), c(1, -1), c(-1, 1), c(-1, -1)))
+      fig <- fig + geom_text(data = ctr, aes(umap_1 + o[1] * halo, umap_2 + o[2] * halo,
+                                             label = lab), inherit.aes = FALSE,
+                             size = 3.4, fontface = "bold", colour = "white")
+    fig <- fig + geom_text(data = ctr, aes(umap_1, umap_2, label = lab), inherit.aes = FALSE,
+                           size = 3.4, fontface = "bold", colour = colors$label_text)
+  }
+  safe_ggsave(outfile, plot = fig, width = width, height = height, dpi = dpi)
+  log_msg("[fig] wrote ", outfile)
   invisible(fig)
 }
 
@@ -693,7 +766,7 @@ fig_marker_grid <- function(cells, markers, outfile, panel_label = "",
   plots <- lapply(markers, function(m) {
     umap_continuous(cells, m, title = m, point_size = ps, compact_bar = TRUE,
                     colors = colors) +
-      theme(legend.position = "bottom",
+      theme(legend.position = "right",
             legend.margin = margin(t = -4, b = 0),
             legend.text = element_text(size = 6),
             axis.title = element_blank(), axis.text = element_blank(),
@@ -1203,8 +1276,13 @@ empty_panel <- function(msg, colors = fcs_colors()) {
 #' @param outfile Path to write the figure to.
 #' @param dpi Resolution in dots per inch. May be reduced automatically to respect the raster ceiling; see [safe_ggsave()]. Default `200`.
 #' @param colors Named list of colours; defaults to the package palette. See [fcs_colors()]. Default `fcs_colors()`.
+#' @param x_label Axis label naming the scale the cuts are on, e.g. the run's
+#'   `transform$label`. Default `"transformed intensity"`.
+#' @param per_sample Also write one page per sample into a folder named after
+#'   `outfile` (`gating_qc/` for `gating_qc.png`). Default `TRUE`.
 #' @export
-fig_gating_qc <- function(recon, outfile, dpi = 200, colors = fcs_colors()) {
+fig_gating_qc <- function(recon, outfile, dpi = 200, colors = fcs_colors(),
+                          x_label = "transformed intensity", per_sample = TRUE) {
   curves <- list(); labs <- list()
   for (r in recon) {
     thr <- r$thresholds %||% list()
@@ -1215,17 +1293,17 @@ fig_gating_qc <- function(recon, outfile, dpi = 200, colors = fcs_colors()) {
       # density() cannot pick a bandwidth from a single point.
       if (length(x) < 2L) next
       # from/to are pinned to the data range on purpose, and n = 512 matches
-      # stat_density's default. ggplot evaluates its KDE over the panel's data
-      # range, whereas stats::density() defaults to range +/- 3*bandwidth; left
-      # at the default the curve would be drawn on a wider grid than
-      # geom_density used and every panel's tails would shift. With them pinned
-      # the rendered layer is IDENTICAL to the old geom_density output to
-      # floating-point equality (verified against ggplot_build on this study's
-      # own data), so this is purely a memory fix and changes no figure.
+      # stat_density's default, so the curve is the one geom_density drew.
       dk <- stats::density(x, n = 512, from = min(x), to = max(x))
+      # EACH CURVE SCALED TO ITS OWN PANEL. facet_grid() shares the y axis along
+      # a row, so the tallest of a sample's markers set the scale for all of
+      # them and the rest were drawn as flat lines along the bottom: the figure
+      # was sharp at full size and unreadable at any size it is looked at. The
+      # height of a density says nothing about where a cut belongs; its shape
+      # does, and that is what this keeps.
       curves[[length(curves) + 1L]] <- data.frame(
         sample_id = r$sample_id, marker = mk,
-        value = dk$x, density = dk$y, stringsAsFactors = FALSE)
+        value = dk$x, density = dk$y / max(dk$y), stringsAsFactors = FALSE)
       labs[[length(labs) + 1L]] <- data.frame(
         sample_id = r$sample_id, marker = mk,
         threshold = thr[[mk]]$threshold %||% NA_real_,
@@ -1238,33 +1316,61 @@ fig_gating_qc <- function(recon, outfile, dpi = 200, colors = fcs_colors()) {
   d <- do.call(rbind, curves)
   lab <- do.call(rbind, labs)
   lab$tag <- ifelse(lab$needs_review, paste0(lab$source, " (REVIEW)"), lab$source)
-  fig <- ggplot(d, aes(value, density)) +
-    geom_area(aes(fill = sample_id), colour = NA, alpha = 0.45) +
-    geom_vline(data = lab, aes(xintercept = threshold, colour = needs_review),
-               linewidth = 0.5, linetype = "dashed", show.legend = FALSE) +
-    geom_text(data = lab, aes(x = threshold, y = Inf, label = tag),
-              hjust = -0.05, vjust = 1.6, size = 2.4, colour = colors$label_text) +
-    scale_colour_manual(values = c(`FALSE` = colors$threshold_ok, `TRUE` = colors$threshold_review)) +
-    scale_fill_manual(values = pop_palette(length(unique(d$sample_id)), colors = colors), name = NULL) +
-    facet_grid(sample_id ~ marker, scales = "free") +
+  fills <- stats::setNames(pop_palette(length(unique(d$sample_id)), colors = colors),
+                           sort(unique(d$sample_id)))
+
+  layers <- function(dd, ll, text_size) list(
+    geom_area(data = dd, aes(fill = sample_id), colour = NA, alpha = 0.55),
+    geom_vline(data = ll, aes(xintercept = threshold, colour = needs_review),
+               linewidth = 0.6, linetype = "dashed", show.legend = FALSE),
+    geom_text(data = ll, aes(x = threshold, y = Inf, label = tag),
+              hjust = -0.05, vjust = 1.5, size = text_size, colour = colors$label_text),
+    scale_colour_manual(values = c(`FALSE` = colors$threshold_ok, `TRUE` = colors$threshold_review)),
+    scale_fill_manual(values = fills, guide = "none"),
+    scale_y_continuous(breaks = NULL, expand = expansion(mult = c(0, 0.18))),
+    labs(x = x_label, y = "density, scaled to each panel"))
+
+  fig <- ggplot(d, aes(value, density)) + layers(d, lab, 2.6) +
+    facet_grid(sample_id ~ marker, scales = "free_x") +
     labs(title = "Gating QC, every applied threshold on its own distribution",
          subtitle = paste("dashed line = applied cut, labelled with its source;",
-                          "highlighted colour = needs review (quantile fallback)"),
-         x = "asinh-transformed intensity", y = "density") +
-    theme_cyto(9, colors = colors) + theme(legend.position = "none",
-                          strip.text.y = element_text(angle = 0, size = 7),
-                          strip.text.x = element_text(size = 7),
-                          axis.text = element_text(size = 6))
+                          "red = needs review (quantile fallback).",
+                          "One readable page per sample is in gating_qc/")) +
+    theme_cyto(10, colors = colors) + theme(legend.position = "none",
+                          strip.text.y = element_text(angle = 0, size = 8),
+                          strip.text.x = element_text(size = 9, face = "bold"),
+                          axis.text = element_text(size = 7))
   nmk <- length(unique(d$marker)); nsm <- length(unique(d$sample_id))
-  # facet_grid(sample_id ~ marker) is a true 2D cross-tabulation -- unlike
-  # facet_wrap it cannot be wrapped into a bounded grid without breaking the
-  # marker-column alignment across samples. safe_ggsave's dpi clamp keeps a
-  # large sample x marker count from crashing the raster device; it gets
-  # dense rather than unbounded, which is acceptable for a figure meant to be
-  # read per sample rather than as a single glance.
-  safe_ggsave(outfile, plot = fig, width = max(8, 1.9 * nmk), height = max(4, 1.7 * nsm),
+  # facet_grid(sample_id ~ marker) is a true 2D cross-tabulation, so it cannot
+  # wrap without breaking the marker-column alignment across samples. It is the
+  # overview; the per-sample pages below are the version meant for reading.
+  safe_ggsave(outfile, plot = fig, width = max(8, 1.9 * nmk), height = max(4, 1.5 * nsm),
              dpi = dpi, limitsize = FALSE)
   log_msg("[fig] wrote ", outfile)
+
+  # ONE PAGE PER SAMPLE, every marker in its own panel with its own axis, at a
+  # size that reads on a screen without zooming. This is where a misplaced cut
+  # is actually found.
+  if (isTRUE(per_sample)) {
+    page_dir <- file.path(dirname(outfile), sub("\\.png$", "", basename(outfile)))
+    dir.create(page_dir, showWarnings = FALSE, recursive = TRUE)
+    ncol <- min(5L, nmk); nrow <- ceiling(nmk / ncol)
+    for (sid in unique(d$sample_id)) {
+      dd <- d[d$sample_id == sid, , drop = FALSE]
+      ll <- lab[lab$sample_id == sid, , drop = FALSE]
+      ll$tag <- sprintf("%s\n%.2f", ll$tag, ll$threshold)
+      pg <- ggplot(dd, aes(value, density)) + layers(dd, ll, 3.1) +
+        facet_wrap(~marker, scales = "free_x", ncol = ncol) +
+        labs(title = paste0("Gating QC: ", sid),
+             subtitle = "dashed line = applied cut, with its source and value; red = needs review") +
+        theme_cyto(11, colors = colors) + theme(legend.position = "none",
+                                                strip.text = element_text(face = "bold"))
+      safe_ggsave(file.path(page_dir, paste0(split_dir_name(sid), ".png")), plot = pg,
+                  width = 3 * ncol, height = 2.3 * nrow + 0.8, dpi = dpi)
+    }
+    log_msg("[fig] wrote ", length(unique(d$sample_id)), " per-sample page(s) in ",
+            basename(page_dir), "/")
+  }
   invisible(fig)
 }
 
@@ -1541,14 +1647,10 @@ fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort"
   keylab  <- setNames(sprintf("%d \u00b7 %s", num, names(num)), names(num))
   pal_pop <- population_colours(lv, colors = colors)
 
-  # The key sits ABOVE the panels, so it has to flow across rather than down.
-  # A single column of one entry per cluster is as tall as the UMAP row's whole
-  # allocation -- twelve clusters collapsed the panels to a sliver of pixels
-  # with the key occupying the rest -- and the taller the cohort's cluster
-  # count, the worse it gets. Six per row keeps the longest label readable at
-  # this figure's width; h_umap below grows by the number of rows so the panels
-  # keep their space instead of paying for the key.
-  lg_nrow <- max(1L, ceiling(length(lv) / 6L))
+  # The key sits BESIDE the panels, at their top, in as many columns as it needs
+  # to fit the UMAP row's height: a single column of one entry per cluster can be
+  # taller than the row, and then it is clipped. About 14 entries fit one column.
+  lg_ncol <- max(1L, ceiling(length(lv) / 14L))
 
   # --- UMAP row: pooled, then one panel per STUDY GROUP ----------------------
   # All panels are the SAME shared embedding restricted to different cells, so a
@@ -1631,7 +1733,7 @@ fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort"
     geom_point(size = ap$size, alpha = ap$alpha, stroke = 0) +
     scale_colour_manual(values = pal_pop, labels = keylab, name = "Cluster",
       guide = guide_legend(override.aes = list(size = 2.5, alpha = 1),
-                           nrow = lg_nrow)) +
+                           ncol = lg_ncol)) +
     facet_wrap(~ .panel, nrow = 1) +
     labs(title = "Shared CD45+ embedding, pooled, then one panel per study",
          subtitle = paste("labels are cluster+subcluster (4a, 4b, ...) and key the peak panels",
@@ -1639,14 +1741,11 @@ fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort"
                           "only where they would overprint"),
          x = "UMAP 1", y = "UMAP 2") +
     theme_cyto(9, colors = colors) +
-    # Top-left, not right. This figure runs to several thousand pixels tall, and
-    # a right-hand key is centred vertically inside its own pane, so the reader
-    # has to scroll away from the panels to see what a colour means. Both panes
-    # of the overlay put their key where reading starts instead. The standalone
-    # UMAP figures keep theirs on the right: they are single panels where the
-    # key is already beside what it describes.
-    theme(legend.position = "top", legend.justification = "left",
-          legend.direction = "horizontal", legend.margin = margin(b = 2),
+    # On the right and justified to the top of the panel row. Centred vertically,
+    # a key on this tall figure would sit far down its own pane, away from the
+    # panels it describes.
+    theme(legend.position = "right", legend.justification = "top",
+          legend.direction = "vertical", legend.margin = margin(b = 2),
           strip.text = element_text(size = 8))
   # Plain text, no box. The boxes were opaque enough to hide the very points they
   # sat on, and with one label per subcluster there are three times as many of
@@ -1713,8 +1812,8 @@ fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort"
                           "group_comparison.png"),
          x = "asinh-transformed intensity", y = "% of mode") +
     theme_cyto(9, colors = colors) +
-    theme(legend.position = "top", legend.justification = "left",
-          legend.direction = "horizontal", legend.margin = margin(b = 2),
+    theme(legend.position = "right", legend.justification = "top",
+          legend.direction = "vertical", legend.margin = margin(b = 2),
           strip.text = element_text(size = 6.5),
           axis.text = element_text(size = 5.5))
 
@@ -1727,8 +1826,8 @@ fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort"
   # (verified), so it is the composition step, not the plot. Laying the two
   # gtables into an explicit grid layout sidesteps patchwork's panel-alignment
   # logic entirely and is deterministic at any panel count.
-  h_umap <- 4.6 + 0.22 * lg_nrow; h_pk <- max(4, 1.30 * npp)
-  W <- max(15, 1.95 * nmk + 2.4); H <- h_umap + h_pk + 1.15
+  h_umap <- 4.8; h_pk <- max(4, 1.30 * npp)
+  W <- max(15, 1.95 * nmk + 2.4) + 1.6 * lg_ncol; H <- h_umap + h_pk + 1.15
   # Same raster ceiling safe_ggsave enforces, applied here since we drive the
   # device directly.
   dpi_use <- max(36L, min(as.integer(dpi), floor(getOption("cyRAVEN.max_raster_px", 30000L) / max(W, H))))

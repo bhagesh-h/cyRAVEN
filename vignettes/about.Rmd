@@ -79,7 +79,7 @@ function, so you can run or replace a single step.
 | 3 Gate | In each sample, cut each marker at the lowest point between its negative and positive peaks | `density_valley()`, `resolve_threshold()` |
 | 4 Score | Count the cells that meet each population's rule from your YAML | `score_populations()` |
 | 5 Uncertainty | Re-derive every cut on resampled events to see how far it moves | `threshold_uncertainty()` |
-| 6 Embed | Build a UMAP from an equal number of cells per sample | `run_umap()` |
+| 6 Embed | Build a UMAP with about the same number of cells from each sample | `run_umap()` |
 | 7 Test | Compare groups with one value per sample | `stats_group_comparison()` |
 | 8 Diagnose | Check whether the gates and populations held up | `stats_threshold_drift()`, `cluster_gate_agreement()` |
 | 9 Explain | Describe an unexplained cluster as a gating strategy | `explain_cluster()` |
@@ -467,10 +467,12 @@ The cost is real: some clusters split on scatter rather than lineage.
 `--explore-markers` overrides it.
 
 **Gate on clusters, not events.** Cluster coarsely first, then judge *whole
-clusters* by their median profile, so no per-event cutoff is invented. The
-debris and dead calls come from 2-means on the per-cluster medians when nothing
-better is available, and from per-sample thresholds when it is. Both are recorded
-in the `basis` column of `explore_qc_clusters.csv`.
+clusters* by their median profile, so no per-event cutoff is invented. The units
+judged are the SOM nodes rather than the merged clusters, because a merge can
+join debris to the CD45-dim cells beside it. The debris and dead calls come from
+2-means on the per-node medians when nothing better is available, and from
+per-sample thresholds when it is. Both are recorded in the `basis` column of
+`explore_qc_clusters.csv`.
 
 **Refuse a gate that keeps almost nothing.** Below `--explore-min-retained`
 (default 5%), the gate is ignored and the run flagged: at that point the markers

@@ -120,22 +120,33 @@ otsu_threshold <- function(x, nbins = 512L) {
 #' @param min_quality a candidate must sit in a trough at least this deep to be
 #'   preferred over the tail rule. Default `0.05`.
 #' @param fallback_q quantile used only when nothing else is usable.
+#' @param floor no candidate at or below this value is considered; see
+#'   [density_valley()]. Default `-Inf`.
+#' @param prefer `"deepest"` (default) scores every candidate by the trough it
+#'   sits in. `"lowest"`, for a gate that removes only the negative mode, takes
+#'   the lowest density valley that sits in a real trough, and falls back to the
+#'   scored choice when no valley does; see [density_valley()].
 #' @return `list(threshold, source, quality)`, where `source` names the method
 #'   that won so a reader can see how each cut was placed.
 #' @keywords internal
 best_threshold <- function(x, ladder = c(4, 6, 8, 12, 16, 24, 32, 48, 64),
-                           bins = 400L, min_quality = 0.05, fallback_q = 0.90) {
+                           bins = 400L, min_quality = 0.05, fallback_q = 0.90,
+                           floor = -Inf, prefer = c("deepest", "lowest")) {
+  prefer <- match.arg(prefer)
   x <- x[is.finite(x)]
   if (length(x) < 500L)
     return(list(threshold = NA_real_, source = "too_few_events", quality = NA_real_))
 
   cand <- list()
-  add <- function(nm, cut) if (is.numeric(cut) && length(cut) == 1L && is.finite(cut))
+  # A candidate at or below `floor` (zero signal) is not a cut; see density_valley().
+  add <- function(nm, cut) if (is.numeric(cut) && length(cut) == 1L && is.finite(cut) &&
+                               cut > floor)
     cand[[length(cand) + 1L]] <<- list(source = nm, cut = as.numeric(cut))
 
   for (s in ladder) {
     if ((2L * s + 1L) >= bins) next
-    v <- tryCatch(density_valley(x, bins = bins, smooth = s, details = TRUE),
+    v <- tryCatch(density_valley(x, bins = bins, smooth = s, floor = floor, prefer = prefer,
+                                 details = TRUE),
                   error = function(e) NULL)
     if (!is.null(v) && is.finite(v$cut)) add(paste0("valley_s", s), v$cut)
   }
@@ -145,6 +156,14 @@ best_threshold <- function(x, ladder = c(4, 6, 8, 12, 16, 24, 32, 48, 64),
 
   if (length(cand)) {
     q <- vapply(cand, function(z) gate_gap_quality(x, z$cut), numeric(1))
+    if (prefer == "lowest") {
+      ok <- which(startsWith(vapply(cand, `[[`, "", "source"), "valley") &
+                  is.finite(q) & q > min_quality)
+      if (length(ok)) {
+        b <- cand[[ok[which.min(vapply(cand[ok], `[[`, 0, "cut"))]]]
+        return(list(threshold = b$cut, source = b$source, quality = q[[match(list(b), cand)]]))
+      }
+    }
     if (any(is.finite(q)) && max(q, na.rm = TRUE) > min_quality) {
       b <- cand[[which.max(q)]]
       return(list(threshold = b$cut, source = b$source, quality = max(q, na.rm = TRUE)))
@@ -157,7 +176,7 @@ best_threshold <- function(x, ladder = c(4, 6, 8, 12, 16, 24, 32, 48, 64),
   # whatever the data look like, which is the fabrication this module exists to
   # remove, so it is the last resort and still reported as one.
   tu <- tryCatch(tail_threshold(x, side = "upper"), error = function(e) NA_real_)
-  if (is.finite(tu)) {
+  if (is.finite(tu) && tu > floor) {
     p <- mean(x > tu)
     if (p > 0.0002 && p < 0.60)
       return(list(threshold = tu, source = "tailgate", quality = NA_real_))

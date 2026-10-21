@@ -68,6 +68,8 @@ read_fcs_resolved <- function(path, sample_id = NULL, max_events = 0L,
   # same file contiguously takes seconds. The transient cost is one full matrix in
   # memory (a 10^6 x 21 double matrix is ~170 MB), which is released as soon as the
   # subsample is taken, so peak memory is bounded by the subsample, not the file.
+  # truncate_max_range = FALSE, and the clamping done afterwards by
+  # clamp_to_declared_range(), which can tell a stray value from a wrong $PnR.
   ff <- flowCore::read.FCS(path, transformation = FALSE, truncate_max_range = FALSE,
                  alter.names = TRUE)
   n_read_full <- nrow(flowCore::exprs(ff))
@@ -147,7 +149,8 @@ read_fcs_resolved <- function(path, sample_id = NULL, max_events = 0L,
     if (any(drop)) marker_cols <- marker_cols[!drop]
   }
 
-  ex <- flowCore::exprs(ff)
+  ex <- clamp_to_declared_range(flowCore::exprs(ff), flowCore::keyword(ff),
+                                label = basename(path))
   # n_events is what was READ (the denominator of every downstream percentage);
   # n_events_file is what the file claims. They differ only under --max-events-per-file.
   n_file <- suppressWarnings(as.integer(flowCore::keyword(ff)$`$TOT`))
@@ -157,6 +160,56 @@ read_fcs_resolved <- function(path, sample_id = NULL, max_events = 0L,
        n_events_file = if (is.finite(n_file)) n_file else n_read_full,
        subsampled = subsampled, file = basename(path),
        sample_id = sample_id %||% derive_sample_id(basename(path), flowCore::keyword(ff)))
+}
+
+#' Cap every channel at the maximum the file declares for it
+#'
+#' WHAT: each value above the channel's `$PnR` is set to `$PnR`, the same
+#' clamping flowCore's `read.FCS()` does by default and FlowJo does on import.
+#'
+#' WHY: a file stored as floats (`$DATATYPE F`) can hold values far above the
+#' range it declares, and acquisition software writes them. One cohort declared
+#' 262,144 on every channel and stored values up to 6.8e8 in 0.3% of events of
+#' most fluorescence channels. They are not measurements, and one of them is
+#' enough to wreck any scale fitted to the data: the logicle transform takes its
+#' top from the channel maximum, so a single 2e8 put every real event within a
+#' few hundredths of zero and every gate on the file became noise.
+#'
+#' ALWAYS, NOT ONLY WHEN FEW VALUES ARE OVER. An earlier version left a channel
+#' alone when more than 1% of its events were above `$PnR`, on the theory that
+#' the declared range was then the error. On that same cohort one file had more
+#' than 1% of its CD45 events above range, reaching 2e8, so its CD45 stayed
+#' uncapped and set the scale for the whole panel again. A channel with that many
+#' values over is named in a warning instead, so a genuinely wrong `$PnR` is
+#' still seen; it is capped either way, as every other tool would cap it.
+#'
+#' @param ex Expression matrix, events x channels, in file order.
+#' @param keywords FCS keywords, carrying `$P<n>R` for each channel.
+#' @param warn_frac Name a channel in a warning when more than this fraction of
+#'   its events was capped. Default `0.01`.
+#' @param label File name for the log line.
+#' @return `ex` with the out-of-range values capped.
+#' @keywords internal
+clamp_to_declared_range <- function(ex, keywords, warn_frac = 0.01, label = "") {
+  n_clamped <- 0L; many <- character(0)
+  for (i in seq_len(ncol(ex))) {
+    r <- suppressWarnings(as.numeric(keywords[[paste0("$P", i, "R")]] %||% NA))
+    if (length(r) != 1L || !is.finite(r) || r <= 0) next
+    over <- which(ex[, i] > r)
+    if (!length(over)) next
+    if (length(over) > warn_frac * nrow(ex))
+      many <- c(many, sprintf("%s (%.1f%%)", colnames(ex)[i], 100 * length(over) / nrow(ex)))
+    ex[over, i] <- r
+    n_clamped <- n_clamped + length(over)
+  }
+  if (n_clamped > 0L)
+    log_msg("  ", label, ": ", n_clamped, " value(s) above their channel's declared ",
+            "range ($PnR) capped at it")
+  if (length(many))
+    log_msg("  WARNING ", label, ": more than ", 100 * warn_frac, "% of events were above ",
+            "$PnR in ", paste(many, collapse = ", "), ". Capped, but check that the ",
+            "declared range is right for these channels")
+  ex
 }
 
 #' Derive a sample label from the FCS keywords or filename

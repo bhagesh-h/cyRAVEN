@@ -82,6 +82,9 @@ valley_setting_grid <- function() {
 #'     separate control tube not passed here, so neither component can be
 #'     computed from `x`. Both are NA with a reason, rather than a small number
 #'     that would read as confidence.
+#'   - `peer_median`: `--auto-fix-gates` took the cut from the density minima
+#'     of the other samples (see `peer_cut_replacements()`), so it was not
+#'     placed on `x` and there is nothing in `x` to resample. NA with a reason.
 #'
 #' @param x parent-gate values for one marker in one sample, on the analysis
 #'   scale
@@ -92,12 +95,17 @@ valley_setting_grid <- function() {
 #'   histogram feature and stops moving long before the full parent gate is used
 #' @param fallback_q the quantile [resolve_threshold()] falls back to
 #' @param grid setting combinations for the method component
+#' @param floor the floor [resolve_threshold()] placed the cut under, so every
+#'   resampled cut obeys the same rule. Default `-Inf`.
+#' @param prefer the valley preference the cut was placed with; see
+#'   [density_valley()]. Default `"deepest"`.
 #' @return list(u_sampling, u_method, u_combined, rel_depth, valley_rate,
 #'   n_events, basis)
 #' @export
 threshold_uncertainty <- function(x, source = "valley", B = 100L, seed = 42L,
                                   max_events = 20000L, fallback_q = 0.90,
-                                  grid = valley_setting_grid()) {
+                                  grid = valley_setting_grid(), floor = -Inf,
+                                  prefer = "deepest") {
   out <- list(u_sampling = NA_real_, u_method = NA_real_, u_combined = NA_real_,
               rel_depth = NA_real_, valley_rate = NA_real_,
               n_events = 0L, basis = NA_character_)
@@ -113,6 +121,14 @@ threshold_uncertainty <- function(x, source = "valley", B = 100L, seed = 42L,
   # separate tube whose events were not passed in, so neither component can be
   # estimated from `x`. NA with a reason, rather than a small number that would
   # read as confidence.
+  if (identical(source, "debris_reference")) {
+    out$basis <- "debris-event reference, not resampled here"
+    return(out)
+  }
+  if (identical(source, "peer_median")) {
+    out$basis <- "median of the other samples' density minima, not resampled here"
+    return(out)
+  }
   if (grepl("^control_q995|^fmo_q995|^fmm_q995", source %||% "")) {
     out$basis <- if (grepl("^fmm", source))
                    "minus-multiple control not available here"
@@ -139,7 +155,7 @@ threshold_uncertainty <- function(x, source = "valley", B = 100L, seed = 42L,
   boot <- vapply(seq_len(as.integer(B)), function(i) {
     xb <- x[sample.int(length(x), n_draw, replace = TRUE)]
     if (is_fb) as.numeric(quantile(xb, fallback_q, na.rm = TRUE))
-    else density_valley(xb)
+    else density_valley(xb, floor = floor, prefer = prefer)
   }, numeric(1))
   ok <- is.finite(boot)
   out$valley_rate <- mean(ok)
@@ -157,8 +173,9 @@ threshold_uncertainty <- function(x, source = "valley", B = 100L, seed = 42L,
   } else {
     meth <- vapply(seq_len(nrow(grid)), function(i)
       density_valley(xs, bins = grid$bins[i], smooth = grid$smooth[i],
-                     min_rel_depth = grid$min_rel_depth[i]), numeric(1))
-    d <- density_valley(xs, details = TRUE)
+                     min_rel_depth = grid$min_rel_depth[i], floor = floor,
+                     prefer = prefer), numeric(1))
+    d <- density_valley(xs, floor = floor, prefer = prefer, details = TRUE)
     out$rel_depth <- d$rel_depth
     out$basis <- "valley bootstrap; sweep over bins, smoothing and depth"
   }
@@ -435,7 +452,8 @@ run_gate_uncertainty <- function(pops, gates, verdicts, panel_of, spec,
       src <- P$details[[m]]$source %||% "valley"
       tu <- threshold_uncertainty(P$tmat[parent, m], source = src, B = B,
                                   seed = seed_for(paste0(s, "\r", m)),
-                                  max_events = max_events, grid = grid)
+                                  max_events = max_events, grid = grid,
+                                  floor = P$details[[m]]$floor %||% -Inf)
       u[[m]] <- tu$u_combined
       trows[[length(trows) + 1L]] <- data.frame(
         sample_id = s, panel = panel_of[[s]] %||% NA_character_, marker = m,
@@ -453,7 +471,8 @@ run_gate_uncertainty <- function(pops, gates, verdicts, panel_of, spec,
       cu <- threshold_uncertainty(g$cd45_x[g$masks$live_cells],
                                   source = g$cd45_source %||% "valley", B = B,
                                   seed = seed_for(paste0(s, "\rCD45")),
-                                  max_events = max_events, grid = grid)
+                                  max_events = max_events, grid = grid,
+                                  floor = g$cd45_floor %||% -Inf, prefer = "lowest")
       cd45_u <- cu$u_combined
       trows[[length(trows) + 1L]] <- data.frame(
         sample_id = s, panel = panel_of[[s]] %||% NA_character_,

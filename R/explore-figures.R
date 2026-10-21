@@ -179,7 +179,7 @@ explore_figures <- function(cells, feats, prof, ex_dir, tag = "",
         ggplot2::facet_wrap(~ grp, ncol = .nc) +
         ggplot2::scale_colour_viridis_c(option = "C") +
         ggplot2::labs(title = paste(m, "by", group_col),
-                      subtitle = paste("one embedding, equal cells per sample;",
+                      subtitle = paste("one embedding for every group;",
                                        "colour is expression, shared across panels"),
                       x = "UMAP1", y = "UMAP2", colour = m) +
         theme_cyto() + theme_panel_borders() +

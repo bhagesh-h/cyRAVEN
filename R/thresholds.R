@@ -21,6 +21,23 @@
 #' @param peak_frac The peak frac. Default `0.02`.
 #' @param min_gap_frac The min gap frac. Default `0.06`.
 #' @param range_q The range q. Default `c(0.001, 0.999)`.
+#' @param floor no cut is accepted at or below this value. Callers pass the
+#'   transformed value of zero signal, `transform$fn(0, marker)`: a stained
+#'   population cannot sit below zero. Without it, the small bump that
+#'   compensated events form below zero, next to the negative peak, scores as a
+#'   deep separation, and the cut lands under the negative peak, so every cell
+#'   is called positive. On one cohort that put 87% of CD45+ cells "Vd1+" and
+#'   emptied every population defined as Vd1-. Default `-Inf`, no floor.
+#' @param prefer which qualifying valley to return. `"deepest"`, the default,
+#'   takes the best-separated pair of modes. `"lowest"` takes the qualifying
+#'   valley nearest the bottom of the scale, which is what a gate meant to remove
+#'   only NEGATIVE events needs: in whole blood the CD45 distribution has a
+#'   negative mode, a dim mode (granulocytes) and a bright one (lymphocytes), the
+#'   dim/bright valley is often the deepest, and taking it removed the
+#'   granulocytes from the CD45+ parent. Used for the CD45 gate. Under
+#'   `"lowest"` a valley also needs `min_lower_frac` of the events below it, so a
+#'   ripple in the tail of the negative mode does not count as a separation.
+#' @param min_lower_frac see `prefer`. Default `0.01`.
 #' @param details when TRUE return a list carrying the cut plus the relative
 #'   depth of the valley and why no cut was found, instead of the bare cut.
 #'   The default returns exactly what it always has: one number or `NA_real_`.
@@ -31,7 +48,9 @@
 density_valley <- function(x, bins = 220L, smooth = 4, peak_frac = 0.02,
                            min_gap_frac = 0.06, range_q = c(0.001, 0.999),
                            min_rel_depth = 0.30, min_upper_frac = 0.002,
-                           details = FALSE) {
+                           floor = -Inf, prefer = c("deepest", "lowest"),
+                           min_lower_frac = 0.01, details = FALSE) {
+  prefer <- match.arg(prefer)
   none <- function(reason)
     if (details) list(cut = NA_real_, rel_depth = NA_real_, n_peaks = NA_integer_,
                       reason = reason) else NA_real_
@@ -58,6 +77,7 @@ density_valley <- function(x, bins = 220L, smooth = 4, peak_frac = 0.02,
     a <- pk[i]; b <- pk[j]
     if (ctr[b] - ctr[a] < min_gap) next
     vi <- a + which.min(ys[a:b]) - 1L
+    if (ctr[vi] <= floor) next
     lo <- min(ys[a], ys[b])
     depth <- lo - ys[vi]
     if (depth <= 0) next
@@ -75,11 +95,15 @@ density_valley <- function(x, bins = 220L, smooth = 4, peak_frac = 0.02,
     if (rel < min_rel_depth) next
     # The upper mode must be a population, not a tail artefact.
     if (sum(ys[vi:length(ys)], na.rm = TRUE) < min_upper_frac * tot) next
+    # And, when the lowest valley is wanted, so must the lower one.
+    if (prefer == "lowest" && sum(ys[seq_len(vi)], na.rm = TRUE) < min_lower_frac * tot) next
     # Among candidates that genuinely separate, prefer the deepest separation and
     # break ties toward the wider peak spacing (a better-resolved pair).
     score <- rel + 0.05 * (ctr[b] - ctr[a]) / diff(range(ctr))
-    if (is.null(best) || score > best$score)
-      best <- list(score = score, cut = ctr[vi], rel_depth = rel)
+    better <- if (prefer == "lowest")
+      is.null(best) || ctr[vi] < best$cut || (ctr[vi] == best$cut && score > best$score)
+    else is.null(best) || score > best$score
+    if (better) best <- list(score = score, cut = ctr[vi], rel_depth = rel)
   }
   if (is.null(best)) return(none("no peak pair separates enough"))
   if (details) list(cut = best$cut, rel_depth = best$rel_depth,
@@ -131,6 +155,13 @@ density_valley <- function(x, bins = 220L, smooth = 4, peak_frac = 0.02,
 #'   cut it anchors is permissive. The arithmetic is identical in all three
 #'   cases; they are named apart because they are different experiments and
 #'   support different claims. See [parse_fmo_map()].
+#' @param prefer Passed to [density_valley()] and [best_threshold()]: `"lowest"`
+#'   for a gate that should remove only the negative mode, such as CD45.
+#'   Default `"deepest"`.
+#' @param floor No derived cut is accepted at or below this value; see
+#'   [density_valley()]. Pass `transform$fn(0, marker)` for a fluorescence
+#'   marker. Default `-Inf`. A manual, config or control cut is not floored:
+#'   each is a decision someone made, not one the density made.
 #' @param control_threshold A cut already placed on the control by the caller,
 #'   used in place of `control_q` of `control_x`. [control_cut()] produces one
 #'   and refuses a control that is brighter than the sample, which a minus
@@ -143,7 +174,9 @@ resolve_threshold <- function(marker, x_parent, cfg_value = NULL,
                               control_kind = c("control_q995", "fmo_q995",
                                                "fmm_q995"),
                               control_threshold = NULL,
-                              adaptive = FALSE) {
+                              adaptive = FALSE, floor = -Inf,
+                              prefer = c("deepest", "lowest")) {
+  prefer <- match.arg(prefer)
   control_kind <- match.arg(control_kind)
   out <- function(threshold, source, needs_review,
                   reason = NA_character_, by = NA_character_,
@@ -153,7 +186,9 @@ resolve_threshold <- function(marker, x_parent, cfg_value = NULL,
          # Carried so a control-anchored cut can still be compared against the
          # cut the sample's own density implied. Without this the agreement
          # diagnostic compares the control against itself and reports zero.
-         derived_threshold = derived, derived_source = derived_source)
+         derived_threshold = derived, derived_source = derived_source,
+         # Kept so threshold_uncertainty() re-derives the cut under the same rule.
+         floor = floor, prefer = prefer)
 
   ov <- suppressWarnings(as.numeric(override$threshold %||% NA_real_))
   if (is.finite(ov))
@@ -206,7 +241,7 @@ resolve_threshold <- function(marker, x_parent, cfg_value = NULL,
   }
 
   if (isTRUE(adaptive)) {
-    b <- best_threshold(x_parent, fallback_q = fallback_q)
+    b <- best_threshold(x_parent, fallback_q = fallback_q, floor = floor, prefer = prefer)
     if (is.finite(b$threshold)) {
       tc <- take_control(b)
       if (!is.null(tc)) return(tc)
@@ -215,7 +250,7 @@ resolve_threshold <- function(marker, x_parent, cfg_value = NULL,
     }
   }
 
-  v <- density_valley(x_parent)
+  v <- density_valley(x_parent, floor = floor, prefer = prefer)
   if (is.finite(v)) {
     tc <- take_control(list(threshold = v, source = "valley"))
     if (!is.null(tc)) return(tc)

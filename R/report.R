@@ -180,7 +180,7 @@ report_table_note <- function(file) {
     "gate_transferability_summary.csv" = "Minimum, median, maximum and IQR of F1 across donors.",
     # ---- explore ----
     "explore_cluster_profile.csv" = "Per cluster: size, phenotype string, fraction positive and median per channel.",
-    "explore_qc_clusters.csv" = "The cluster-level gate: the call for each cluster and the basis for it.",
+    "explore_qc_clusters.csv" = "The QC gate: the call for each SOM node, the merged cluster it belongs to, and the basis for the call.",
     "explore_cluster_abundance.csv" = "Per donor and cluster, with counting uncertainty and the limits of detection and quantification.",
     "explore_cluster_stats.csv" = "Donor-level group tests on cluster abundance, carrying the batch and group confounding verdict.",
     "explore_cells.csv" = "One row per cell: sample, event index, cluster and UMAP coordinates.",
@@ -1123,8 +1123,8 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
       # bottom of the report -- written to disk, but invisible where a reader
       # would look for them. Pooled first, then the days: the order this
       # section's description asks the reader to follow.
-      figures = c("population_frequencies.png", "umap_overview.png",
-                  "umap_overview_by_group.png",
+      figures = c("population_frequencies.png", "umap_populations.png",
+                  "umap_overview.png", "umap_overview_by_group.png",
                   pooled_then_split(outdir, "umap_markers"),
                   "umap_density.png", "umap_density_by_group.png",
                   "umap_multigraph_overlay.png", "unsupervised_clusters.png"),
