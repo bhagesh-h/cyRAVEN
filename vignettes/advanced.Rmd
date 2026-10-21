@@ -1327,11 +1327,13 @@ claims to.
 
 Population markers are never skipped: a quantile fallback on CD19 is a poor
 threshold, but "no threshold" does not mean "every cell is a B cell". They
-borrow instead. Every sample of a panel is on one pooled transform, so where most
-of them found a density minimum for the marker, the median of those minima is a
-measured cut on this sample's scale too. Two kinds of population cut are replaced
-by it: a `quantile_fallback`, and a tail-rule cut more than 3.5 robust SDs from
-the minima. The row in `thresholds_used.csv` then has `source` `peer_median`,
+borrow instead (`--peer-cuts`, which `--auto-fix-gates` implies). Every sample of
+a panel is on one pooled transform, so where most of them found a density minimum
+for the marker, the median of those minima is a measured cut on this sample's
+scale too, and a sample without one -- a `quantile_fallback` or a tail-rule cut --
+takes it. Where most samples found none, as for a rare marker, the tail rule
+stands, and only a fallback or a tail cut more than 3.5 robust SDs from the other
+samples' cuts takes their median. The row in `thresholds_used.csv` then has `source` `peer_median`,
 keeps `needs_review`, and holds the original cut in `derived_threshold`. The same
 applies to the functional-block markers, whose positive fractions use these cuts.
 Cuts from a control, a config entry or a manual override are never replaced.

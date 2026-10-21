@@ -124,6 +124,7 @@ population is still reported; check it before you use the number.
 | Uncertainty for every cut and frequency | on by default |
 | Several smoothing levels and gate shapes | `--adaptive-gates` |
 | Skip a gate the data cannot support | `--auto-fix-gates` |
+| Take a cut the sample cannot place from the other samples | `--peer-cuts` |
 | Tests between groups | `--group-column` |
 | Clinical scores and lab values | `--clinical-columns` |
 | Absolute cell numbers | `--total-counts` |

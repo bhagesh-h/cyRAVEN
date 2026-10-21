@@ -877,11 +877,11 @@ run_cyraven_impl <- function(opt) {
       rd <- NULL
     }
   }
-  # ---- --auto-fix-gates: population cuts the sample could not measure ---------
-  # A quantile fallback, or a tail-rule cut far from what the other samples'
-  # density minima gave, is replaced by the median of those minima, and the
-  # sample is scored again. See peer_cut_replacements() in gate-autofix.R.
-  if (isTRUE(opt$auto_fix_gates) && length(thr_rows)) {
+  # ---- --peer-cuts: population cuts the sample could not measure -------------
+  # A cut the sample's own density could not support is replaced by what the
+  # other samples' cuts say, and the sample is scored again. See
+  # peer_cut_replacements() in gate-autofix.R. --auto-fix-gates implies it.
+  if ((isTRUE(opt$peer_cuts) || isTRUE(opt$auto_fix_gates)) && length(thr_rows)) {
     .thr_df <- do.call(rbind, thr_rows)
     .rep <- peer_cut_replacements(.thr_df)
     if (!is.null(.rep)) {
@@ -910,9 +910,9 @@ run_cyraven_impl <- function(opt) {
                             .rep$reason[r], NA_real_, NA_real_)))
       .gadj <- if (!is.null(.gadj) && nrow(.gadj)) rbind(.gadj, .padj) else .padj
       write.csv(.gadj, file.path(opt$outdir, "gate_adjustments.csv"), row.names = FALSE)
-      log_msg("--auto-fix-gates: ", nrow(.rep), " population cut(s) in ",
-              length(unique(.rep$sample_id)), " sample(s) replaced by the median of ",
-              "the other samples' density minima (gate_adjustments.csv):")
+      log_msg("--peer-cuts: ", nrow(.rep), " population cut(s) in ",
+              length(unique(.rep$sample_id)), " sample(s) replaced from the other ",
+              "samples' cuts (gate_adjustments.csv):")
       for (r in seq_len(nrow(.rep)))
         log_msg("    ", .rep$sample_id[r], " / ", .rep$marker[r], ": ",
                 round(.rep$old_threshold[r], 3), " (", .rep$old_source[r], ") -> ",

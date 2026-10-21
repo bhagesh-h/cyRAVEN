@@ -160,22 +160,28 @@ test_that("logicle parameters cover a marker some files lack", {
 })
 
 test_that("a population cut the sample could not measure is taken from its peers", {
+  # Six of eight samples found a density minimum: the marker is bimodal here,
+  # so both the fallback and the tail cut take the median of the minima.
   thr <- data.frame(
-    sample_id = sprintf("S%02d", 1:8), panel = "P1", marker = "SSC-A",
-    threshold = c(4.00, 4.02, 3.98, 4.05, 3.97, 4.01, 4.70, 5.30),
+    sample_id = sprintf("S%02d", 1:8), panel = "P1", marker = "CD19",
+    threshold = c(2.40, 2.42, 2.38, 2.45, 2.37, 2.41, 1.34, 3.24),
     source = c(rep("valley_s6", 5), "otsu", "quantile_fallback", "tailgate"),
     stringsAsFactors = FALSE)
   r <- cyRAVEN:::peer_cut_replacements(thr)
   expect_setequal(r$sample_id, c("S07", "S08"))
   expect_equal(unique(r$threshold), stats::median(thr$threshold[1:6]))
-  expect_identical(r$old_source[r$sample_id == "S07"], "quantile_fallback")
+  expect_identical(r$old_source[r$sample_id == "S08"], "tailgate")
 
-  # A tail-rule cut close to the minima stays; so does every measured cut.
-  thr$threshold[8] <- 4.10
-  expect_identical(cyRAVEN:::peer_cut_replacements(thr)$sample_id, "S07")
-
-  # Too few samples with a minimum: nothing to borrow from.
+  # Without a majority of minima, as for a rare marker like Vd1, the tail rule
+  # stands unless a cut is far from the others; a fallback is still replaced.
   thr$source[1:4] <- "tailgate"
+  thr$threshold[8] <- 2.50
+  expect_identical(cyRAVEN:::peer_cut_replacements(thr)$sample_id, "S07")
+  thr$threshold[8] <- 0.80
+  expect_setequal(cyRAVEN:::peer_cut_replacements(thr)$sample_id, c("S07", "S08"))
+
+  # Measured cuts, and cuts from a control or an override, are never touched.
+  thr$source <- c(rep("valley_s6", 6), "control_q995", "manual")
   expect_null(cyRAVEN:::peer_cut_replacements(thr))
 })
 

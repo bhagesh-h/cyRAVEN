@@ -67,17 +67,27 @@ populations:
     CD14: above
     CD16: below
 
+  # HLA-DR above and SSC-A below on the two CD16+ subsets. Every monocyte subset
+  # carries HLA-DR, the CD16+ ones the most; neutrophils and NK cells carry none.
+  # Neutrophils are CD16+ and dimly CD14+, so without these two conditions they
+  # pass as intermediate monocytes.
   Intermediate monocytes:
     CD3: below
     CD14: above
     CD16: above
+    HLA-DR: above
+    SSC-A: below
 
-  # SSC-A below: neutrophils are CD3- CD14- CD16+ too, and only side scatter
-  # tells them apart from these monocytes in this panel.
+  # SSC-A below: neutrophils are CD3- CD14- CD16+ too. HLA-DR above and CD56
+  # below: CD56-dim NK cells are CD3- CD14- CD16+ with low side scatter as well,
+  # and only their missing HLA-DR and their CD56 tell them apart from these
+  # monocytes.
   Non-classical monocytes:
     CD3: below
     CD14: below
     CD16: above
+    HLA-DR: above
+    CD56: below
     SSC-A: below
 
   Dendritic cells:
@@ -135,10 +145,14 @@ populations:
   #
   # SSC-A below: neutrophils are CD3- CD19- CD16+, so without it every
   # granulocyte also counted as an NK cell, and in whole blood granulocytes
-  # outnumber NK cells about ten to one.
+  # outnumber NK cells about ten to one. HLA-DR below and CD14 below: CD16+
+  # monocytes have low side scatter too, and NK cells are the HLA-DR-negative,
+  # CD14-negative ones.
   NK cells:
     CD3: below
     CD19: below
+    CD14: below
+    HLA-DR: below
     SSC-A: below
     any_of:
       CD16: above
