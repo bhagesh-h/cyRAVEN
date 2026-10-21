@@ -36,17 +36,19 @@
 # Directions are `above`, `below` and `intermediate`. Declare lineage-level
 # populations first and confirm they score plausibly before adding subsets: an
 # error in a parent gate propagates to everything beneath it.
+#
+# No population repeats CD45. Every population is already scored inside the
+# CD45+ parent gate, and a second CD45 cut inside it separates CD45-dim cells
+# from CD45-bright ones: in whole blood that drops the granulocytes, which are
+# the dim ones.
 populations:
   Granulocytes:
-    CD45: above
     SSC-A: above
     CD15: above
   Monocytes:
-    CD45: above
     CD14: above
     CD15: below
   Lymphocytes:
-    CD45: above
     SSC-A: below
     CD14: below
 

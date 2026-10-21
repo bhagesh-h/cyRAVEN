@@ -1319,18 +1319,32 @@ fig_gating_qc <- function(recon, outfile, dpi = 200, colors = fcs_colors(),
   fills <- stats::setNames(pop_palette(length(unique(d$sample_id)), colors = colors),
                            sort(unique(d$sample_id)))
 
+  # WHICH SIDE OF ITS LINE A LABEL GOES. To the right, unless the cut sits in the
+  # right half of its panel: there a label to the right ran past the panel edge
+  # and was clipped to "p" or "peer_median (REVI". The panel's x range is the
+  # marker's values plus its cuts, as facet scales = "free_x" draws it.
+  label_side <- function(ll, dd) {
+    ll$hj <- vapply(seq_len(nrow(ll)), function(i) {
+      v <- c(dd$value[dd$marker == ll$marker[i]], ll$threshold[ll$marker == ll$marker[i]])
+      v <- v[is.finite(v)]
+      if (!length(v) || !is.finite(ll$threshold[i])) return(-0.05)
+      if (ll$threshold[i] > mean(range(v))) 1.05 else -0.05
+    }, numeric(1))
+    ll
+  }
+
   layers <- function(dd, ll, text_size) list(
     geom_area(data = dd, aes(fill = sample_id), colour = NA, alpha = 0.55),
     geom_vline(data = ll, aes(xintercept = threshold, colour = needs_review),
                linewidth = 0.6, linetype = "dashed", show.legend = FALSE),
-    geom_text(data = ll, aes(x = threshold, y = Inf, label = tag),
-              hjust = -0.05, vjust = 1.5, size = text_size, colour = colors$label_text),
+    geom_text(data = ll, aes(x = threshold, y = Inf, label = tag, hjust = hj),
+              vjust = 1.5, size = text_size, colour = colors$label_text),
     scale_colour_manual(values = c(`FALSE` = colors$threshold_ok, `TRUE` = colors$threshold_review)),
     scale_fill_manual(values = fills, guide = "none"),
     scale_y_continuous(breaks = NULL, expand = expansion(mult = c(0, 0.18))),
     labs(x = x_label, y = "density, scaled to each panel"))
 
-  fig <- ggplot(d, aes(value, density)) + layers(d, lab, 2.6) +
+  fig <- ggplot(d, aes(value, density)) + layers(d, label_side(lab, d), 2.6) +
     facet_grid(sample_id ~ marker, scales = "free_x") +
     labs(title = "Gating QC, every applied threshold on its own distribution",
          subtitle = paste("dashed line = applied cut, labelled with its source;",
@@ -1359,7 +1373,7 @@ fig_gating_qc <- function(recon, outfile, dpi = 200, colors = fcs_colors(),
       dd <- d[d$sample_id == sid, , drop = FALSE]
       ll <- lab[lab$sample_id == sid, , drop = FALSE]
       ll$tag <- sprintf("%s\n%.2f", ll$tag, ll$threshold)
-      pg <- ggplot(dd, aes(value, density)) + layers(dd, ll, 3.1) +
+      pg <- ggplot(dd, aes(value, density)) + layers(dd, label_side(ll, dd), 3.1) +
         facet_wrap(~marker, scales = "free_x", ncol = ncol) +
         labs(title = paste0("Gating QC: ", sid),
              subtitle = "dashed line = applied cut, with its source and value; red = needs review") +

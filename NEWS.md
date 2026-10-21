@@ -48,6 +48,12 @@ at cyCONDOR's settings: 25,000 events per file and a logicle transform.
   of sharing a row's axis with the tallest marker, the axis names the scale
   actually used (it said asinh under logicle), and one page per sample is
   written into `gating_qc/`.
+- **Labels in `gating_qc.png` stay inside their panel.** A cut in the right half
+  of a panel had its label written to the right of the line and clipped at the
+  panel edge ("p", "peer_median (REVI"); it is now written on the left.
+- **`--write-template` no longer repeats CD45 in every population.** Populations
+  are scored inside the CD45+ parent gate already, and a second CD45 cut inside
+  it splits CD45-dim granulocytes from bright lymphocytes.
 - **`umap_populations.png`**: one large population UMAP with the names on the
   map, beside the six-panel overview.
 - **Every legend sits to the right of its figure.**
@@ -90,8 +96,11 @@ at cyCONDOR's settings: 25,000 events per file and a logicle transform.
   CD56-), as in standard gating. CD16+ NK cells had been counted as
   non-classical monocytes, at a median 2.2% of CD45+ cells where manual gating
   found 0.3%.
+- **`config_cohorts.yaml`:** granulocytes must be HLA-DR-. Monocytes with high
+  side scatter otherwise passed the side-scatter rule: 2,859 CD14-high,
+  HLA-DR-high cells were counted as granulocytes on the whole-blood cohort.
 - **`config_cohorts.yaml`:** granulocytes are defined by side scatter, CD3- and
-  CD19- only. The CD45, CD14 and CD16 conditions each split a dim population from
+  CD19-, without CD45, CD14 or CD16. The CD45, CD14 and CD16 conditions each split a dim population from
   a bright one, granulocytes were the dim one every time, and they were scored at
   a median 1.5% of CD45+ cells where clustering found 59%. NK cells and
   non-classical monocytes now require `SSC-A: below`, so CD16+ neutrophils are
