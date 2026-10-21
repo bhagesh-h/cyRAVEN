@@ -51,17 +51,19 @@ at cyCONDOR's settings: 25,000 events per file and a logicle transform.
 - **`umap_populations.png`**: one large population UMAP with the names on the
   map, beside the six-panel overview.
 - **Every legend sits to the right of its figure.**
-- **`--auto-fix-gates` repairs population cuts the sample could not measure.**
+- **`--peer-cuts` takes a cut the sample cannot place from the other samples.**
   A population or functional-block marker with no density minimum in one sample
-  got a cut at a fixed quantile, and a tail-rule cut could land far from where every other
-  sample's density minimum put it. On 30 sepsis PBMC files, side-scatter cuts at
-  the 90th percentile counted only the top tenth of the granulocytes in two
-  samples, and a CD14 tail cut at twice the others' let monocytes in in a third.
-  Under the flag, both kinds are replaced by the median of the minima the other
-  samples of the panel found (`source` `peer_median`, the original kept in
-  `derived_threshold`, a row in `gate_adjustments.csv`), and the sample is scored
-  again. On that cohort 20 cuts in 18 samples were replaced, 10 of them CD38
-  cuts at the 90th percentile.
+  got a cut at a fixed quantile or from the tail rule, however clearly the other
+  samples separated it. Where most samples of the panel found a minimum, a
+  sample without one now takes the median of those minima; where most found
+  none, only a fallback, or a tail cut far from the others, takes the median of
+  their cuts. `source` reads `peer_median`, the original stays in
+  `derived_threshold`, and each change is a row of `gate_adjustments.csv`.
+  `--auto-fix-gates` implies it. Against the lab's manual gating of a 24-sample
+  whole-blood cohort, the largest single-sample errors fell from 14.2 to 2.8
+  points for CD4 T cells and from 4.8 to 1.7 for B cells. On 30 sepsis PBMC
+  files it repaired the side-scatter and CD14 cuts that had put four samples'
+  granulocyte counts 21 to 45 points from clustering.
 - **Explore's QC gate judges SOM nodes, not merged clusters.** The gate drops
   the coarse clusters whose median CD45 falls in the low group of a 2-means
   split. A merged cluster can join debris to CD45-dim cells that border it: on 30
@@ -83,6 +85,11 @@ at cyCONDOR's settings: 25,000 events per file and a logicle transform.
   parameters were derived for the markers of the first file only, and a marker
   absent from any pooled file stopped the run with "subscript out of bounds".
   Each marker is now pooled from the files that carry it.
+- **`config_cohorts.yaml`:** NK cells must be HLA-DR- and CD14-, and the two
+  CD16+ monocyte subsets HLA-DR+ with low side scatter (non-classical also
+  CD56-), as in standard gating. CD16+ NK cells had been counted as
+  non-classical monocytes, at a median 2.2% of CD45+ cells where manual gating
+  found 0.3%.
 - **`config_cohorts.yaml`:** granulocytes are defined by side scatter, CD3- and
   CD19- only. The CD45, CD14 and CD16 conditions each split a dim population from
   a bright one, granulocytes were the dim one every time, and they were scored at

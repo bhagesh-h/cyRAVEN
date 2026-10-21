@@ -2,7 +2,7 @@
 % Please edit documentation in R/gate-autofix.R
 \name{peer_cut_replacements}
 \alias{peer_cut_replacements}
-\title{Population cuts to take from the other samples' density minima}
+\title{Population cuts to take from the other samples}
 \usage{
 peer_cut_replacements(thr, z_max = 3.5, min_peers = 3L, min_peer_frac = 0.5)
 }
@@ -10,11 +10,13 @@ peer_cut_replacements(thr, z_max = 3.5, min_peers = 3L, min_peer_frac = 0.5)
 \item{thr}{Data frame with \code{sample_id}, \code{panel}, \code{marker}, \code{threshold},
 \code{source}, one row per sample and marker.}
 
-\item{z_max}{Robust z beyond which a tail-rule cut is replaced.}
+\item{z_max}{Robust z beyond which a tail cut is replaced when the marker has
+no majority of density minima.}
 
-\item{min_peers}{Minimum number of peer minima.}
+\item{min_peers}{Minimum number of reference cuts.}
 
-\item{min_peer_frac}{Minimum share of the panel's samples with a minimum.}
+\item{min_peer_frac}{Minimum share of the panel's samples the reference must
+cover.}
 }
 \value{
 A data frame of replacements (\code{sample_id}, \code{panel}, \code{marker},
@@ -22,12 +24,22 @@ A data frame of replacements (\code{sample_id}, \code{panel}, \code{marker},
 \code{reason}), or \code{NULL} when nothing is replaced.
 }
 \description{
-For each panel and marker, the cuts placed at a density minimum (\verb{valley_*},
-\code{otsu}) are the peers. Where at least \code{min_peers} and at least
-\code{min_peer_frac} of the panel's samples have one, two kinds of cut are
-replaced by the peers' median: a \code{quantile_fallback}, which is not a
-measurement, and a \verb{tailgate*} cut more than \code{z_max} robust SDs from the
-peers (MAD floored at 0.25, as for \code{scale_outlier}). Cuts from a control, a
-config entry or a manual override are never touched.
+Two cases, decided per panel and marker by how many samples placed their cut
+at a density minimum (\verb{valley_*}, \code{otsu}):
+}
+\details{
+\itemize{
+\item At least \code{min_peers} and at least \code{min_peer_frac} of the samples did. The
+marker is then bimodal in this assay, and a sample without a minimum -- a
+\code{quantile_fallback} or a \verb{tailgate*} cut -- takes the median of the minima.
+On the KMT2C/KMT2D cohort one sample's CD19 tail cut at 3.24, against minima
+between 2.28 and 2.50 elsewhere, counted 0.9\% B cells where manual gating
+counted 5.7\%.
+\item Fewer did. The other samples' cuts, fallbacks excluded, are the reference:
+a fallback takes their median, and a tail cut more than \code{z_max} robust SDs
+from them (MAD floored at 0.25, as for \code{scale_outlier}) does too.
+}
+
+Cuts from a control, a config entry or a manual override are never touched.
 }
 \keyword{internal}
