@@ -139,7 +139,10 @@ cannot: a declared parent gate is exactly what it is meant to work without.
 
 So it uses the cluster-level gate the unsupervised family uses. Cluster coarsely
 first, then judge **whole clusters** by their marker profile, so no per-event
-cutoff is invented:
+cutoff is invented. The units judged are the SOM nodes (100 on the default
+10 × 10 grid), not the merged clusters: a merge can join debris to CD45-dim cells
+that border it, such as low-density granulocytes in PBMC, and whether it does
+depends on the seed. Node by node, the same rule keeps those cells at every seed.
 
 | Call | Rule |
 |---|---|
@@ -151,9 +154,10 @@ Saturation is decided **first**: an aggregate is bright in the leukocyte marker
 too, so calling it debris would mislabel it.
 
 Under `--maybe-learn` the debris and dead calls are made against each sample's
-own thresholds. Without it they come from 2-means on the per-cluster medians,
+own thresholds. Without it they come from 2-means on the per-node medians,
 which is what a standalone tool has. Either way `explore_qc_clusters.csv`
-records the call **and the basis for it** per cluster.
+records the call **and the basis for it** per node, with the merged cluster each
+node belongs to.
 
 If the gate would keep less than `--explore-min-retained` (default 5%), it is
 ignored and the run flagged: at that point the markers are more likely mis-named
@@ -344,7 +348,7 @@ p-values. At these group sizes that is p-hacking with extra steps.
 | `--explore-only` | off | Run **only** explore; no specification needed |
 | `--maybe-learn` | off | Let the two analyses inform each other, both ways |
 | `--explore-k` | 20 | Metaclusters |
-| `--explore-qc-k` | 20 | Clusters for the coarse QC gate |
+| `--explore-qc-k` | 20 | Merged clusters of the coarse QC clustering; the gate judges their SOM nodes |
 | `--explore-grid` | 10 | SOM grid side |
 | `--explore-cells-per-sample` | 6000 | Cells drawn per sample before the gate |
 | `--explore-max-cells` | 150000 | Ceiling across all samples |
@@ -1297,7 +1301,7 @@ is what cyRAVEN resolves from `$PnS`.
 | `flowjo/` | UMAP-annotated FCS, written by `--flowjo-export` |
 | `config_derived.yaml` | Derived parameters, written by `--write-config` |
 | `sample_map_template.csv` | Written by `--write-sample-map` |
-| `gate_adjustments.csv` | One row per hierarchy gate `--auto-fix-gates` skipped, with `threshold_not_applied`, `pct_of_parent_kept` and the reason. Empty without the flag |
+| `gate_adjustments.csv` | One row per hierarchy gate `--auto-fix-gates` skipped and per population cut it replaced, with `threshold_not_applied`, `pct_of_parent_kept` and the reason. Empty without the flag |
 
 #### Gate adjustments
 
@@ -1310,7 +1314,7 @@ beneath it.
 | `sample_id`, `gate`, `marker` | Which cut, in which sample |
 | `threshold_source` | Why it was eligible. `quantile_fallback` means no density minimum was found, so the cut came from a percentile |
 | `threshold_not_applied` | The number that would have been used. Kept so the decision is auditable rather than merely reported |
-| `action` | `skipped`, with the parent carried through unchanged |
+| `action` | `skipped`, with the parent carried through unchanged; for a population cut, `replaced by` and the new value |
 | `pct_of_parent_kept` | What the gate retains after the decision. 100 when it was skipped |
 | `reason` | The rule that fired, in words |
 
@@ -1321,10 +1325,16 @@ than 5% of its parent is misplaced whatever its source says, because a viability
 or CD45 gate that discards nineteen cells in twenty is not measuring what it
 claims to.
 
-Population markers are left untouched. A quantile fallback on CD19 is a
-poor threshold, but "no threshold" does not mean "every cell is a B cell", so
-this repairs the hierarchy and leaves the reason a specification may describe few
-cells exactly where it was.
+Population markers are never skipped: a quantile fallback on CD19 is a poor
+threshold, but "no threshold" does not mean "every cell is a B cell". They
+borrow instead. Every sample of a panel is on one pooled transform, so where most
+of them found a density minimum for the marker, the median of those minima is a
+measured cut on this sample's scale too. Two kinds of population cut are replaced
+by it: a `quantile_fallback`, and a tail-rule cut more than 3.5 robust SDs from
+the minima. The row in `thresholds_used.csv` then has `source` `peer_median`,
+keeps `needs_review`, and holds the original cut in `derived_threshold`. The same
+applies to the functional-block markers, whose positive fractions use these cuts.
+Cuts from a control, a config entry or a manual override are never replaced.
 
 ### 10d. Externally measured cell counts
 

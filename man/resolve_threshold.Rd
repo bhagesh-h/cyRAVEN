@@ -14,7 +14,9 @@ resolve_threshold(
   override = NULL,
   control_kind = c("control_q995", "fmo_q995", "fmm_q995"),
   control_threshold = NULL,
-  adaptive = FALSE
+  adaptive = FALSE,
+  floor = -Inf,
+  prefer = c("deepest", "lowest")
 )
 }
 \arguments{
@@ -52,6 +54,15 @@ here as before.}
 before falling back to a quantile. See \code{\link[=best_threshold]{best_threshold()}}. \code{FALSE} by
 default, because it moves thresholds and a threshold that moves moves
 every frequency beneath it.}
+
+\item{floor}{No derived cut is accepted at or below this value; see
+\code{\link[=density_valley]{density_valley()}}. Pass \code{transform$fn(0, marker)} for a fluorescence
+marker. Default \code{-Inf}. A manual, config or control cut is not floored:
+each is a decision someone made, not one the density made.}
+
+\item{prefer}{Passed to \code{\link[=density_valley]{density_valley()}} and \code{\link[=best_threshold]{best_threshold()}}: \code{"lowest"}
+for a gate that should remove only the negative mode, such as CD45.
+Default \code{"deepest"}.}
 }
 \description{
 Priority (per the agreed contract):

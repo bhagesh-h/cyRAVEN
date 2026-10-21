@@ -40,12 +40,26 @@ populations:
   # Granulocytes are defined by SIDE SCATTER, not by a lineage antibody: dense
   # cytoplasmic granules scatter light strongly. SSC-A is thresholded on a log10
   # scale by the same mode-finding machinery used for fluorescence.
+  #
+  # NO CD45 REQUIREMENT. Every population is already scored inside the CD45+
+  # parent gate. A CD45 cut placed again within that parent separates CD45-dim
+  # from CD45-bright cells, and granulocytes are the CD45-dim ones, so requiring
+  # "CD45: above" here excluded the population it defines: on one 24-sample
+  # whole-blood cohort it scored granulocytes at a median 1.5% of CD45+ cells
+  # where the clustering found 59%.
+  #
+  # NO CD14 OR CD16 REQUIREMENT either, for the same reason: each cut divides a
+  # dim population from a bright one, and neutrophils are the dim one on this
+  # panel. They carry CD14 dimly, so a cut separating CD14-negative from any CD14
+  # signal calls them CD14+. Their CD16 sits well above lymphocytes' but well
+  # below NK cells' and CD16+ monocytes', and the CD16 cut falls between them
+  # and the bright cells, so "CD16: above" rejected them too. Side scatter alone
+  # separates granulocytes cleanly (two clear SSC-A peaks in every sample), and
+  # monocytes sit below the SSC-A cut. Eosinophils are included: they are
+  # granulocytes as well.
   Granulocytes:
-    CD45: above
     CD3: below
-    CD14: below
     CD19: below
-    CD16: above
     SSC-A: above
 
   Classical monocytes:
@@ -58,10 +72,13 @@ populations:
     CD14: above
     CD16: above
 
+  # SSC-A below: neutrophils are CD3- CD14- CD16+ too, and only side scatter
+  # tells them apart from these monocytes in this panel.
   Non-classical monocytes:
     CD3: below
     CD14: below
     CD16: above
+    SSC-A: below
 
   Dendritic cells:
     CD3: below
@@ -115,9 +132,14 @@ populations:
   # "CD16+ or CD56+" in the source document. The two receptors mark overlapping
   # but non-identical NK subsets and the population is their union, so this is a
   # genuine disjunction rather than two populations.
+  #
+  # SSC-A below: neutrophils are CD3- CD19- CD16+, so without it every
+  # granulocyte also counted as an NK cell, and in whole blood granulocytes
+  # outnumber NK cells about ten to one.
   NK cells:
     CD3: below
     CD19: below
+    SSC-A: below
     any_of:
       CD16: above
       CD56: above

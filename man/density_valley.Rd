@@ -13,6 +13,9 @@ density_valley(
   range_q = c(0.001, 0.999),
   min_rel_depth = 0.3,
   min_upper_frac = 0.002,
+  floor = -Inf,
+  prefer = c("deepest", "lowest"),
+  min_lower_frac = 0.01,
   details = FALSE
 )
 }
@@ -36,6 +39,26 @@ populations findable -- see the note on scoring below.}
 \item{min_upper_frac}{the upper mode must hold at least this fraction of events,
 so a cut cannot be placed out in the extreme tail where a handful of events
 form a bump.}
+
+\item{floor}{no cut is accepted at or below this value. Callers pass the
+transformed value of zero signal, \code{transform$fn(0, marker)}: a stained
+population cannot sit below zero. Without it, the small bump that
+compensated events form below zero, next to the negative peak, scores as a
+deep separation, and the cut lands under the negative peak, so every cell
+is called positive. On one cohort that put 87\% of CD45+ cells "Vd1+" and
+emptied every population defined as Vd1-. Default \code{-Inf}, no floor.}
+
+\item{prefer}{which qualifying valley to return. \code{"deepest"}, the default,
+takes the best-separated pair of modes. \code{"lowest"} takes the qualifying
+valley nearest the bottom of the scale, which is what a gate meant to remove
+only NEGATIVE events needs: in whole blood the CD45 distribution has a
+negative mode, a dim mode (granulocytes) and a bright one (lymphocytes), the
+dim/bright valley is often the deepest, and taking it removed the
+granulocytes from the CD45+ parent. Used for the CD45 gate. Under
+\code{"lowest"} a valley also needs \code{min_lower_frac} of the events below it, so a
+ripple in the tail of the negative mode does not count as a separation.}
+
+\item{min_lower_frac}{see \code{prefer}. Default \code{0.01}.}
 
 \item{details}{when TRUE return a list carrying the cut plus the relative
 depth of the valley and why no cut was found, instead of the bare cut.

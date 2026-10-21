@@ -1658,6 +1658,8 @@ has already applied that marker.
 |---|---|---|
 | `--cells-per-sample` | 20000 | Cells drawn per sample for the embedding |
 | `--max-cells` | 200000 | Overall ceiling per embedding. The per-sample allowance is reduced proportionally if the total would exceed it |
+| `--no-equalise` | off | Embed every gated cell up to `--cells-per-sample`. By default no sample contributes more than the lower quartile of the per-sample counts, so no sample dominates the map; a sample with fewer cells contributes all it has |
+| `--umap-scale` | `auto` | How each marker is scaled before the UMAP and the clustering: `none`, `robust` (median/MAD) or `zscore`. `auto` uses `none` under `--transform logicle`, whose scale every channel already shares, and `robust` otherwise |
 | `--subsample` | `uniform` | `uniform` reproduces the sample's composition; `rare` weights by inverse local density so a population too small to form a cluster can be recovered. **Consequential**: it changes which cells are embedded and adds `sampling_weight` to `cells_umap.csv` |
 | `--umap-markers` | built-in lineage list | Comma-separated features. Override this where the default list matches fewer than two markers, rather than relying on the all-eligible fallback |
 | `--umap-markers-all` | off | Use every eligible marker instead of preferring lineage markers |

@@ -1,5 +1,95 @@
 # cyRAVEN (development)
 
+## Fixes found by running cyRAVEN beside cyCONDOR
+
+These came out of analysing one 24-sample whole-blood cohort with both tools,
+at cyCONDOR's settings: 25,000 events per file and a logicle transform.
+
+- **Values above a channel's declared range are capped on reading.** Files
+  stored as floats can hold values far above their `$PnR`. That cohort declared
+  262,144 and stored up to 6.8e8 in 0.3% of events of most channels. Under
+  `--transform logicle` one such value set the top of the scale, every real
+  event landed within a few hundredths of zero, and the gates were noise: 6 of
+  24 samples failed staining QC, and explore mode's QC gate gave up. Every
+  channel is capped, as flowCore, FlowJo and cyCONDOR cap it; a channel with
+  more than 1% of its events over is also named in a warning, so a wrong `$PnR`
+  is still seen. arcsinh runs were not affected by the scale; they now read the
+  same capped values.
+- **No gate is placed below zero signal.** A marker with few positive cells,
+  such as Vd1, has no real density minimum, and the small bump compensated
+  events form below zero scored as one. The cut landed under the negative peak:
+  87% of CD45+ cells were "Vd1+", and every population defined as Vd1-, including
+  CD4 and CD8 T cells, came out near 0%. A cut at or below the transformed value
+  of zero is now rejected, in the default rule, in `--adaptive-gates` and in the
+  uncertainty resampling.
+- **The scatter and CD45 gates no longer cut through cells.** Both took the
+  deepest density valley. In whole blood the deepest FSC valley can be a
+  near-empty gap between two groups of cells, and the deepest CD45 valley the
+  one between CD45-dim granulocytes and CD45-bright lymphocytes, so in 4 of 21
+  samples the granulocytes were removed before any population was scored. Both
+  gates now take the lowest qualifying valley (`density_valley(prefer =
+  "lowest")`, which also needs 1% of events below the cut). And when a CD45 cut
+  would still leave more than 10% of its parent between it and the CD45-negative
+  reference measured on the tube's own debris, the cut is replaced by that
+  reference and its source recorded as `debris_reference`. Granulocytes now
+  agree with clustering in every sample (Spearman 0.93, largest difference 8.8
+  points).
+- **One small sample no longer shrinks the UMAP.** The embedding drew the
+  smallest sample's count from every sample. One sample with 393 CD45+ cells cut
+  a map that could hold 59,000 cells down to 5,895. The level is now the lower
+  quartile of the per-sample counts, and `--no-equalise` embeds every gated cell.
+- **No per-marker scaling of logicle data before the UMAP.** Logicle already
+  puts every channel on one scale; dividing by each marker's spread multiplied
+  the noise of mostly negative markers. On 40,000 cells embedded identically
+  otherwise, unscaled data kept 97.0% of each cell's nearest neighbours in its
+  own cluster against 94.8% scaled. `--umap-scale` chooses; `auto` keeps
+  median/MAD scaling for arcsinh runs, so they are unchanged.
+- **`gating_qc.png` is readable.** Each curve is scaled to its own panel instead
+  of sharing a row's axis with the tallest marker, the axis names the scale
+  actually used (it said asinh under logicle), and one page per sample is
+  written into `gating_qc/`.
+- **`umap_populations.png`**: one large population UMAP with the names on the
+  map, beside the six-panel overview.
+- **Every legend sits to the right of its figure.**
+- **`--auto-fix-gates` repairs population cuts the sample could not measure.**
+  A population or functional-block marker with no density minimum in one sample
+  got a cut at a fixed quantile, and a tail-rule cut could land far from where every other
+  sample's density minimum put it. On 30 sepsis PBMC files, side-scatter cuts at
+  the 90th percentile counted only the top tenth of the granulocytes in two
+  samples, and a CD14 tail cut at twice the others' let monocytes in in a third.
+  Under the flag, both kinds are replaced by the median of the minima the other
+  samples of the panel found (`source` `peer_median`, the original kept in
+  `derived_threshold`, a row in `gate_adjustments.csv`), and the sample is scored
+  again. On that cohort 20 cuts in 18 samples were replaced, 10 of them CD38
+  cuts at the 90th percentile.
+- **Explore's QC gate judges SOM nodes, not merged clusters.** The gate drops
+  the coarse clusters whose median CD45 falls in the low group of a 2-means
+  split. A merged cluster can join debris to CD45-dim cells that border it: on 30
+  sepsis PBMC files, low-density granulocytes and debris fell into one cluster of
+  72% of all events, and 43% of the CD45+ events were dropped with it. Whether
+  that happened depended on the seed (56% to 86% of CD45+ events kept over three
+  seeds). The same rule applied to the 100 SOM nodes keeps 86% of CD45+ events
+  and under 3% of CD45- events at every seed. `explore_qc_clusters.csv` now has
+  one row per node, with the merged cluster it belongs to.
+- **Explore's equalising follows the declared UMAP:** the lower quartile of the
+  per-sample counts instead of the smallest sample.
+- **Paired tests keep every pair they can.** With three or more conditions,
+  each Wilcoxon against the reference used only donors seen at every condition.
+  In a sepsis cohort sampled at d0, d3 and d7, 10 patients had d0 and d3 but
+  only 7 all three, so 3 of the 10 d3 pairs were dropped. Each comparison now
+  uses every donor seen at both of its conditions, and only the Friedman
+  omnibus requires all of them.
+- **Logicle runs with `--panel-optional-markers` no longer stop.** The logicle
+  parameters were derived for the markers of the first file only, and a marker
+  absent from any pooled file stopped the run with "subscript out of bounds".
+  Each marker is now pooled from the files that carry it.
+- **`config_cohorts.yaml`:** granulocytes are defined by side scatter, CD3- and
+  CD19- only. The CD45, CD14 and CD16 conditions each split a dim population from
+  a bright one, granulocytes were the dim one every time, and they were scored at
+  a median 1.5% of CD45+ cells where clustering found 59%. NK cells and
+  non-classical monocytes now require `SSC-A: below`, so CD16+ neutrophils are
+  not counted as either.
+
 ## Every declared population is drawn
 
 Four figures kept only the most abundant populations and dropped the rest

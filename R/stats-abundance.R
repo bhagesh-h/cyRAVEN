@@ -360,15 +360,14 @@ fig_group_comparison <- function(freq, outfile, group_of, stats = NULL,
   # patchwork collects it from the panels, so the guide always matches the fills
   # actually drawn rather than a separately-constructed copy that could drift.
   if (show_key)
-    # TOP-LEFT, NOT RIGHT. patchwork collects the guide once for the whole
-    # composition and centres it vertically on the right. On a tall grid --
-    # functional_markers.png runs to 26 panels and six thousand pixels -- that
-    # puts the key thousands of pixels below the top of the image, so a reader
-    # has to scroll away from the figure to find out what the colours mean and
-    # scroll back. Top-left puts it where reading starts.
+    # ON THE RIGHT, JUSTIFIED TO THE TOP. patchwork collects the guide once for
+    # the whole composition and by default centres it vertically. On a tall grid
+    # -- functional_markers.png runs to 26 panels and six thousand pixels -- that
+    # puts the key thousands of pixels below the top of the image, so it is
+    # pinned to the top, beside the first row of panels.
     panels[[1]] <- panels[[1]] +
-      theme(legend.position = "top", legend.justification = "left",
-            legend.direction = "horizontal",
+      theme(legend.position = "right", legend.justification = "top",
+            legend.direction = "vertical",
             legend.key.size = unit(9, "pt"),
             legend.margin = margin(b = 2),
             legend.text = element_text(size = 7))
@@ -423,8 +422,8 @@ fig_group_comparison <- function(freq, outfile, group_of, stats = NULL,
       theme = ggplot2::theme(
         plot.title = element_text(size = 11, face = "bold"),
         plot.subtitle = element_text(size = 8, lineheight = 1.15),
-        legend.position = "top", legend.justification = "left",
-        legend.direction = "horizontal", legend.margin = margin(b = 2),
+        legend.position = "right", legend.justification = "top",
+        legend.direction = "vertical", legend.margin = margin(b = 2),
         legend.key.size = unit(9, "pt"), legend.text = element_text(size = 7),
         plot.caption = element_text(size = 7, hjust = 0, colour = colors$caption_text))) &
     ggplot2::theme(plot.tag = element_text(size = 10, face = "bold"))
@@ -681,8 +680,8 @@ fig_group_volcano <- function(stats, outfile, effect = c("cliff", "log2fc"),
            "Every point is in group_comparison_stats.csv with its interval and ",
            "its uncertainty columns."), if (ncomp > 1L) 10.4 else 7.8)) +
     theme_cyto(9, colors = colors) +
-    theme(legend.position = "top", legend.justification = "left",
-          legend.direction = "horizontal",
+    theme(legend.position = "right", legend.justification = "top",
+          legend.direction = "vertical",
           panel.border = element_rect(colour = colors$axis_ticks, fill = NA,
                                       linewidth = 0.4),
           strip.background = element_rect(fill = colors$grid_major, colour = NA),

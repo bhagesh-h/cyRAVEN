@@ -155,6 +155,24 @@ test_that("paired analysis counts incomplete pairs rather than hiding them", {
   expect_gte(max(p2$n_incomplete_pairs_dropped), 1L)
 })
 
+test_that("each paired comparison uses every donor seen at both of its conditions", {
+  # 10 donors at d0 and d3, 7 of them also at d7: d3 vs d0 has 10 pairs, d7 vs d0
+  # has 7, and Friedman runs on the 7 donors seen at all three.
+  ids <- c(sprintf("P%02d_d0", 1:10), sprintf("P%02d_d3", 1:10), sprintf("P%02d_d7", 1:7))
+  withr::local_seed(3)
+  freq <- data.frame(sample_id = ids, population = "T cells",
+                     pct_of_cd45_pos = stats::runif(length(ids), 10, 40),
+                     qc_status = "pass", stringsAsFactors = FALSE)
+  pair <- stats::setNames(sub("_d.$", "", ids), ids)
+  cond <- stats::setNames(sub("^.*_", "", ids), ids)
+  ps <- stats_paired_comparison(freq, pair, cond, reference = "d0")
+  expect_identical(ps$n_pairs[ps$comparison_condition == "d3"], 10L)
+  expect_identical(ps$n_pairs[ps$comparison_condition == "d7"], 7L)
+  expect_identical(ps$n_incomplete_pairs_dropped[ps$comparison_condition == "d7"], 3L)
+  expect_identical(ps$n_incomplete_pairs_dropped[ps$comparison_condition == "d3"], 0L)
+  expect_true(all(is.finite(ps$p_omnibus_friedman)))
+})
+
 test_that("threshold drift flags the marker whose gate moves, and only that one", {
   td <- stats_threshold_drift(synth_thresholds(), synth_groups(),
                               spec = default_population_spec())

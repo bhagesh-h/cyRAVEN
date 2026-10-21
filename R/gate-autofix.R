@@ -33,11 +33,19 @@
 # rule --drop-unstable-events and --correct-batch follow: an analysis that
 # changes a number the previous run reported is asked for, never assumed.
 #
-# WHAT IS DELIBERATELY NOT DONE HERE. Spec markers are left alone. For a
-# population marker a quantile fallback is a poor threshold, but skipping is not
-# the alternative -- "no threshold" for CD19 does not mean "every cell is a B
-# cell". Those keep their fallback and their needs_review flag, and
-# spec_gaps.csv and the explore QC gate report on them independently.
+# POPULATION MARKERS ARE NOT SKIPPED, THEY BORROW. For a population marker a
+# quantile fallback is a poor threshold, but skipping is not the alternative --
+# "no threshold" for CD19 does not mean "every cell is a B cell". What the data
+# do offer is the same marker in the other samples: every sample of a panel is on
+# one pooled transform, so where most of them found a density minimum, the median
+# of those minima is a measured cut on this sample's scale too. Under
+# --auto-fix-gates peer_cut_replacements() below replaces two kinds of cut with
+# it: a quantile fallback, and a tail-rule cut far out of line with the minima.
+# On 30 sepsis PBMC files, a side-scatter cut at the 90th percentile counted only
+# the top tenth of the granulocytes in two samples, and a CD14 tail cut at twice
+# the others' let monocytes in in a third. The replaced cut keeps its
+# needs_review flag, its original value stays in derived_threshold, and each
+# replacement is a row of gate_adjustments.csv.
 
 #' Decide whether a hierarchy gate rests on evidence or on the fallback constant
 #'
@@ -120,4 +128,59 @@ gate_adjustment_row <- function(sample_id, gate, marker, source, threshold,
                round(100 * n_kept / n_parent, 4) else NA_real_,
              reason = reason,
              stringsAsFactors = FALSE)
+}
+
+#' Population cuts to take from the other samples' density minima
+#'
+#' For each panel and marker, the cuts placed at a density minimum (`valley_*`,
+#' `otsu`) are the peers. Where at least `min_peers` and at least
+#' `min_peer_frac` of the panel's samples have one, two kinds of cut are
+#' replaced by the peers' median: a `quantile_fallback`, which is not a
+#' measurement, and a `tailgate*` cut more than `z_max` robust SDs from the
+#' peers (MAD floored at 0.25, as for `scale_outlier`). Cuts from a control, a
+#' config entry or a manual override are never touched.
+#'
+#' @param thr Data frame with `sample_id`, `panel`, `marker`, `threshold`,
+#'   `source`, one row per sample and marker.
+#' @param z_max Robust z beyond which a tail-rule cut is replaced.
+#' @param min_peers Minimum number of peer minima.
+#' @param min_peer_frac Minimum share of the panel's samples with a minimum.
+#' @return A data frame of replacements (`sample_id`, `panel`, `marker`,
+#'   `old_threshold`, `old_source`, `threshold`, `n_peers`, `robust_z`,
+#'   `reason`), or `NULL` when nothing is replaced.
+#' @keywords internal
+peer_cut_replacements <- function(thr, z_max = 3.5, min_peers = 3L,
+                                  min_peer_frac = 0.5) {
+  if (is.null(thr) || !nrow(thr)) return(NULL)
+  measured <- (grepl("^valley", thr$source) | thr$source == "otsu") &
+    is.finite(thr$threshold)
+  key <- paste(thr$panel, thr$marker, sep = "\r")
+  out <- list()
+  for (k in unique(key)) {
+    i <- which(key == k)
+    pv <- thr$threshold[i][measured[i]]
+    if (length(pv) < max(min_peers, ceiling(min_peer_frac * length(i)))) next
+    med <- stats::median(pv)
+    sc <- max(stats::mad(pv), 0.25)
+    for (j in i) {
+      src <- thr$source[j]; t0 <- thr$threshold[j]
+      z <- if (is.finite(t0)) abs(t0 - med) / sc else NA_real_
+      fb <- identical(src, "quantile_fallback")
+      far_tail <- startsWith(src %||% "", "tailgate") && is.finite(z) && z > z_max
+      if (!fb && !far_tail) next
+      out[[length(out) + 1L]] <- data.frame(
+        sample_id = thr$sample_id[j], panel = thr$panel[j], marker = thr$marker[j],
+        old_threshold = t0, old_source = src, threshold = med,
+        n_peers = length(pv), robust_z = round(z, 2),
+        reason = if (fb)
+          sprintf(paste("no density minimum in this sample, so the cut was the",
+                        "fallback quantile; replaced by the median of the %d",
+                        "minima found in the other samples"), length(pv))
+        else
+          sprintf(paste("tail-rule cut %.2f robust SDs from the %d minima found in",
+                        "the other samples; replaced by their median"), z, length(pv)),
+        stringsAsFactors = FALSE)
+    }
+  }
+  if (length(out)) do.call(rbind, out) else NULL
 }

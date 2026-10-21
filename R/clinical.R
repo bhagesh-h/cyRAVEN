@@ -484,8 +484,8 @@ fig_clinical_heatmap <- function(assoc, key_col, outfile,
     theme_cyto(9, colors = colors) +
     theme(axis.text.x = element_text(angle = 30, hjust = 1),
           panel.grid = element_blank(),
-          legend.position = "top", legend.justification = "left",
-          legend.direction = "horizontal",
+          legend.position = "right", legend.justification = "top",
+          legend.direction = "vertical",
           plot.caption = element_text(size = 7, hjust = 0,
                                       colour = colors$caption_text))
   safe_ggsave(outfile, plot = fig,
@@ -604,10 +604,10 @@ fig_clinical_detail <- function(freq, clin_values, var_name, outfile,
     # The categories are in the legend, so the axis carries no text at all.
     legend_rows <- ceiling(length(lev) / 3L)
     fig <- fig +
-      guides(colour = guide_legend(nrow = legend_rows, byrow = TRUE,
+      guides(colour = guide_legend(ncol = 1,
                                    override.aes = list(size = 3, alpha = 1))) +
       theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
-            legend.position = "bottom", legend.text = element_text(size = 8),
+            legend.position = "right", legend.text = element_text(size = 8),
             legend.title = element_text(size = 8, face = "bold"))
   }
   nr <- ceiling(npop / ncol)
@@ -751,8 +751,8 @@ fig_clinical_forest <- function(assoc, key_col, var_name, outfile, dpi = 200,
            "which level is higher. The box plot for this variable is where",
            "that is visible."), 8.4)) +
     theme_cyto(9, colors = colors) +
-    theme(legend.position = "top", legend.justification = "left",
-          legend.direction = "horizontal",
+    theme(legend.position = "right", legend.justification = "top",
+          legend.direction = "vertical",
           panel.grid.major.y = element_line(colour = colors$grid_major,
                                             linewidth = 0.3),
           plot.caption = element_text(size = 7, hjust = 0,
@@ -873,8 +873,8 @@ fig_clinical_correlogram <- function(clin, outfile, dpi = 200,
     theme(axis.text.x = element_text(angle = 30, hjust = 1),
           panel.grid.major = element_line(colour = colors$grid_major,
                                           linewidth = 0.25),
-          legend.position = "top", legend.justification = "left",
-          legend.direction = "horizontal",
+          legend.position = "right", legend.justification = "top",
+          legend.direction = "vertical",
           plot.caption = element_text(size = 7, hjust = 0,
                                       colour = colors$caption_text))
   # A FIXED INCH BUDGET PER CELL rather than a square canvas. A correlation matrix
@@ -1051,8 +1051,7 @@ fig_clinical_landscape <- function(freq, clin, outfile, order_by = NULL,
   }
   strips <- lapply(vars, strip)
   npop <- nlevels(d$.pop)
-  # GUIDES COLLECTED, ON THE RIGHT, AND NOT ON TOP. Every other figure in this
-  # package puts its key above the panel, because there it costs nothing. Here
+  # GUIDES COLLECTED, ON THE RIGHT, as in every figure of the package. Here
   # there are as many keys as there are clinical variables plus one, and each of
   # the strips is a plot of its own -- patchwork lays a collected guide out once
   # for the whole composition, so collecting them is also what keeps the strips'
@@ -1195,8 +1194,8 @@ fig_clinical_trajectory <- function(freq, time_of, patient_of, outfile,
           panel.spacing = grid::unit(0.6, "lines"),
           strip.background = element_rect(fill = colors$grid_major, colour = NA),
           strip.text = element_text(size = 7),
-          legend.position = "top", legend.justification = "left",
-          legend.direction = "horizontal",
+          legend.position = "right", legend.justification = "top",
+          legend.direction = "vertical",
           plot.caption = element_text(size = 7, hjust = 0,
                                       colour = colors$caption_text))
   nr <- ceiling(npop / ncol)
@@ -1266,8 +1265,8 @@ fig_populations_by_batch <- function(freq, batch_of, outfile, value_col = NULL,
           panel.spacing = grid::unit(0.6, "lines"),
           strip.background = element_rect(fill = colors$grid_major, colour = NA),
           strip.text = element_text(size = 7),
-          legend.position = "top", legend.justification = "left",
-          legend.direction = "horizontal",
+          legend.position = "right", legend.justification = "top",
+          legend.direction = "vertical",
           plot.caption = element_text(size = 7, hjust = 0,
                                       colour = colors$caption_text))
   nr <- ceiling(npop / ncol)

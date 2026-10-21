@@ -504,8 +504,8 @@ fig_threshold_drift <- function(thr, outfile, group_of, stats = NULL,
     # starts. The UMAP figures keep theirs on the right -- there the key sits
     # beside the single panel it describes.
     theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
-          legend.position = "top", legend.justification = "left",
-          legend.direction = "horizontal",
+          legend.position = "right", legend.justification = "top",
+          legend.direction = "vertical",
           legend.key.size = unit(9, "pt"), legend.margin = margin(b = 2),
           legend.text = element_text(size = 7),
           strip.text = element_text(size = 7.5, face = "bold"),

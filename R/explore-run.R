@@ -219,39 +219,59 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
       cc <- run_unsupervised_clusters(cells, fcols,
                                       n_clusters = opt$explore_qc_k %||% 20L,
                                       grid = opt$explore_grid %||% 10L,
-                                      seed = seed, max_cells = nrow(cells))
+                                      seed = seed, max_cells = nrow(cells),
+                                      scale_method = umap_scale_method(opt))
       if (is.null(cc)) {
         note("qc_gate", "skipped", "coarse clustering returned nothing")
       } else {
         cl0 <- cc$cluster
+        # THE GATE JUDGES THE SOM NODES, NOT THE MERGED CLUSTERS. Each of the
+        # --explore-qc-k clusters is a union of SOM nodes, and the merge can join
+        # debris to CD45-dim cells that border it: on 30 sepsis PBMC files,
+        # CD45-dim low-density granulocytes and CD45-negative debris fell into
+        # one cluster holding 72% of all events, whose median put it on the
+        # debris side, and 43% of the CD45+ events went with it. Whether that
+        # merge happened depended on the seed (56% to 86% of CD45+ events kept
+        # over three seeds). Judged node by node with the same rule, 86% were
+        # kept and under 3% of CD45- events, at every seed. The table still
+        # names each node's merged cluster.
+        unit <- if (!all(is.na(cc$node))) cc$node else cl0
+        ulab <- if (!all(is.na(cc$node))) "n" else "k"
         Xm <- as.matrix(cells[, fcols, drop = FALSE])
-        uk <- sort(unique(cl0))
-        pos0 <- explore_positivity(Xm, cl0, cells$sample_id, thr_by_sample)
+        uk <- sort(unique(unit))
+        pos0 <- explore_positivity(Xm, paste0(ulab, unit), cells$sample_id,
+                                   thr_by_sample)
         med0 <- t(vapply(uk, function(k)
-          apply(Xm[cl0 == k, , drop = FALSE], 2, stats::median, na.rm = TRUE),
+          apply(Xm[unit == k, , drop = FALSE], 2, stats::median, na.rm = TRUE),
           numeric(length(fcols))))
-        dimnames(med0) <- list(paste0("k", uk), fcols)
-        sizes0 <- as.integer(table(cl0)[as.character(uk)])
+        dimnames(med0) <- list(paste0(ulab, uk), fcols)
+        pos0 <- pos0[rownames(med0), , drop = FALSE]
+        sizes0 <- as.integer(table(unit)[as.character(uk)])
         qc_tab <- explore_qc_gate(pos0, med0, sizes0, leukocyte = leuko,
                                   viability = viab, have_thresholds = have_thr,
                                   drop_dead = !isTRUE(opt$explore_keep_dead),
                                   seed = seed)
-        qc_tab <- cbind(qc_tab, round(med0[qc_tab$cluster, , drop = FALSE], 4))
+        merged <- tapply(cl0, unit, function(x) x[1])
+        qc_tab <- cbind(qc_tab[, 1, drop = FALSE],
+                        merged_cluster = paste0("k", merged[sub("^[nk]", "", qc_tab$cluster)]),
+                        qc_tab[, -1, drop = FALSE],
+                        round(med0[qc_tab$cluster, , drop = FALSE], 4))
         wcsv(qc_tab, sprintf("explore_qc_clusters%s.csv", tag))
 
-        kept <- as.integer(sub("^k", "", qc_tab$cluster[qc_tab$call == "keep"]))
-        keep_idx <- which(cl0 %in% kept)
+        kept <- as.integer(sub("^[nk]", "", qc_tab$cluster[qc_tab$call == "keep"]))
+        keep_idx <- which(unit %in% kept)
         frac <- length(keep_idx) / nrow(cells)
-        log_msg(sprintf("explore: QC gate keeps %d of %d cells (%.1f%%)",
-                        length(keep_idx), nrow(cells), 100 * frac))
+        log_msg(sprintf("explore: QC gate keeps %d of %d cells (%.1f%%), judged on %d %s",
+                        length(keep_idx), nrow(cells), 100 * frac, length(uk),
+                        if (ulab == "n") "SOM nodes" else "clusters"))
         for (cn in setdiff(unique(qc_tab$call), "keep"))
           log_msg("  dropped as ", cn, ": ",
                   sum(qc_tab$cells[qc_tab$call == cn]), " cells")
         note("qc_gate", sprintf("%d of %d kept (%.1f%%)", length(keep_idx),
                                 nrow(cells), 100 * frac),
              if (have_thr)
-               "whole clusters judged against each sample's own thresholds"
-             else "whole clusters judged by 2-means on per-cluster medians")
+               "whole SOM nodes judged against each sample's own thresholds"
+             else "whole SOM nodes judged by 2-means on per-node medians")
 
         min_frac <- opt$explore_min_retained %||% 0.05
         if (frac < min_frac) {
@@ -276,21 +296,25 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
     # Re-equalise so no donor dominates the embedding. cyCONDOR does not, and
     # its faceted panels then differ in density for a reason that is group size
     # rather than biology.
+    # The level is the lower quartile of the per-sample counts, as for the
+    # declared UMAP (plan_subsample()), so one small sample cannot shrink it.
     if (!isTRUE(opt$no_explore_equalise)) {
       per <- table(cells$sample_id)
-      m <- min(per)
+      take <- plan_subsample(stats::setNames(as.integer(per), names(per)),
+                             cap = max(per), equalise = TRUE)
+      m <- max(take)
       idx <- unlist(lapply(names(per), function(s) {
         w <- which(cells$sample_id == s)
-        withr::with_seed(seed, sample(w, m))
+        if (length(w) <= take[[s]]) w else withr::with_seed(seed, sample(w, take[[s]]))
       }))
-      note("equalised", sprintf("%d cells per sample", m),
+      note("equalised", sprintf("at most %d cells per sample", m),
            sprintf("%d dropped so no donor dominates the embedding",
                    nrow(cells) - length(idx)))
       cells <- cells[sort(idx), , drop = FALSE]
     }
 
     M <- as.matrix(cells[, fcols, drop = FALSE])
-    emb <- run_umap(M, seed = seed,
+    emb <- run_umap(M, seed = seed, scale_method = umap_scale_method(opt),
                     n_neighbors = opt$explore_neighbors %||% 30L,
                     min_dist = opt$explore_min_dist %||% 0.1,
                     n_threads = max(1L, opt$threads %||% 1L))
@@ -303,7 +327,8 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
     cl <- run_unsupervised_clusters(cells, fcols,
                                     n_clusters = opt$explore_k %||% 20L,
                                     grid = opt$explore_grid %||% 10L,
-                                    seed = seed, max_cells = nrow(cells))
+                                    seed = seed, max_cells = nrow(cells),
+                                    scale_method = umap_scale_method(opt))
     if (is.null(cl)) {
       log_msg("explore: clustering returned nothing for ", p$name)
       next

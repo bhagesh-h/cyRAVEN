@@ -11,7 +11,9 @@ threshold_uncertainty(
   seed = 42L,
   max_events = 20000L,
   fallback_q = 0.9,
-  grid = valley_setting_grid()
+  grid = valley_setting_grid(),
+  floor = -Inf,
+  prefer = "deepest"
 )
 }
 \arguments{
@@ -30,6 +32,12 @@ histogram feature and stops moving long before the full parent gate is used}
 \item{fallback_q}{the quantile \code{\link[=resolve_threshold]{resolve_threshold()}} falls back to}
 
 \item{grid}{setting combinations for the method component}
+
+\item{floor}{the floor \code{\link[=resolve_threshold]{resolve_threshold()}} placed the cut under, so every
+resampled cut obeys the same rule. Default \code{-Inf}.}
+
+\item{prefer}{the valley preference the cut was placed with; see
+\code{\link[=density_valley]{density_valley()}}. Default \code{"deepest"}.}
 }
 \value{
 list(u_sampling, u_method, u_combined, rel_depth, valley_rate,
@@ -59,5 +67,8 @@ this is the number that says so.
 separate control tube not passed here, so neither component can be
 computed from \code{x}. Both are NA with a reason, rather than a small number
 that would read as confidence.
+\item \code{peer_median}: \code{--auto-fix-gates} took the cut from the density minima
+of the other samples (see \code{peer_cut_replacements()}), so it was not
+placed on \code{x} and there is nothing in \code{x} to resample. NA with a reason.
 }
 }
