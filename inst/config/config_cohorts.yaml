@@ -54,12 +54,17 @@ populations:
   # signal calls them CD14+. Their CD16 sits well above lymphocytes' but well
   # below NK cells' and CD16+ monocytes', and the CD16 cut falls between them
   # and the bright cells, so "CD16: above" rejected them too. Side scatter alone
-  # separates granulocytes cleanly (two clear SSC-A peaks in every sample), and
-  # monocytes sit below the SSC-A cut. Eosinophils are included: they are
-  # granulocytes as well.
+  # separates granulocytes cleanly (two clear SSC-A peaks in every sample).
+  # Eosinophils are included: they are granulocytes as well.
+  #
+  # HLA-DR below: monocytes with high side scatter sit above the SSC-A cut in
+  # some samples, and nothing else in the rule excludes them. On one 24-sample
+  # whole-blood cohort that put 2,859 CD14-high, HLA-DR-high cells among the
+  # granulocytes. Granulocytes carry no HLA-DR; every monocyte does.
   Granulocytes:
     CD3: below
     CD19: below
+    HLA-DR: below
     SSC-A: above
 
   Classical monocytes:
