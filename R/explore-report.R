@@ -19,6 +19,10 @@
 write_explore_report <- function(ex_dir, opt = NULL) {
   if (!dir.exists(ex_dir)) return(invisible(NULL))
   path <- file.path(ex_dir, "explore_report.html")
+  # --report-images reaches this report too, so the two files a run writes
+  # are either both self-contained or both light.
+  .op <- options(cyRAVEN.report_images = opt$report_images %||% report_image_mode())
+  on.exit(options(.op), add = TRUE)
 
   has <- function(...) {
     f <- c(...)
@@ -39,6 +43,11 @@ write_explore_report <- function(ex_dir, opt = NULL) {
     }
     unique(out)
   }
+  # Exactly stem.ext or stem_panel_N.ext. has_stem() is looser -- any suffix --
+  # which would let explore_cluster_mfi_heatmap.png also collect the by-group
+  # variant that its own section names, embedding it twice.
+  has_panels <- function(stem, ext = "png")
+    sort(list.files(ex_dir, paste0("^", stem, "(_panel_[0-9]+)?[.]", ext, "$")))
   # Figures in the by-group subdirectory are referenced by relative path, which
   # report_section() resolves against ex_dir exactly like a top-level figure.
   bg <- list.files(file.path(ex_dir, "explore_marker_umaps_by_group"),
@@ -57,7 +66,7 @@ write_explore_report <- function(ex_dir, opt = NULL) {
   secs <- list()
 
   secs <- c(secs, list(report_section(ex_dir, "e1",
-    "1. What this run found",
+    "What this run found",
     paste("Unsupervised clusters over every eligible channel. No population",
           "specification was used to produce them and the parent gate was not",
           "applied, so anything here that the declared analysis missed is",
@@ -75,8 +84,21 @@ write_explore_report <- function(ex_dir, opt = NULL) {
     tables = has("explore_cluster_profile.csv", "explore_findings.csv"),
     open = TRUE)))
 
+  secs <- c(secs, list(report_section(ex_dir, "e1b",
+    "Composition of the embedding",
+    paste("Every cluster in its own colour on the shared embedding, with a",
+          "legend that says what each colour is: the cluster, the immune subset",
+          "its marker profile matches where one does, its measured phenotype,",
+          "and its share of the cells kept by the QC gate -- overall and within",
+          "each study group. The phenotype is a MEASUREMENT, the markers this",
+          "cluster's cells sit above or below their thresholds on, not a",
+          "definition anyone wrote. The table adds each cluster's spread of",
+          "shares across donors."),
+    figures = has_panels("explore_umap_composition"),
+    tables = has_panels("explore_cluster_composition", "csv"))))
+
   secs <- c(secs, list(report_section(ex_dir, "e2",
-    "2. Quality control, decided from the data",
+    "Quality control, decided from the data",
     paste("Explore mode embeds every event it is given, and on ungated whole",
           "blood most events are not leukocytes. The gate works on whole",
           "clusters rather than events: cluster coarsely, then judge each",
@@ -87,7 +109,7 @@ write_explore_report <- function(ex_dir, opt = NULL) {
 
   if (length(has_stem("explore_cluster_median_heatmap.png")))
     secs <- c(secs, list(report_section(ex_dir, "e2b",
-      "2b. The same clusters as scaled median expression",
+      "The same clusters as scaled median expression",
       paste("The heatmap above asks what share of each cluster is above its",
             "own sample's threshold. This one asks how bright each cluster is",
             "for each marker relative to the other clusters, which needs no",
@@ -101,8 +123,24 @@ write_explore_report <- function(ex_dir, opt = NULL) {
             "hierarchical clustering, so adjacency means resemblance."),
       figures = has_stem("explore_cluster_median_heatmap.png"))))
 
+  secs <- c(secs, list(report_section(ex_dir, "e2c",
+    "Marker intensity per cluster (MFI)",
+    paste("Median fluorescence intensity per cluster and marker in instrument",
+          "units: each sample's median within the cluster first, then the median",
+          "over samples, so the donor with the most events does not set it. The",
+          "heatmap prints the value in every tile and colours it on the analysis",
+          "scale rescaled per marker, rows ordered by similarity, with each",
+          "cluster's share of the cells beside it. In the dot plot, size is the",
+          "percent positive and colour the scaled intensity. Percent positive is",
+          "against each sample's own threshold where the declared run supplied",
+          "one, and otherwise the cluster's pooled call."),
+    figures = c(has_panels("explore_cluster_mfi_heatmap"),
+                has_panels("explore_cluster_mfi_dotplot"),
+                has_panels("explore_cluster_mfi_heatmap_by_group")),
+    tables = has_panels("explore_cluster_mfi", "csv"))))
+
   secs <- c(secs, list(report_section(ex_dir, "e3",
-    "3. Abundance per donor",
+    "Abundance per donor",
     paste("One value per sample, never one per cell. Cluster frequencies carry",
           "the counting uncertainty of the events behind them and are",
           "classified against the limits of detection and quantification, on",
@@ -110,7 +148,7 @@ write_explore_report <- function(ex_dir, opt = NULL) {
     tables = has("explore_cluster_abundance.csv"))))
 
   secs <- c(secs, list(report_section(ex_dir, "e4",
-    "4. Between-group differences",
+    "Between-group differences",
     paste("Kruskal-Wallis across groups and Wilcoxon rank-sum against the",
           "reference, on per-donor frequencies, with Cliff's delta and",
           "Benjamini-Hochberg across every cluster tested. Where the run",
@@ -126,7 +164,7 @@ write_explore_report <- function(ex_dir, opt = NULL) {
                       "explore_absolute_vs_share.png",
                       "explore_total_counts_qc.png")))
     secs <- c(secs, list(report_section(ex_dir, "e4b",
-      "4b. Absolute cell numbers",
+      "Absolute cell numbers",
       paste("Everything above this section is compositional: a share of the",
             "events acquired, and shares are constrained to sum to 100. That",
             "constraint means no frequency table can separate one cluster",
@@ -153,7 +191,7 @@ write_explore_report <- function(ex_dir, opt = NULL) {
 
   if (length(bg))
     secs <- c(secs, list(report_section(ex_dir, "e5",
-      "5. Each marker, split by group",
+      "Each marker, split by group",
       paste("One panel per group per marker, on the shared embedding. This",
             "answers whether a marker is expressed in a DIFFERENT PLACE",
             "between groups, as opposed to more or less of it. Cells were",
@@ -162,7 +200,7 @@ write_explore_report <- function(ex_dir, opt = NULL) {
       figures = bg)))
 
   secs <- c(secs, list(report_section(ex_dir, "e6",
-    "6. Against the declared specification",
+    "Against the declared specification",
     paste("Where the two views agree and where they do not. The identity",
           "figure is the one to read first: rows are clusters, grouped by the",
           "declared population each best matches, so it answers 'this cluster",
@@ -184,14 +222,14 @@ write_explore_report <- function(ex_dir, opt = NULL) {
                    "explore_population_split.csv")))))
 
   secs <- c(secs, list(report_section(ex_dir, "e7",
-    "7. Marker expression over the embedding",
+    "Marker expression over the embedding",
     paste("The sanity check that the map is organised by biology. Islands",
           "should light up for the markers that define them; if no marker",
           "structures the map, the clustering below it means little."),
     figures = has("explore_umap_markers.png"))))
 
   secs <- c(secs, list(report_section(ex_dir, "e8",
-    "8. How this run was produced",
+    "How this run was produced",
     paste("Every choice explore mode made, and on what basis. Where the",
           "declared pipeline supplied something -- the estimated transform,",
           "per-sample thresholds, the confounding verdict -- this table says",
@@ -209,38 +247,22 @@ write_explore_report <- function(ex_dir, opt = NULL) {
       "<p>This report is self-contained. It references no other file and needs ",
       "no network.</p>"))))
 
-  secs <- Filter(function(s) nzchar(s$html), secs)
+  secs <- report_number(secs)
   if (!length(secs)) return(invisible(NULL))
 
   nfig <- sum(vapply(secs, `[[`, integer(1), "n_fig"))
   ntab <- sum(vapply(secs, `[[`, integer(1), "n_tab"))
 
-  html <- c(
-    "<!doctype html><html lang='en'><head><meta charset='utf-8'>",
-    "<meta name='viewport' content='width=device-width,initial-scale=1'>",
-    "<title>cyRAVEN explore report</title>",
-    sprintf("<style>%s</style>", report_css()), "</head><body>",
-    "<div id='lb' onclick='if(event.target.id===\"lb\")cyClose()'>",
-    "<div id='lbbar'><span id='lbname'></span>",
-    "<button onclick='cyZset(LBZ/1.25)'>&minus;</button>",
-    "<span id='lbpct'>100%</span>",
-    "<button onclick='cyZset(LBZ*1.25)'>+</button>",
-    "<button onclick='cyZset(1)'>Fit</button>",
-    "<a class='dl' id='lbdl' download href='#'>Download</a>",
-    "<button onclick='cyClose()'>Close</button></div>",
-    "<img id='lbimg' alt='' onclick='event.stopPropagation()'/></div>",
-    "<div class='wrap'>",
-    "<nav class='side'><h2>Contents</h2>",
-    paste(vapply(secs, `[[`, character(1), "nav"), collapse = "\n"),
-    # Sibling of the nav, matching the run report: a child of the sticky
-    # scrolling column would scroll away from the edge it resizes.
-    "</nav><div class='side-grip'></div><main>",
+  masthead <- paste0(
     "<h1>cyRAVEN explore report</h1>",
-    sprintf("<p class='q'>%s &middot; cyRAVEN %s &middot; %d figures, %d tables, all embedded</p>",
+    sprintf("<p class='q'>%s &middot; cyRAVEN %s &middot; %d sections, %d figures, %d tables, %s</p>",
             html_escape(format(Sys.time(), tz = "UTC", usetz = TRUE)),
             html_escape(tryCatch(as.character(utils::packageVersion("cyRAVEN")),
                                  error = function(e) "unknown")),
-            nfig, ntab),
+            length(secs), nfig, ntab,
+            if (identical(report_image_mode(), "link"))
+              "figures linked from this directory" else "all embedded"))
+  banner <- paste0(
     sprintf("<div class='banner %s'>%s</div>",
             if (thr_based) "ok" else "warn",
             if (thr_based)
@@ -251,21 +273,15 @@ write_explore_report <- function(ex_dir, opt = NULL) {
               paste("Standalone unsupervised discovery. No declared pipeline",
                     "ran, so clusters are named from pooled medians rather than",
                     "per-sample thresholds.")),
-    sprintf(paste0("<div class='banner warn'>Explore mode is a HYPOTHESIS",
-                   " GENERATOR. A cluster is not a population until it has been",
-                   " declared, thresholded per sample and checked.",
-                   "<span style='float:right'>",
-                   "<button class='dl' onclick='cyAll(true)'>Expand all</button> ",
-                   "<button class='dl' onclick='cyAll(false)'>Collapse all</button>",
-                   "</span></div>")),
-    paste(vapply(secs, `[[`, character(1), "html"), collapse = "\n"),
-    "</main></div>",
-    paste0("<button id='cytop' type='button' onclick='cyTop()' ",
-           "title='Back to top' aria-label='Back to top'>&uarr;</button>"),
-    sprintf("<script>%s</script>", report_js()),
-    "</body></html>")
+    "<div class='banner warn'>Explore mode is a HYPOTHESIS GENERATOR. A cluster",
+    " is not a population until it has been declared, thresholded per sample",
+    " and checked.</div>")
+  html <- report_page(secs, "cyRAVEN explore report", masthead, banner)
 
   writeLines(html, path, useBytes = TRUE)
-  log_msg("wrote ", path, " (", nfig, " figures, ", ntab, " tables, self-contained)")
+  log_msg("wrote ", path, " (", length(secs), " numbered sections, ", nfig,
+          " figures, ", ntab, " tables, ",
+          if (identical(report_image_mode(), "link"))
+            "figures linked from this directory" else "self-contained", ")")
   invisible(path)
 }

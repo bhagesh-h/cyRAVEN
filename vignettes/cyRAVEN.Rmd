@@ -1780,6 +1780,7 @@ Whichever method runs, `batch_correction.csv` records it, including on a refusal
 | Option | Default | Effect |
 |---|---|---|
 | `--no-report` | on | Skip `report.html`, the single self-contained file carrying every figure and table the run produced, in the documented reading order |
+| `--report-images` | `embed` | `link` references the figures beside the report instead of embedding them: a few megabytes that open at once, readable only inside the results directory. Applies to `explore_report.html` too |
 | `--no-miflowcyt` | on | Skip `miflowcyt.md`, the ISAC-structured record of the instrument and the analysis |
 | `--no-session` | on | Skip `session_state.RData`. Worth doing: on a large cohort that file reaches several hundred MB and dominates the runtime, and nothing in the results depends on it |
 | `--keep-exprs` | off | Include raw expression matrices in the saved session. Large |
@@ -1787,13 +1788,16 @@ Whichever method runs, `batch_correction.csv` records it, including on a refusal
 
 `report.html` embeds every figure at full resolution and every table in full, so
 it can be moved, attached or archived on its own; it references no other file and
-needs no network. Figures zoom and download at full resolution; tables are
-searchable, sortable, paged at 10/50/100/all rows and exportable to CSV exactly
-as filtered. A run that fails writes it too, with the diagnosis and everything
-produced before the failure.
+needs no network. Every section, figure and table is numbered, and a search bar
+at the top finds them by name or description, and finds tables by the values in
+their rows (press `/` to start typing). Figures zoom and download at full
+resolution; tables are searchable, sortable, paged at 10/50/100/all rows and
+exportable to CSV exactly as filtered. A run that fails writes it too, with the
+diagnosis and everything produced before the failure.
 
-Its size is the sum of the figures it carries, which on a full run is tens of
-megabytes. A table larger than 8 MB is named with its row count rather than
+Its size is the sum of the figures it carries, once each, which on a full run is
+tens of megabytes; a figure is decoded only when its tab is opened, so the page
+stays responsive. `--report-images link` makes it a few megabytes instead. A table larger than 8 MB is named with its row count rather than
 embedded, which in practice means only the per-cell exports; change the limit
 with `options(cyRAVEN.report_table_max_mb = )`.
 

@@ -75,7 +75,9 @@ utils::globalVariables(c(
   "umap_2", "value", "x", "y",
   # ggplot2 aesthetics evaluated against columns built inside the figure
   # functions themselves, and therefore invisible to static analysis.
-  "cd45", "fsc", "lab", "needs_review", "row_label", "ssc", "tag",
+  # `hj` is the label justification fig_gating_qc() assigns per cut, so a
+  # label in the right half of a panel is written to the left of its line.
+  "cd45", "fsc", "hj", "lab", "needs_review", "row_label", "ssc", "tag",
   # Uncertainty figures: `lo`/`hi` are the interval bounds and `grp` the study
   # group, all three assigned onto the frame a few lines above the plot call;
   # `u_pct_points` and `term` are columns of the budget table.
@@ -111,5 +113,10 @@ utils::globalVariables(c(
   # through the trajectory, subset-balance and marker-by-visit figures;
   # `ratio` is the subset share those figures plot; `total_cells` is the
   # measured yield drawn by fig_total_counts_qc().
-  "patient_id", "ratio", "timepoint", "total_cells"
+  "patient_id", "ratio", "timepoint", "total_cells",
+  # MFI heatmap and dot plot, and the composition legend (R/figures-mfi.R):
+  # `scaled`, `txt` and `ink` are the per-marker colour, tile text and its ink,
+  # `pct_positive_median` a column of the MFI summary, `line1`/`ph` the two
+  # text lines of a legend row.
+  "ink", "line1", "pct_positive_median", "ph", "scaled", "txt"
 ))

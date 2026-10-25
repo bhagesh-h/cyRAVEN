@@ -1022,16 +1022,42 @@ version-controlled beside the config it describes.
 | File | Content |
 |---|---|
 | `population_frequencies.csv` | Percentage of parent per population per sample |
-| `population_marker_mfi.csv` | Median transformed intensity and percent positive per sample, population and marker |
+| `population_marker_mfi.csv` | Per sample, population and marker: the median intensity on the analysis scale (`median_asinh`), the same median in instrument units (`mfi`), and the percent positive |
+| `population_mfi_summary.csv` | Median fluorescence intensity per population and marker: the median over donors of each sample's median, in instrument units with its interquartile range, overall and per study group, with the median percent positive |
+| `population_composition.csv` | Each population's share of the embedded cells, its defining markers, its spread across donors and its share within each study group |
 | `functional_markers.csv` | The same restricted to functional marker blocks declared in the config |
 | `population_ratios.csv` | Derived ratios where declared |
 | `gate_counts.csv` | Event counts at each level of the gate hierarchy |
 | `population_frequencies.png` | Pooled composition across samples |
 | `population_marker_heatmap.png` | Marker intensity against declared populations, z-scored |
+| `population_mfi_heatmap.png` | MFI per population and marker, the value printed in each tile, colour scaled per marker; a bar per row gives the population's share |
+| `population_mfi_dotplot.png` | Dot size is the percent positive, colour the scaled MFI |
+| `population_mfi_heatmap_by_group.png` | The MFI heatmap per study group, on one colour scale |
+| `umap_composition.png` | The shared UMAP with a legend of each population's defining markers, share of the embedded cells and share per study group |
 
 `count` is an event count and scales with acquisition duration. It is not an
 abundance. Report `pct_of_cd45_pos` unless absolute counts were supplied through
 `--absolute-counts`.
+
+**MFI is a median of medians, in instrument units.** Each sample's median comes
+first and the cohort value is the median of those, so donors are the replicates
+and the donor with the most events does not set the value. The median is taken
+on the analysis scale and inverted through the run's transform; a median commutes
+with a monotone transform, so `mfi` is the median on the instrument's linear
+scale exactly. Compare `mfi` between runs only when the instrument settings
+match: it is in the instrument's units, which a voltage change rescales. The
+heatmap colours each marker separately, between its 1st and 99th percentile
+across populations, so the colour says "bright for this marker" and the printed
+number says how bright.
+
+**Composition shares sum to 100; frequencies do not.** In
+`population_composition.csv` and `umap_composition.png` each embedded cell has
+one label, its most specific population, so "CD3 pos" holds only the CD3+ cells
+no deeper population claimed. `population_frequencies.csv` scores overlapping
+gates, where "CD3 pos" includes the CD4 and CD8 T cells. The shares are of the
+embedded cells, which are drawn per sample; `pct_median_per_sample` is the
+per-donor view. Under `--subsample rare` the shares are weighted back to the true
+composition.
 
 ### 5. Embedding
 
@@ -1476,16 +1502,25 @@ moved is not a record.
 
 | Feature | Behaviour |
 |---|---|
+| Numbering | Every section is numbered in reading order, and every figure and table within it (4.1, 4.2, ...), on its tab, caption and contents entry. Numbers are assigned after the sections a run did not write are dropped, so they have no gaps |
+| Search | A bar pinned to the top finds sections, figures and tables by title, name, description and column name, and tables by the values in their rows; a row match opens the table already filtered. `/` or Ctrl+K focuses it, arrow keys move, Enter opens |
 | Sections | Collapsible, with a sidebar indexing every section, figure and table, and expand/collapse-all |
 | Sidebar | Drag its right edge to resize, or focus it and use the arrow keys. The width is remembered for next time |
 | Back to top | A button at the bottom right once you are a screen down, since the report runs to tens of screens |
-| Figures | Uniform display box whatever the native aspect ratio; click to zoom, with keyboard `+`/`-` and Escape; download the original PNG at full resolution |
+| Figures | Uniform display box whatever the native aspect ratio, with a one-line description underneath; click to zoom, with keyboard `+`/`-` and Escape; download the original PNG at full resolution. A figure is decoded only when its tab is shown |
+| Small screens | Below 900px the contents list becomes a drawer behind the button in the search bar, and figures and table controls fit the width |
 | Tables | Searchable across all columns, sortable by clicking a heading, shown 10, 50, 100 or all rows, scrollable with a sticky header |
 | Export | Any table exports to CSV exactly as filtered and sorted, so what you export is what you were looking at |
 | Completeness | Every figure and table the run wrote appears; anything no section names is collected under "Further outputs" rather than omitted |
 
-Its size is the sum of the figures it carries, which on a full run is tens of
-megabytes. A table larger than 8 MB is named with its row count instead of being
+Its size is the sum of the figures it carries, once each: tens of megabytes on
+a full run (59 MB for one 24-sample cohort with 108 figures, which was 108 MB
+while each figure was stored twice). Opening it costs less
+than its size suggests, because no figure is decoded until it is shown.
+`--report-images link` writes a report of a few megabytes that references the
+PNGs beside it instead of carrying them; it opens at once but shows its figures
+only while it stays in the results directory, and its tables are still
+embedded. A table larger than 8 MB is named with its row count instead of being
 embedded, which in practice means only the per-cell exports; the limit is
 `options(cyRAVEN.report_table_max_mb = )`.
 
@@ -1536,8 +1571,12 @@ subdirectory. Nothing outside it changes.
 
 | File | Content |
 |---|---|
-| `explore_report.html` | Self-contained report, separate from `report.html` |
+| `explore_report.html` | Self-contained report, separate from `report.html`, numbered and searchable in the same way |
 | `explore_cluster_profile.csv` | Per cluster: size, phenotype string, fraction positive and median per channel |
+| `explore_cluster_mfi.csv` | MFI per cluster and marker: median over donors of each sample's cluster median, in instrument units with its interquartile range, overall and per group |
+| `explore_cluster_composition.csv` | Each cluster's share of the cells after the QC gate, with its phenotype, matched subset, spread across donors and share per group |
+| `explore_umap_composition.png` | The explore embedding with a legend of each cluster's subset, phenotype and share |
+| `explore_cluster_mfi_heatmap.png`, `explore_cluster_mfi_dotplot.png` | The cluster MFI as a value-printed heatmap and as a dot plot, as for declared populations |
 | `explore_qc_clusters.csv` | The cluster-level gate: `call` and the `basis` for it |
 | `explore_cluster_abundance.csv` | Per donor per cluster, with counting uncertainty and LOD/LOQ |
 | `explore_cluster_stats.csv` | Donor-level group tests, carrying the batch/group confounding verdict |

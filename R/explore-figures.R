@@ -238,3 +238,134 @@ explore_figures <- function(cells, feats, prof, ex_dir, tag = "",
 
   written
 }
+
+#' Explore mode: MFI per cluster, and the composition of the embedding
+#'
+#' The explore counterparts of population_mfi_summary.csv and
+#' umap_composition.png, built by the same functions so the two modes read
+#' alike: `explore_cluster_mfi.csv` with its heatmap and dot plot, and
+#' `explore_cluster_composition.csv` with `explore_umap_composition.png`.
+#'
+#' Per-cluster medians are taken per SAMPLE first and summarised over samples,
+#' as for declared populations, so the donor with the most events does not set
+#' a cluster's intensity. A sample contributes to a cluster only where it holds
+#' at least ten of its cells. Percent positive is against each sample's own
+#' threshold where the declared run supplied one; otherwise the "All samples"
+#' row falls back to the cluster's pooled call, the basis explore_cluster_profile
+#' already reports.
+#'
+#' @param cells Explore cell table: `sample_id`, `cluster`, `umap_1`, `umap_2`,
+#'   the feature columns and optionally `group`.
+#' @param feats Feature names.
+#' @param prof Cluster profile, with `phenotype` and `frac_pos.*` columns.
+#' @param subs Optional subset annotation from annotate_clusters_with_subsets().
+#' @param tr The panel's transform.
+#' @param thr_by_sample Named list: sample -> named thresholds on the analysis scale.
+#' @param scatter Feature names that are log10 scatter.
+#' @param ex_dir Output directory.
+#' @param tag Panel suffix.
+#' @return Character vector of file names written.
+#' @keywords internal
+explore_mfi_composition <- function(cells, feats, prof, subs = NULL, tr = NULL,
+                                    thr_by_sample = list(),
+                                    scatter = character(0), ex_dir, tag = "") {
+  written <- character(0)
+  feats <- intersect(feats, names(cells))
+  if (!length(feats) || !nrow(cells)) return(written)
+  plab <- if (nzchar(tag)) paste0(", ", sub("^_", "", tag)) else ""
+  cells$cluster <- as.character(cells$cluster)
+  ks <- levels(natural_cluster_factor(cells$cluster))
+  name_of <- NULL
+  if (!is.null(subs) && nrow(subs) && all(c("cluster", "subset_label") %in% names(subs)))
+    name_of <- stats::setNames(as.character(subs$subset_label), subs$cluster)
+  row_labels <- stats::setNames(ks, ks)
+  if (!is.null(name_of)) {
+    nm <- name_of[ks]
+    row_labels[!is.na(nm)] <- paste0(ks[!is.na(nm)], "  ", nm[!is.na(nm)])
+  }
+  grp_of <- if ("group" %in% names(cells)) {
+    g <- tapply(as.character(cells$group), cells$sample_id, function(x) x[1])
+    g[!is.na(g)]
+  } else NULL
+
+  # ---- composition ----------------------------------------------------------
+  cols <- stats::setNames(scales::hue_pal()(length(ks)), ks)
+  comp <- composition_table(cells, "cluster",
+                            phenotype = stats::setNames(prof$phenotype, prof$cluster),
+                            group_col = if ("group" %in% names(cells)) "group" else NULL,
+                            colours = cols, name_of = name_of)
+  if (!is.null(comp) && nrow(comp)) {
+    f <- sprintf("explore_cluster_composition%s.csv", tag)
+    utils::write.csv(comp, file.path(ex_dir, f), row.names = FALSE)
+    written <- c(written, f)
+    fz <- file.path(ex_dir, sprintf("explore_umap_composition%s.png", tag))
+    if (!is.null(fig_umap_composition(cells, comp, fz, label_col = "cluster",
+          title = paste0("Explore: composition of the embedding", plab),
+          subtitle = paste0(format(nrow(cells), big.mark = ","),
+                            " cells after the cluster-level QC gate; markers are ",
+                            "each cluster's measured phenotype, not a definition"),
+          header = "Cluster and measured phenotype")))
+      written <- c(written, basename(fz))
+  }
+
+  # ---- MFI per cluster ------------------------------------------------------
+  key <- paste(cells$sample_id, cells$cluster, sep = "\r")
+  idx <- split(seq_len(nrow(cells)), factor(key, levels = unique(key)))
+  long <- do.call(rbind, lapply(idx, function(i) {
+    if (length(i) < 10L) return(NULL)
+    s <- cells$sample_id[i[1]]
+    X <- as.matrix(cells[i, feats, drop = FALSE])
+    thr <- thr_by_sample[[s]]
+    pp <- vapply(feats, function(m) {
+      t <- if (!is.null(thr) && m %in% names(thr)) as.numeric(thr[[m]]) else NA_real_
+      if (is.finite(t)) 100 * mean(X[, m] > t, na.rm = TRUE) else NA_real_
+    }, numeric(1))
+    data.frame(sample_id = s, cluster = cells$cluster[i[1]], n_cells = length(i),
+               marker = feats,
+               median_transformed = apply(X, 2, stats::median, na.rm = TRUE),
+               pct_positive = pp, stringsAsFactors = FALSE)
+  }))
+  if (is.null(long) || !nrow(long)) return(written)
+  long <- long[order(match(long$cluster, ks)), , drop = FALSE]
+  ms <- summarise_mfi(long, transforms = tr, group_of = grp_of,
+                      label_col = "cluster", value_col = "median_transformed",
+                      scatter = scatter)
+  if (is.null(ms) || !nrow(ms)) return(written)
+  ms$panel <- NULL
+  fp <- prof[, c("cluster", grep("^frac_pos\\.", names(prof), value = TRUE)), drop = FALSE]
+  miss <- which(ms$group == "All samples" & !is.finite(ms$pct_positive_median))
+  for (r in miss) {
+    col <- paste0("frac_pos.", ms$marker[r])
+    v <- if (col %in% names(fp)) fp[[col]][match(ms$cluster[r], fp$cluster)] else NA
+    if (length(v) && is.finite(v)) ms$pct_positive_median[r] <- round(100 * v, 2)
+  }
+  f <- sprintf("explore_cluster_mfi%s.csv", tag)
+  utils::write.csv(ms, file.path(ex_dir, f), row.names = FALSE)
+  written <- c(written, f)
+  share <- if (!is.null(comp)) stats::setNames(comp$pct_of_embedded, comp$cluster) else NULL
+  fh <- file.path(ex_dir, sprintf("explore_cluster_mfi_heatmap%s.png", tag))
+  if (!is.null(fig_mfi_heatmap(ms, fh, label_col = "cluster", freq = share,
+        freq_label = "% of embedded cells", cluster_rows = TRUE,
+        row_labels = row_labels,
+        title = paste0("Explore: median fluorescence intensity per cluster", plab),
+        subtitle = paste0("Median over donors of each sample's cluster median, in ",
+                          "instrument units; colour scaled per marker; rows ",
+                          "ordered by similarity"))))
+    written <- c(written, basename(fh))
+  fd <- file.path(ex_dir, sprintf("explore_cluster_mfi_dotplot%s.png", tag))
+  if (!is.null(fig_mfi_dotplot(ms, fd, label_col = "cluster", cluster_rows = TRUE,
+        row_labels = row_labels,
+        title = paste0("Explore: marker positivity and intensity per cluster", plab),
+        subtitle = paste0("Dot size: median % positive; colour: median intensity ",
+                          "scaled per marker"))))
+    written <- c(written, basename(fd))
+  if (!is.null(grp_of) && length(unique(grp_of)) > 1L) {
+    fg <- file.path(ex_dir, sprintf("explore_cluster_mfi_heatmap_by_group%s.png", tag))
+    if (!is.null(fig_mfi_heatmap(ms, fg, label_col = "cluster", by_group = TRUE,
+          cluster_rows = TRUE, row_labels = row_labels,
+          title = paste0("Explore: median fluorescence intensity by group", plab),
+          subtitle = "One panel per group on one colour scale; values in instrument units")))
+      written <- c(written, basename(fg))
+  }
+  written
+}

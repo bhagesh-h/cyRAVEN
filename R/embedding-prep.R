@@ -88,7 +88,13 @@ plan_subsample <- function(n_per_sample, cap = 20000L, equalise = TRUE,
   }
   names(take) <- names(n_per_sample)
   if (!is.null(total_cap) && sum(take) > total_cap) {
-    take <- pmax(1L, floor(take * total_cap / sum(take)))
+    # The scaled counts FIRST: pmax() takes its attributes from its first
+    # argument, and with the bare 1L first every sample name was dropped. Each
+    # caller then looks its sample up by name, so whenever the total cap applied
+    # -- 35 demo samples at explore's default 6,000 cells each against its
+    # 150,000 cap -- every lookup failed and explore mode stopped with
+    # "subscript out of bounds".
+    take <- pmax(floor(take * total_cap / sum(take)), 1L)
     message("[subsample] total cap ", total_cap, " applied -> at most ",
             max(take), " cells/sample")
   }

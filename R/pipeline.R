@@ -1126,6 +1126,9 @@ run_cyraven_impl <- function(opt) {
     .rare <- identical(opt$subsample %||% "uniform", "rare")
     rows <- list()
     for (s in inc) {
+      # A sample with no gated cells is absent from the plan; skip it rather
+      # than fail on looking it up.
+      if (is.na(planned[s])) next
       idx <- which(gates[[s]]$masks$cd45_pos)
       tm <- pops[[s]]$tmat
       keep <- intersect(feats, colnames(tm))
@@ -1354,6 +1357,34 @@ run_cyraven_impl <- function(opt) {
     fig_umap_populations(embeddings[[p$name]]$cells,
                          file.path(opt$outdir, paste0("umap_populations", sfx, ".png")),
                          panel_label = p$name)
+    # COMPOSITION, FROM EVERY EMBEDDED CELL. all_cells rather than the figure
+    # cells: the catch-all is part of the composition, so the shares sum to 100
+    # only with it, and it is drawn in grey beneath the populations rather than
+    # left out. The colours are population_colours() over the same labels, so
+    # each population keeps the colour it has in umap_populations.png.
+    tryCatch({
+      .ac <- all_cells[[p$name]]
+      .lv <- sort(unique(stats::na.omit(as.character(.ac$population_label))))
+      .comp <- composition_table(.ac, "population_label",
+                                 phenotype = population_phenotype(spec),
+                                 group_col = if (.gcol %in% names(.ac)) .gcol else NULL,
+                                 colours = population_colours(.lv))
+      if (!is.null(.comp) && nrow(.comp)) {
+        write.csv(.comp, file.path(opt$outdir,
+                                   paste0("population_composition", sfx, ".csv")),
+                  row.names = FALSE)
+        fig_umap_composition(.ac, .comp,
+          file.path(opt$outdir, paste0("umap_composition", sfx, ".png")),
+          title = paste0("Composition of the shared CD45+ UMAP",
+                         if (length(fpr$panels) > 1L) paste0(", ", p$name) else ""),
+          subtitle = paste0(format(nrow(.ac), big.mark = ","), " embedded cells, ",
+                            "each under its most specific population, so the ",
+                            "shares sum to 100%; defining markers from the ",
+                            "population specification"))
+      }
+    }, error = function(e)
+      log_msg("  WARNING umap_composition failed: ", conditionMessage(e),
+              ", every other output is unaffected"))
     fig_marker_grid(embeddings[[p$name]]$cells, fcols,
                     file.path(opt$outdir, paste0("umap_markers", sfx, ".png")),
                     panel_label = p$name)
@@ -1924,6 +1955,30 @@ run_cyraven_impl <- function(opt) {
                  row.names = NULL, stringsAsFactors = FALSE)
     }))
   }))
+  # THE SAME MEDIAN IN INSTRUMENT UNITS, beside the analysis-scale one. A median
+  # commutes with a monotone transform, so inverting median_asinh through the
+  # panel's own transform IS the median intensity on the linear scale -- the
+  # number a reader compares with a published MFI -- with no second pass over
+  # events the pipeline has already freed. Added after median_asinh; every
+  # consumer selects columns by name.
+  # Scatter channels used as gates sit in tmat on a log10 scale, not through
+  # the fluorescence transform (see STEP 4), so they are inverted as such: a
+  # logicle inverse has no parameters for SSC-A, and an arcsinh one would turn
+  # log10 units into a meaningless intensity.
+  .mfi_scatter <- unique(unlist(lapply(names(pops), function(s)
+    setdiff(colnames(pops[[s]]$tmat), names(reads[[s]]$marker_cols)))))
+  if (!is.null(mfi) && nrow(mfi)) {
+    .mfi_lin <- rep(NA_real_, nrow(mfi))
+    for (.pn in unique(mfi$panel)) {
+      .i <- which(mfi$panel == .pn)
+      .mfi_lin[.i] <- mfi_back_transform(mfi$median_asinh[.i], mfi$marker[.i],
+                                         transforms[[.pn]], scatter = .mfi_scatter)
+    }
+    .at <- match("median_asinh", names(mfi))
+    mfi <- data.frame(mfi[seq_len(.at)], mfi = signif(.mfi_lin, 6),
+                      mfi[-seq_len(.at)], check.names = FALSE,
+                      stringsAsFactors = FALSE)
+  }
   write.csv(mfi, file.path(opt$outdir, "population_marker_mfi.csv"), row.names = FALSE)
 
   # ---- functional marker blocks, scoped as the gating strategy specifies -----
@@ -2574,6 +2629,62 @@ run_cyraven_impl <- function(opt) {
                              group_col = gcol)
     })
   }
+
+  # ---- marker intensity (MFI) summary --------------------------------------
+  # Written on every run, grouped or not, and not under --no-heatmaps: the
+  # table is the deliverable and the figures only make it readable. One heatmap
+  # with the value in every tile and one dot plot per panel; a faceted heatmap
+  # per study group where there are groups. See R/figures-mfi.R.
+  .ext_ok("MFI summary", {
+    if (!is.null(mfi) && nrow(mfi)) {
+      .ms <- summarise_mfi(mfi, transforms = transforms,
+                           group_of = if (grouped) group_of else NULL,
+                           scatter = .mfi_scatter)
+      if (!is.null(.ms) && nrow(.ms)) {
+        write.csv(.ms, file.path(opt$outdir, "population_mfi_summary.csv"),
+                  row.names = FALSE)
+        log_msg("wrote population_mfi_summary.csv (", nrow(.ms), " rows: ",
+                length(unique(.ms$population)), " population(s) x ",
+                length(unique(.ms$marker)), " marker(s)",
+                if (grouped) ", overall and per group" else "", ")")
+        .fq <- if (!is.null(freq)) qc_pass_rows(freq) else NULL
+        for (.pn in unique(.ms$panel)) {
+          .sfx <- if (length(unique(.ms$panel)) > 1L) paste0("_", .pn) else ""
+          .plab <- if (nzchar(.sfx)) paste0(", ", .pn) else ""
+          .sub <- .ms[.ms$panel == .pn, , drop = FALSE]
+          .share <- if (!is.null(.fq) && nrow(.fq)) {
+            .f <- if ("panel" %in% names(.fq))
+              .fq[is.na(.fq$panel) | .fq$panel == .pn, , drop = FALSE] else .fq
+            tapply(.f$pct_of_cd45_pos, .f$population, stats::median, na.rm = TRUE)
+          } else NULL
+          .tr_lab <- transforms[[.pn]]$method %||% "transformed"
+          fig_mfi_heatmap(.sub,
+            file.path(opt$outdir, paste0("population_mfi_heatmap", .sfx, ".png")),
+            freq = .share, freq_label = "median % of CD45+",
+            title = paste0("Median fluorescence intensity per population", .plab),
+            subtitle = paste0("Median over donors of each sample's median, in ",
+                              "instrument units; colour is the ", .tr_lab,
+                              " value scaled per marker between its 1st and ",
+                              "99th percentile"))
+          fig_mfi_dotplot(.sub,
+            file.path(opt$outdir, paste0("population_mfi_dotplot", .sfx, ".png")),
+            title = paste0("Marker positivity and intensity per population", .plab),
+            subtitle = paste0("Dot size: median % of the population above its ",
+                              "own sample's threshold. Colour: median intensity, ",
+                              "scaled per marker"))
+          if (grouped)
+            fig_mfi_heatmap(.sub,
+              file.path(opt$outdir, paste0("population_mfi_heatmap_by_group",
+                                           .sfx, ".png")),
+              by_group = TRUE,
+              title = paste0("Median fluorescence intensity by ", gcol, .plab),
+              subtitle = paste0("One panel per group, one colour scale for all ",
+                                "of them: a tile darker in one group is dimmer ",
+                                "there. Values in instrument units"))
+        }
+      }
+    }
+  })
 
   # ---- compositional (CLR) re-test of the abundance comparison -------------
   if (!isTRUE(opt$no_compositional) && group_tests && !is.null(freq) &&

@@ -70,7 +70,8 @@ docker run --rm \
 ```
 
 **5. Open `results/report.html`.** Every figure and table is in that one
-file.
+file, numbered, with a search bar at the top that finds sections, figures,
+tables and table rows.
 
 On Windows, run these in Git Bash or WSL with `MSYS_NO_PATHCONV=1` in front
 of each command. In PowerShell, end each continued line with a backtick

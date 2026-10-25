@@ -135,7 +135,10 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
     n_reread <- 0L
     rows <- list()
     for (s in sids) {
-      if (is.na(planned[[s]]) || planned[[s]] < 1L) next
+      # planned[s], not planned[[s]]: a sample with no events is absent from the
+      # plan, and `[[` on a named vector errors on an absent name where `[`
+      # returns the NA this test is written for.
+      if (is.na(planned[s]) || planned[s] < 1L) next
       rd <- .events(s)
       if (is.null(rd)) {
         log_msg("  explore: no events available for ", s, ", skipped")
@@ -712,6 +715,21 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
                  explore_figures(cells, fcols, prof, ex_dir, tag = tag,
                                  group_col = if ("group" %in% colnames(cells))
                                    "group" else NULL))
+
+    # MFI per cluster and the composition of the embedding, on by default like
+    # their declared counterparts. Drawn with the RNG stream restored, so adding
+    # them cannot move the next panel's embedding.
+    written <- c(written, tryCatch(without_spending_draws(
+      explore_mfi_composition(cells, fcols, prof,
+                              subs = subs,
+                              tr = tr, thr_by_sample = thr_by_sample,
+                              scatter = intersect(fcols, scat),
+                              ex_dir = ex_dir, tag = tag)),
+      error = function(e) {
+        log_msg("  WARNING explore MFI and composition failed: ",
+                conditionMessage(e), ", every other output is unaffected")
+        character(0)
+      }))
 
     # --total-counts figures. The QC one is drawn whenever a total was supplied,
     # including when no group exists to compare across: checking that the

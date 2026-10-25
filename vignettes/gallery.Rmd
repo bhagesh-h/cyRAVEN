@@ -121,8 +121,9 @@ a Windows path.
 
 Step 4 should report 35 files, four resolved markers, that every marker the
 specification names is present, that the sheet covers every file, and the group
-sizes. Step 5 writes 24 figures and 35 tables into `results/`, plus
-`report.html`, which carries all of them embedded in one file.
+sizes. Step 5 writes 29 figures and 33 tables into `results/`, plus
+`report.html`, which carries all of them embedded in one file, numbered, with a
+search bar at the top.
 
 ### 0.3 What each flag is doing
 
@@ -307,6 +308,50 @@ this figure serves the inverse function of its equivalent in clustering-first
 analysis: a population that does not show the markers its definition requires
 falsifies the gate that produced it.
 
+### population_mfi_heatmap.png
+
+Median fluorescence intensity per population and marker, in the instrument's own
+units: each sample's median first, then the median over samples. The number in
+each tile is the intensity; the colour is the same value on the analysis scale,
+rescaled per marker, so it reads as "bright for this marker". The bar beside each
+row is the population's median share of CD45+ cells.
+
+```{r, fig.alt="Heatmap of median fluorescence intensity per population and marker, with the value printed in each tile and a bar of each population's share"}
+knitr::include_graphics("figures/demo_population_mfi_heatmap.png")
+```
+
+**What to look for.** Read a row for a population's phenotype and a column for
+which population is brightest on a marker. Compare the printed values between
+runs only at matched instrument settings, because they are in the instrument's
+units.
+
+**This run.** Lymphocytes sit at 696 on CD45 and at 3 or less on CD14, CD33 and
+CD15, which is what their definition requires. Granulocytes have the highest
+side scatter (315, against 81 for lymphocytes) and read 1.0k on CD15. The CD45
+column reads 1.0k for every myeloid population because these files record
+intensity on a 0 to 1,023 scale and more than half of those events sit at the
+top of it: the populations are bright, but how bright is beyond what the files
+can say.
+
+### population_mfi_dotplot.png
+
+The same medians as colour, with the percent of each population above its own
+sample's threshold as the size of the dot.
+
+```{r, fig.alt="Dot plot of percent positive as dot size and scaled median intensity as colour, per population and marker"}
+knitr::include_graphics("figures/demo_population_mfi_dotplot.png")
+```
+
+**What to look for.** Size and colour disagreeing is the informative case. A
+large pale dot is a population that is uniformly dim on the marker; a small dark
+one is a bright minority inside it.
+
+**This run.** Monocytes are CD14-positive at a median of 100% and CD15-positive
+at 0%, while granulocytes are the reverse on CD15. The CD33-positive myeloid
+population is CD14-positive at about 50%: half of it is monocytes, which the
+specification allows because it defines that population by CD45 and CD33
+alone.
+
 ### population_frequencies.png
 
 The pooled composition across samples.
@@ -328,6 +373,28 @@ knitr::include_graphics("figures/demo_cohort_composition_heatmap.png")
 7-against-28 sample imbalance from generating the pattern.
 
 ## 4. The shared embedding
+
+### umap_composition.png
+
+The shared embedding coloured by population, with a legend that says what each
+colour is: the population's name, its defining markers from the specification,
+its share of the embedded cells, and its share within each study group.
+
+```{r, fig.alt="Shared UMAP coloured by population beside a legend of each population's defining markers, share of embedded cells and share per GvHD grade"}
+knitr::include_graphics("figures/demo_umap_composition.png")
+```
+
+**What to look for.** Each embedded cell carries one label, its most specific
+population, so the shares sum to 100. They are therefore not the frequencies in
+`population_frequencies.csv`, where the gates overlap.
+
+**This run.** Most of the embedding, 83%, is "Other CD45+": the specification
+declares five populations, and on a four-colour myeloid panel most CD45+ events
+match none of them. Lymphocytes are 24.9% of the grade 1 cells and 3.9% of the
+grade 3 cells, but `population_composition.csv` gives their median share per
+sample as 0: only 5 of the 22 embedded samples hold any. Read that column before
+quoting a pooled share, and the per-donor test in `group_comparison.png` before
+reading the difference as one between grades.
 
 ### umap_overview.png
 

@@ -4,7 +4,13 @@
 \alias{write_run_report}
 \title{Write a single self-contained HTML report of everything a run produced}
 \usage{
-write_run_report(outdir, opt = NULL, verdicts = NULL, failure = NULL)
+write_run_report(
+  outdir,
+  opt = NULL,
+  verdicts = NULL,
+  failure = NULL,
+  images = NULL
+)
 }
 \arguments{
 \item{outdir}{the results directory, which is also where the report is written}
@@ -15,6 +21,12 @@ write_run_report(outdir, opt = NULL, verdicts = NULL, failure = NULL)
 
 \item{failure}{a condition or message; when given, the report is written as
 the record of a failed run rather than a completed one.}
+
+\item{images}{"embed" to carry every figure inside the file (the default),
+or "link" to reference the PNGs beside it, which makes a report of a few
+megabytes that shows its figures only while it stays in the results
+directory. Defaults to \code{opt$report_images}, then to
+\code{getOption("cyRAVEN.report_images", "embed")}.}
 }
 \value{
 the path, invisibly, or NULL when there is nothing to report

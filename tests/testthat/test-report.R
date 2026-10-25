@@ -312,3 +312,113 @@ test_that("unsupervised discovery is pulled ahead of the declared analysis", {
   expect_lt(pos("Provenance"), pos("Unsupervised discovery"))
   expect_lt(pos("Unsupervised discovery"), pos("Gate placement"))
 })
+
+test_that("every section, figure and table is numbered, with no token left behind", {
+  d <- fake_results(c("gating_qc.png", "recon_diagnostics.png", "staining_qc.csv",
+                      "thresholds_used.csv"))
+  suppressMessages(write_run_report(d))
+  txt <- read_report(d)
+  expect_false(grepl("@@", txt, fixed = TRUE))
+  nums <- regmatches(txt, gregexpr("class='sec-num'>[0-9]+<", txt))[[1]]
+  expect_identical(as.integer(gsub("\\D", "", nums)), seq_along(nums))
+  # Subsections run through figures then tables within a section.
+  expect_match(txt, "Figure [0-9]+\\.1</b>")
+  expect_match(txt, "Table [0-9]+\\.[0-9]+</span>")
+  expect_match(txt, "class='nav-num'>[0-9]+\\.[0-9]+<")
+})
+
+test_that("cross-references name the section's number, or say it is absent", {
+  d <- fake_results(c("acquisition_qc.png", "uncertainty_budget.csv"))
+  suppressMessages(write_run_report(d))
+  txt <- read_report(d)
+  chunks <- strsplit(txt, "<section class='sec' id='", fixed = TRUE)[[1]]
+  s6 <- chunks[startsWith(chunks, "s6'")]
+  n6 <- sub(".*class='sec-num'>([0-9]+)<.*", "\\1", s6)
+  expect_match(txt, paste0("gate uncertainty in section ", n6, "\\."))
+  d2 <- fake_results("acquisition_qc.png")
+  suppressMessages(write_run_report(d2))
+  expect_match(read_report(d2), "a section this run did not write", fixed = TRUE)
+})
+
+test_that("a search bar indexes sections, figures, tables and table rows", {
+  d <- fake_results(c("gating_qc.png", "staining_qc.csv"))
+  suppressMessages(write_run_report(d))
+  txt <- read_report(d)
+  expect_match(txt, "id='cyq'", fixed = TRUE)
+  expect_match(txt, "role='search'", fixed = TRUE)
+  for (fn in c("function cyIndex(", "function cySearch(", "function cyRowCount(",
+               "function cyGo("))
+    expect_match(txt, fn, fixed = TRUE)
+  # The figure's one-line description is on the page, where search finds it.
+  expect_match(txt, "class='fignote'>The gate hierarchy", fixed = TRUE)
+})
+
+test_that("each figure is stored once and decoded only when shown", {
+  d <- fake_results("gating_qc.png")
+  suppressMessages(write_run_report(d))
+  txt <- read_report(d)
+  b64 <- sub("^data:image/png;base64,", "",
+             file_data_uri(file.path(d, "gating_qc.png"), "image/png"))
+  expect_identical(lengths(regmatches(txt, gregexpr(b64, txt, fixed = TRUE))), 1L)
+  expect_match(txt, "<img data-src='data:image/png;base64,", fixed = TRUE)
+  expect_match(txt, "onclick='return cyDl(this)'", fixed = TRUE)
+})
+
+test_that("linked mode references the figures instead of carrying them", {
+  d <- fake_results(c("gating_qc.png", "staining_qc.csv"))
+  suppressMessages(write_run_report(d, images = "link"))
+  txt <- read_report(d)
+  expect_match(txt, "data-src='gating_qc.png'", fixed = TRUE)
+  expect_match(txt, "href='gating_qc.png'", fixed = TRUE)
+  expect_false(grepl("data:image/png;base64,bm90", txt, fixed = TRUE))
+  # Tables still travel with the report.
+  expect_match(txt, "id='tab-staining-qc-data'", fixed = TRUE)
+  expect_match(txt, "figures linked from this directory", fixed = TRUE)
+  # The option does not leak into the next report.
+  d2 <- fake_results("gating_qc.png")
+  suppressMessages(write_run_report(d2))
+  expect_match(read_report(d2), "data-src='data:image/png", fixed = TRUE)
+})
+
+test_that("MFI and composition outputs get their own places", {
+  d <- fake_results(c("population_mfi_heatmap.png", "population_mfi_dotplot.png",
+                      "population_mfi_summary.csv", "population_marker_mfi.csv",
+                      "umap_composition.png", "population_composition.csv",
+                      "population_marker_heatmap.png"))
+  suppressMessages(write_run_report(d))
+  txt <- read_report(d)
+  chunks <- strsplit(txt, "<section class='sec' id='", fixed = TRUE)[[1]]
+  s4b <- chunks[startsWith(chunks, "s4b'")]
+  expect_length(s4b, 1L)
+  expect_match(s4b, sec_title("Marker intensity (MFI)"), fixed = TRUE)
+  for (f in c("population_mfi_heatmap", "population_mfi_dotplot",
+              "population_mfi_summary.csv", "population_marker_mfi.csv"))
+    expect_match(s4b, f, fixed = TRUE)
+  s7 <- chunks[startsWith(chunks, "s7'")]
+  expect_match(s7, "umap_composition", fixed = TRUE)
+  expect_match(s7, "population_composition.csv", fixed = TRUE)
+  expect_false(grepl(sec_title("Further outputs"), txt, fixed = TRUE))
+  # Read with the phenotype: MFI directly after phenotype concordance.
+  pos <- function(t) regexpr(sec_title(t), txt, fixed = TRUE)
+  expect_lt(pos("Phenotype concordance"), pos("Marker intensity (MFI)"))
+})
+
+test_that("the explore report is numbered and searchable too", {
+  d <- fake_results(character(0))
+  ex <- file.path(d, "explore")
+  dir.create(ex)
+  for (f in c("explore_umap_clusters.png", "explore_umap_composition.png",
+              "explore_cluster_mfi_heatmap.png"))
+    writeLines("not really a png", file.path(ex, f))
+  for (f in c("explore_cluster_composition.csv", "explore_cluster_mfi.csv"))
+    utils::write.csv(data.frame(a = 1), file.path(ex, f), row.names = FALSE)
+  suppressMessages(write_explore_report(ex))
+  txt <- paste(readLines(file.path(ex, "explore_report.html"), warn = FALSE),
+               collapse = "\n")
+  expect_false(grepl("@@", txt, fixed = TRUE))
+  expect_match(txt, "id='cyq'", fixed = TRUE)
+  expect_match(txt, sec_title("Composition of the embedding"), fixed = TRUE)
+  expect_match(txt, sec_title("Marker intensity per cluster (MFI)"), fixed = TRUE)
+  # Titles carry no hand-written ordinal now that numbering is automatic.
+  expect_false(grepl("sec-title'>[0-9]", txt))
+})

@@ -123,12 +123,13 @@ docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" bhagesh/cyrav
 docker run --rm -v "$PWD/demo:/data:ro" -v "$PWD/results:/results" bhagesh/cyraven:1.0.0 --dir /data/fcs --samples /data/samples.csv --config /data/panel.yaml --group-column cohort --reference-group "GvHD grade 1" --batch-column visit --cluster --outdir /results
 ```
 
-That writes **24 figures and 35 tables** at the top level, full-size UMAPs per
+That writes **29 figures and 33 tables** at the top level, full-size UMAPs per
 marker in `marker_umaps_by_group/` (each marker pooled, and split by every
 category the sample sheet carries), and a self-contained `results/report.html`:
 one file carrying every figure and table, linking to nothing and loading nothing
-from a network. Each table in the report is its own toggle, carrying a line
-saying what it holds. Nothing is downloaded at any point; the demonstration
+from a network. Every section, figure and table is numbered, a search bar at
+the top finds them by name, description or the values in a table's rows, and
+each table is its own toggle, carrying a line saying what it holds. Nothing is downloaded at any point; the demonstration
 cohort ships inside a package cyRAVEN already depends on.
 
 ## Your own data

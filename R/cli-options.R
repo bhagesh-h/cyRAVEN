@@ -273,9 +273,22 @@ build_option_list <- function() list(
               dest = "no_report",
               help = paste("skip report.html, which indexes every output in the",
                            "order the documentation says they must be read.",
-                           "Written by default; it references the figures beside",
-                           "it rather than embedding them, so it must be read in",
-                           "the results directory")),
+                           "Written by default, with every figure and table",
+                           "embedded so the file can be moved on its own")),
+  # WHY A CHOICE AND NOT A FIXED BEHAVIOUR. Embedding is what makes the report
+  # a record that survives being moved, and it is the default. Its price is
+  # size: a cohort with 160 figures writes a report of about 110 MB. Linking
+  # writes a few megabytes that open at once, for anyone reading the results
+  # in place.
+  optparse::make_option("--report-images", type = "character", default = "embed",
+              dest = "report_images", metavar = "embed|link",
+              help = paste("how report.html and explore_report.html carry their",
+                           "figures. 'embed' [default] puts every figure inside",
+                           "the file, so it can be emailed or archived on its",
+                           "own. 'link' references the PNGs beside it instead:",
+                           "a report of a few MB that opens at once, but shows",
+                           "its figures only while it stays in the results",
+                           "directory. Tables are embedded either way")),
   optparse::make_option("--no-miflowcyt", action = "store_true", default = FALSE,
               dest = "no_miflowcyt",
               help = paste("skip miflowcyt.md, the ISAC-structured report of",
