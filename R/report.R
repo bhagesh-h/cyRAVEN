@@ -29,8 +29,19 @@
 #
 # The cost is size, and it is a real one. Figures are embedded once, at full
 # resolution, and displayed scaled down by CSS; the same bytes serve the
-# on-screen figure and the full-resolution download, so nothing is stored twice.
+# on-screen figure and the full-resolution download, so nothing is stored twice
+# (the download link reads the image when clicked -- until it did, every figure
+# was stored twice and a 110 MB report was 220 MB). Each image is decoded only
+# when its tab is shown, so the page stays responsive however many it carries.
 # The final size is logged, because a 40 MB HTML file should not be a surprise.
+# --report-images link trades the self-containment for size, for a reader who
+# reads the results in place.
+#
+# WHY THE NUMBERS AND THE SEARCH ARE BUILT AT THE END. A section's number is
+# its position in the reading order after empty sections are dropped, which is
+# known only once every section exists (report_number()). The search index is
+# built in the browser from the finished page, so it indexes exactly what the
+# reader sees and adds nothing to the file.
 #
 # WHY THE TABLES ARE JSON RATHER THAN MARKUP. Every table is searchable, can be
 # paged at 10/50/100/all rows, and can be exported to CSV. Doing that over
@@ -134,7 +145,9 @@ report_table_note <- function(file) {
     "specification_changes.csv" = "Populations added, removed or redefined since the baseline run.",
     # ---- abundance ----
     "population_frequencies.csv" = "The run's primary result: one row per sample and population, with the percentage of parent and the event count behind it.",
-    "population_marker_mfi.csv" = "Median transformed intensity and percent positive, per sample, population and marker.",
+    "population_marker_mfi.csv" = "Per sample, population and marker: the median intensity on the analysis scale (median_asinh), the same median in instrument units (mfi), and the percent above that sample's threshold.",
+    "population_mfi_summary.csv" = "Median fluorescence intensity per population and marker across donors, in instrument units with its interquartile range, overall and per study group, with the median percent positive.",
+    "population_composition.csv" = "Each population's share of the embedded cells, under each cell's most specific label so the shares sum to 100, with its defining markers, its spread across donors and its share within each study group.",
     "functional_markers.csv" = "Percent positive for the functional marker blocks declared in the config, per sample and population.",
     "population_ratios.csv" = "Derived population ratios, where the config declares any.",
     "absolute_counts.csv" = "Measured cells per microlitre per sample and population, from --absolute-counts.",
@@ -189,6 +202,8 @@ report_table_note <- function(file) {
     "explore_findings.csv" = "Clusters that no declared population covers -- what the specification is missing.",
     "explore_population_split.csv" = "Declared labels that span several clusters -- what the specification lumps together.",
     "explore_provenance.csv" = "Every choice explore mode made, and the basis for each.",
+    "explore_cluster_mfi.csv" = "Median fluorescence intensity per cluster and marker across donors, in instrument units with its interquartile range, overall and per study group, with the median percent positive.",
+    "explore_cluster_composition.csv" = "Each cluster's share of the embedded cells after the QC gate, with its measured phenotype, matched subset, spread across donors and share within each study group.",
     "spec_gaps.csv" = "Gaps between the population specification and what the data contains.",
     # ---- auxiliary ----
     "patient_metadata_english.csv" = "The patient table after column mapping and value translation, as the pipeline read it.",
@@ -201,6 +216,99 @@ report_table_note <- function(file) {
   g <- sub("_[^_]+\\.csv$", ".csv", f)
   if (g != f && g %in% names(d))
     return(paste0(unname(d[g]), " This copy covers one marker panel only."))
+  # ...and the two-part form a multi-panel run writes: _panel_2.
+  g <- sub("_panel_[0-9]+\\.csv$", ".csv", f)
+  if (g != f && g %in% names(d))
+    return(paste0(unname(d[g]), " This copy covers one marker panel only."))
+  ""
+}
+
+#' One line saying what a figure shows
+#'
+#' The figure counterpart of [report_table_note()]. It is printed under each
+#' figure and is what the report's search bar matches when a reader types what
+#' they are looking for ("composition", "MFI", "threshold") rather than a file
+#' name they have never seen. Figures whose names carry a marker, a variable or
+#' a timepoint are matched by pattern, and a panel or timepoint suffix is
+#' stripped before the exact lookup. An unknown figure gets no line.
+#' @param file figure file name, with or without a directory.
+#' @return A single string, or "" when the figure is not known.
+#' @keywords internal
+report_figure_note <- function(file) {
+  d <- c(
+    "recon_diagnostics.png" = "Per sample, the scatter gate and every marker threshold drawn on the density it was derived from: a cut in a trough is data-driven, a cut on a flank is a quantile fallback.",
+    "gating_qc.png" = "The gate hierarchy for each sample, panel by panel, with the events kept at each step.",
+    "acquisition_qc.png" = "Event rate and channel medians over acquisition time per file; troughs, spikes and steps mark clogs, bubbles and settings changes.",
+    "population_marker_heatmap.png" = "Median marker intensity across the declared populations, z-scored over the run; a population lacking the markers its definition requires falsifies its gate.",
+    "cohort_composition_heatmap.png" = "Each study group's share of every population after normalising the groups to a common cell count.",
+    "population_mfi_heatmap.png" = "Median fluorescence intensity per population and marker in instrument units, printed in each tile; colour scaled per marker, bars give each population's share.",
+    "population_mfi_heatmap_by_group.png" = "The MFI heatmap split by study group on one colour scale, so a tile darker in one group is brighter there.",
+    "population_mfi_dotplot.png" = "Per population and marker: dot size is the percent above the sample's own threshold, colour the scaled median intensity.",
+    "frequency_uncertainty.png" = "Each frequency with its gate uncertainty and its counting uncertainty, drawn separately.",
+    "uncertainty_budget.png" = "How much each threshold contributes to each population's frequency uncertainty.",
+    "detection_limits.png" = "Every population classified against the limits of detection and quantification of its own parent gate.",
+    "population_frequencies.png" = "Percent of CD45+ cells per population and sample: the run's primary result.",
+    "umap_composition.png" = "The shared embedding coloured by population, with a legend giving each population's defining markers, its share of the embedded cells and its share in each study group.",
+    "umap_populations.png" = "The shared embedding coloured by gated population, with each name printed at its median position.",
+    "umap_overview.png" = "The shared embedding coloured by population, sample and each covariate in the sample sheet.",
+    "umap_overview_by_group.png" = "The shared embedding pooled, then split by study group on the same axes.",
+    "umap_markers.png" = "The shared embedding coloured by each marker's intensity, one small panel per marker.",
+    "umap_density.png" = "Cell density over the shared embedding, per sample.",
+    "umap_density_by_group.png" = "Cell density over the shared embedding, per study group, at equal cells per sample.",
+    "umap_multigraph_overlay.png" = "The embedding with its neighbour graph overlaid, showing which islands are connected.",
+    "unsupervised_clusters.png" = "The unsupervised clustering beside the gated labels on the same embedding.",
+    "group_differences.png" = "Every population's between-group difference on one pair of axes: effect size against adjusted p.",
+    "group_comparison.png" = "Per-sample population frequencies by study group, with the adjusted p-value of each test.",
+    "marker_state.png" = "Per-sample median marker intensity by study group, per population and marker.",
+    "functional_markers.png" = "Percent positive for the declared functional marker blocks, by study group.",
+    "population_ratios.png" = "The declared population ratios, by study group.",
+    "absolute_counts.png" = "Measured cells per microlitre per population, by study group.",
+    "absolute_counts_qc.png" = "The supplied absolute counts against this run's own frequencies, to catch unit and matching errors.",
+    "absolute_vs_share.png" = "Cells per microlitre against share of CD45+: whether a compartment changed size or only its composition.",
+    "population_trajectories.png" = "Population frequencies per donor across repeated measures.",
+    "clinical_variables_correlation.png" = "How strongly the clinical variables correlate with each other; two correlated variables are one question asked twice.",
+    "clinical_association.png" = "Association of every population with every clinical variable, as a heatmap of effects.",
+    "clinical_association_markers.png" = "Association of per-sample median marker intensity with every clinical variable.",
+    "clinical_landscape.png" = "Every sample's population profile beside its clinical variables.",
+    "timepoint_subset_balance.png" = "Two subsets of one compartment against each other across visits.",
+    "timepoint_marker_intensity.png" = "Per-patient median marker intensity across visits.",
+    "threshold_drift.png" = "Whether the thresholds themselves differ by group, which would make a difference definitional.",
+    "batch_diagnostic.png" = "Whether the embedding separates by acquisition batch.",
+    "populations_by_batch.png" = "Whether the reported population frequencies step with acquisition batch.",
+    "total_counts_qc.png" = "The externally supplied total cell counts per sample, on a log scale.",
+    "explore_cluster_identity.png" = "Each unsupervised cluster against the declared population it best matches, scored by F1; undescribed clusters are gaps in the specification.",
+    "explore_umap_clusters.png" = "The explore embedding coloured by unsupervised cluster.",
+    "explore_umap_composition.png" = "The explore embedding coloured by cluster, with a legend giving each cluster's measured phenotype, matched subset and share of the cells.",
+    "explore_cluster_heatmap.png" = "Share of each cluster above its own sample's threshold, per marker: what each cluster is.",
+    "explore_cluster_median_heatmap.png" = "Median expression per cluster z-scored per marker, rows and columns ordered by similarity.",
+    "explore_cluster_mfi_heatmap.png" = "Median fluorescence intensity per cluster and marker in instrument units, printed in each tile; colour scaled per marker.",
+    "explore_cluster_mfi_heatmap_by_group.png" = "The cluster MFI heatmap split by study group on one colour scale.",
+    "explore_cluster_mfi_dotplot.png" = "Per cluster and marker: dot size is the percent positive, colour the scaled median intensity.",
+    "explore_umap_markers.png" = "The explore embedding coloured by each marker's intensity.",
+    "explore_umap_by_group.png" = "The explore clusters split by study group on one embedding.",
+    "explore_absolute_vs_share.png" = "Cluster cell numbers against cluster shares, from the supplied total counts.",
+    "explore_total_counts_qc.png" = "The externally supplied total cell counts used by explore mode.")
+  f <- basename(file)
+  if (f %in% names(d)) return(unname(d[f]))
+  pat <- c(
+    "^umap_(.+)_by_(.+)[.]png$" = "The shared embedding coloured by %s, split by %s.",
+    "^explore_umap_(.+)_by_group.*[.]png$" = "The explore embedding coloured by %s, split by study group.",
+    "^clinical_effects_(.+)[.]png$" = "Effect sizes with bootstrap intervals for %s, per population.",
+    "^timepoint_trajectories_(.+)[.]png$" = "One line per patient across visits for %s, cohort median drawn over.",
+    "^cluster_gate_strategy_(.+)[.]png$" = "The learned two-marker gate for cluster %s.",
+    "^external_label_strategy_(.+)[.]png$" = "The learned gating strategy for external label %s.",
+    "^umap_(.+)[.]png$" = "The shared embedding coloured by %s.")
+  # Suffixes first: _panel_N, a timepoint (_d0) or _by_timepoint after a known
+  # stem, so umap_density_by_group_panel_1.png reads as its pooled stem rather
+  # than being taken apart by the marker patterns below.
+  for (rx in c("_panel_[0-9]+(?=[._])", "_by_timepoint(?=[.])", "_[A-Za-z0-9]+(?=[.]png$)")) {
+    g <- sub(rx, "", f, perl = TRUE)
+    if (g != f && g %in% names(d)) return(unname(d[g]))
+  }
+  for (p in names(pat)) if (grepl(p, f)) {
+    m <- regmatches(f, regexec(p, f))[[1]][-1]
+    return(do.call(sprintf, c(list(pat[[p]]), as.list(gsub("_", " ", m)))))
+  }
   ""
 }
 
@@ -339,9 +447,15 @@ report_section <- function(outdir, id, title, description, figures = character(0
     return(list(id = id, html = "", nav = "", n_fig = 0L, n_tab = 0L, bytes = 0,
                 used = character(0)))
 
+  # @@N@@ IS THE SECTION NUMBER, FILLED IN LATER. Sections are built here in
+  # source order and only put into reading order -- and filtered for being
+  # empty -- by the caller, so the number a section will carry is not known
+  # yet. report_number() replaces the token once the order is final; every
+  # figure and table number below is "@@N@@.k" for the same reason.
   h <- c(sprintf("<section class='sec' id='%s'>", id),
          sprintf("<details%s><summary><span class='chev' aria-hidden='true'></span>",
                  if (open) " open" else ""),
+         "<span class='sec-num'>@@N@@</span>",
          sprintf("<span class='sec-title'>%s</span>", html_escape(title)),
          sprintf("<span class='sec-count'>%s</span></summary>",
                  html_escape(paste0(length(fig_present), " fig / ",
@@ -370,11 +484,21 @@ report_section <- function(outdir, id, title, description, figures = character(0
   add_pane <- function(label, id, html, grp)
     panes[[length(panes) + 1L]] <<- list(label = label, id = id, html = html,
                                          grp = grp)
+  # Subsection numbers run through the figures and then the tables, in the
+  # order the tabs show them, so "4.3" is the third tab of section 4.
+  k <- 0L
+  linked <- identical(report_image_mode(), "link")
   for (f in fig_present) {
     p <- file.path(outdir, f)
-    uri <- file_data_uri(p, "image/png")
+    # LINKED MODE names the file instead of carrying it: a report of a few MB
+    # that opens instantly, at the price of working only beside its figures.
+    # The relative path is URL-encoded so a space or a '#' in a marker name
+    # cannot end the address early.
+    uri <- if (linked) utils::URLencode(f) else file_data_uri(p, "image/png")
     if (is.na(uri)) next
-    bytes <- bytes + file.size(p)
+    if (!linked) bytes <- bytes + file.size(p)
+    k <- k + 1L
+    num <- paste0("@@N@@.", k)
     # The id keeps the full relative path so two figures with the same file name
     # in different directories cannot collide. Everything the READER sees is the
     # base name: a caption reading marker_umaps_by_group/umap_CD3.png tells them
@@ -382,19 +506,34 @@ report_section <- function(outdir, id, title, description, figures = character(0
     # at, and the same string was being used as the download file name.
     fid <- paste0("fig-", gsub("[^A-Za-z0-9]+", "-", sub("[.]png$", "", f)))
     fb  <- basename(f)
+    note <- report_figure_note(f)
+    # THE IMAGE TRAVELS ONCE. The download link used to carry a second copy of
+    # the same data URI, which doubled every report: 110 MB of figures became
+    # 220 MB of HTML on the sepsis cohort. The link now reads the address from
+    # the image when it is clicked (cyDl), so the bytes are stored once and
+    # still serve both the view and the full-resolution download.
+    #
+    # data-src, NOT src. A browser decodes every <img src> it parses, hidden or
+    # not, so a report with 160 figures held 160 decoded bitmaps in memory
+    # before the reader had opened a section. cyImgs() moves data-src to src
+    # for the images actually on screen -- the open section's selected tab --
+    # and nothing else is decoded until it is shown.
     add_pane(sub("[.]png$", "", fb), fid, sprintf(paste0(
       "<figure class='fig' id='%s'>",
-      "<div class='figbox'><img src='%s' alt='%s' loading='lazy' ",
+      "<div class='figbox'><img data-src='%s' alt='%s' decoding='async' ",
       "onclick='cyZoom(this)'/>",
       "<button class='zoom' title='Zoom' onclick='cyZoom(this.parentNode.querySelector(\"img\"))'>&#9974;</button>",
       "</div>",
-      "<figcaption><span class='fn'>%s</span>",
-      "<a class='dl' download='%s' href='%s'>Full resolution PNG</a>",
-      "</figcaption></figure>"),
-      fid, uri, html_escape(fb), html_escape(fb), html_escape(fb), uri),
+      "<figcaption><span class='fn'><b class='fnum'>Figure %s</b> %s</span>",
+      "<a class='dl' download='%s' href='%s' onclick='return cyDl(this)'>Full resolution PNG</a>",
+      "</figcaption>%s</figure>"),
+      fid, uri, html_escape(fb), num, html_escape(fb), html_escape(fb),
+      if (linked) uri else "#",
+      if (nzchar(note)) sprintf("<p class='fignote'>%s</p>", html_escape(note)) else ""),
       grp = "Figures")
-    nav <- c(nav, sprintf("<a class='nav-fig' href='#%s'>%s</a>", fid,
-                          html_escape(sub("[.]png$", "", fb))))
+    panes[[length(panes)]]$num <- num
+    nav <- c(nav, sprintf("<a class='nav-fig' href='#%s'><span class='nav-num'>%s</span>%s</a>",
+                          fid, num, html_escape(sub("[.]png$", "", fb))))
   }
 
   for (t in tab_present) {
@@ -404,6 +543,8 @@ report_section <- function(outdir, id, title, description, figures = character(0
                   error = function(e) NULL)
     if (is.null(d)) next
     bytes <- bytes + file.size(p)
+    k <- k + 1L
+    num <- paste0("@@N@@.", k)
     tid <- paste0("tab-", gsub("[^A-Za-z0-9]+", "-", sub("[.]csv$", "", t)))
     note <- report_table_note(t)
     .tab_html <- character(0)
@@ -425,6 +566,9 @@ report_section <- function(outdir, id, title, description, figures = character(0
       # has already selected.
       "<details class='tabdet' open><summary>",
       "<span class='chev' aria-hidden='true'></span>",
+      # The number sits OUTSIDE the h3: cyCsv() names the exported file from
+      # the h3's text, and "Table 4.3 staining_qc.csv" is not a file name.
+      "<span class='tnum'>Table %s</span>",
       "<h3>%s</h3><span class='dim'>%d rows &times; %d cols</span></summary>",
       "%s",
       "<div class='tabhead'>",
@@ -436,15 +580,16 @@ report_section <- function(outdir, id, title, description, figures = character(0
       "<button class='dl' onclick='cyCsv(\"%s\")'>Export CSV</button>",
       "</div><div class='tabwrap'><table></table></div>",
       "<p class='none shown'></p></details></div>"),
-      tid, html_escape(basename(t)), nrow(d), ncol(d),
+      tid, num, html_escape(basename(t)), nrow(d), ncol(d),
       if (nzchar(note)) sprintf("<p class='tabnote'>%s</p>", html_escape(note)) else "",
       tid, html_escape(basename(t)), tid, tid))
     .tab_html <- c(.tab_html,
                    sprintf("<script type='application/json' id='%s-data'>%s</script>",
                            tid, json_table(d)))
     add_pane(basename(t), tid, paste(.tab_html, collapse = "\n"), grp = "Tables")
-    nav <- c(nav, sprintf("<a class='nav-tab' href='#%s'>%s</a>", tid,
-                          html_escape(basename(t))))
+    panes[[length(panes)]]$num <- num
+    nav <- c(nav, sprintf("<a class='nav-tab' href='#%s'><span class='nav-num'>%s</span>%s</a>",
+                          tid, num, html_escape(basename(t))))
   }
 
   # One tab strip per group, each wrapped in its own .tabgroup. The wrapper is
@@ -455,8 +600,8 @@ report_section <- function(outdir, id, title, description, figures = character(0
     gp <- Filter(function(p) identical(p$grp, g), panes)
     if (!length(gp)) next
     btns <- vapply(seq_along(gp), function(i) sprintf(
-      "<button class='tabbtn%s' role='tab' data-pane='%s' onclick='cyTab(this)'>%s</button>",
-      if (i == 1L) " active" else "", gp[[i]]$id,
+      "<button class='tabbtn%s' role='tab' data-pane='%s' onclick='cyTab(this)'><span class='tnum'>%s</span> %s</button>",
+      if (i == 1L) " active" else "", gp[[i]]$id, gp[[i]]$num %||% "",
       html_escape(gp[[i]]$label)), character(1))
     bodies <- vapply(seq_along(gp), function(i) sprintf(
       "<div class='pane%s' id='pane-%s'>%s</div>",
@@ -485,7 +630,7 @@ report_section <- function(outdir, id, title, description, figures = character(0
   h <- c(h, "</div></details></section>")
   # The id travels with the section so the caller can put the sections into
   # execution order without depending on the order they were constructed in.
-  list(id = id,
+  list(id = id, title = title,
        html = paste(h, collapse = "\n"),
        # The per-figure and per-table links live in their own container so the
        # sidebar can show section titles alone until a section is opened. A
@@ -493,7 +638,8 @@ report_section <- function(outdir, id, title, description, figures = character(0
        # structure of the document -- which is what a contents list is for --
        # disappears into them.
        nav = paste0(sprintf(paste0("<div class='nav-sec' data-sec='%s'>",
-                                   "<a class='nav-h' href='#%s'>%s</a>"),
+                                   "<a class='nav-h' href='#%s'>",
+                                   "<span class='nav-num'>@@N@@</span>%s</a>"),
                             id, id, html_escape(title)),
                     "<div class='nav-kids'>", paste(nav, collapse = ""),
                     "</div></div>"),
@@ -506,6 +652,108 @@ report_section <- function(outdir, id, title, description, figures = character(0
        # the one invariant that section exists to provide: if it has anything in
        # it, a named section is missing an entry.
        used = c(fig_present, tab_present, oversize))
+}
+
+#' How the report carries its figures: "embed" (default) or "link"
+#'
+#' Set per run with `--report-images`, or for a session with
+#' `options(cyRAVEN.report_images = "link")`. Embedding makes the report one
+#' file that survives being moved; linking makes it a few megabytes that opens
+#' at once but shows its figures only while it sits in the results directory.
+#' @keywords internal
+report_image_mode <- function() {
+  m <- tolower(as.character(getOption("cyRAVEN.report_images", "embed"))[1])
+  if (!is.na(m) && m %in% c("link", "linked")) "link" else "embed"
+}
+
+#' Number the sections, and resolve cross-references between them
+#'
+#' Called once the sections are in reading order and the empty ones are gone,
+#' which is the first point at which a section's number is known. Replaces the
+#' `@@N@@` token report_section() leaves in each section, and resolves
+#' `@@REF:<id>@@` in descriptions to "section N", so prose that points at
+#' another section cannot go stale when a section is added or a run omits one.
+#' @param secs List of sections from [report_section()].
+#' @return The non-empty sections, numbered.
+#' @keywords internal
+report_number <- function(secs) {
+  secs <- Filter(function(s) nzchar(s$html), secs)
+  ids <- vapply(secs, function(s) s$id %||% "", character(1))
+  for (i in seq_along(secs)) {
+    secs[[i]]$num <- as.character(i)
+    for (part in c("html", "nav"))
+      secs[[i]][[part]] <- gsub("@@N@@", i, secs[[i]][[part]], fixed = TRUE)
+  }
+  for (i in seq_along(secs)) {
+    h <- secs[[i]]$html
+    m <- gregexpr("@@REF:[A-Za-z0-9-]+@@", h)
+    refs <- unique(regmatches(h, m)[[1]])
+    for (r in refs) {
+      j <- match(sub("^@@REF:(.*)@@$", "\\1", r), ids)
+      h <- gsub(r, if (is.na(j)) "a section this run did not write"
+                   else paste0("section ", j), h, fixed = TRUE)
+    }
+    secs[[i]]$html <- h
+  }
+  secs
+}
+
+#' Assemble a report page around its sections
+#'
+#' Shared by the run report and the explore report, so both carry the same
+#' search bar, numbering, contents and behaviour.
+#' @param secs Sections from [report_section()], in reading order.
+#' @param title The page title.
+#' @param masthead HTML for the masthead.
+#' @param banner HTML placed under the masthead.
+#' @return A character vector of HTML lines.
+#' @keywords internal
+report_page <- function(secs, title, masthead, banner = "") {
+  c("<!doctype html><html lang='en'><head><meta charset='utf-8'>",
+    "<meta name='viewport' content='width=device-width,initial-scale=1'>",
+    sprintf("<title>%s</title>", html_escape(title)),
+    sprintf("<style>%s</style>", report_css()), "</head><body>",
+    "<div id='lb' onclick='if(event.target.id===\"lb\")cyClose()'>",
+    "<div id='lbbar'><span id='lbname'></span>",
+    "<button onclick='cyZset(LBZ/1.25)'>&minus;</button>",
+    "<span id='lbpct'>100%</span>",
+    "<button onclick='cyZset(LBZ*1.25)'>+</button>",
+    "<button onclick='cyZset(1)'>Fit</button>",
+    "<a class='dl' id='lbdl' download href='#'>Download</a>",
+    "<button onclick='cyClose()'>Close</button></div>",
+    "<img id='lbimg' alt='' onclick='event.stopPropagation()'/></div>",
+    "<div class='wrap'>",
+    "<nav class='side' id='cyside' aria-label='Contents'><h2>Contents</h2>",
+    paste(vapply(secs, `[[`, character(1), "nav"), collapse = "\n"),
+    # The grip is a sibling of the nav, not a child: as a child of a scrolling
+    # sticky column it would scroll away from the edge it resizes.
+    "</nav><div class='side-grip'></div><main>",
+    # THE SEARCH BAR, pinned to the top of the reading column. It searches what
+    # a reader remembers rather than what a file is called: section titles and
+    # descriptions, figure and table names and their one-line descriptions,
+    # table column names, and the rows of every table. The index is built in
+    # the browser from the page itself (cyIndex), so it can never disagree with
+    # what is on screen and costs nothing in file size.
+    paste0("<div class='topbar' role='search'>",
+           "<button class='navtoggle' type='button' onclick='cySide()' ",
+           "aria-controls='cyside' aria-label='Show contents'>&#9776;</button>",
+           "<div class='sbox'><input id='cyq' type='search' autocomplete='off' ",
+           "placeholder='Search sections, figures, tables, descriptions and table rows'",
+           " aria-label='Search the report' aria-controls='cyres' ",
+           "oninput='cySearch()' onkeydown='cyKey(event)' onfocus='cySearch()'/>",
+           "<kbd class='skey' title='Press / to search'>/</kbd>",
+           "<div id='cyres' role='listbox' hidden></div></div>",
+           "<button class='dl' type='button' onclick='cyAll(true)'>Expand all</button>",
+           "<button class='dl' type='button' onclick='cyAll(false)'>Collapse all</button>",
+           "</div>"),
+    masthead, banner,
+    vapply(secs, `[[`, character(1), "html"),
+    "</main></div>",
+    "<div id='cyscrim' onclick='cySide(false)'></div>",
+    paste0("<button id='cytop' type='button' onclick='cyTop()' ",
+           "title='Back to top' aria-label='Back to top'>&uarr;</button>"),
+    sprintf("<script>%s</script>", report_js()),
+    "</body></html>")
 }
 
 #' Stylesheet for the run report
@@ -623,7 +871,7 @@ report_css <- function() {
   # Figures: every figure occupies the same box whatever its native aspect
   # ratio, so the page does not jump between a wide strip and a tall grid.
   "figure.fig{margin:1rem 0 1.4rem}",
-  ".figbox{position:relative;height:420px;border:1px solid var(--line);",
+  ".figbox{position:relative;height:min(420px,62vh);border:1px solid var(--line);",
   "border-radius:6px;background:var(--panel);display:flex;align-items:center;",
   "justify-content:center;overflow:hidden}",
   ".figbox img{max-width:100%;max-height:100%;width:auto;height:auto;",
@@ -756,15 +1004,96 @@ report_css <- function() {
   ".ok{background:#eefaf0;border:1px solid #b6e3c2}",
   ".warn{background:#fff6e5;border:1px solid #f0d9a8}",
   ".stop{background:#fdecea;border:1px solid #f5b5ae}",
-  "@media print{nav.side,.side-grip,#cytop{display:none}details{open:true}}",
-  # The report is read on laptops and projected in meetings; below 900px the
-  # sidebar becomes a normal block above the content rather than disappearing.
-  # Below 900px the sidebar is a block above the content, so there is no
-  # vertical edge to drag and the handle is removed rather than left inert.
-  "@media(max-width:900px){.wrap{display:block}nav.side{position:static;height:auto;",
-  "flex-basis:auto;width:auto;border-right:none;border-bottom:1px solid var(--line)}",
-  ".side-grip{display:none}",
-  "main{padding:1rem}.figbox{height:300px}}")
+  # ---- numbering -------------------------------------------------------------
+  # Every section, figure and table carries a number, in the mono face so the
+  # numbers line up down the contents list and read as references, not prose.
+  ".sec-num{font-family:var(--mono);font-weight:700;font-size:.82rem;",
+  "color:var(--accent);min-width:1.7rem;flex:0 0 auto}",
+  ".nav-num{font-family:var(--mono);font-size:.74rem;color:var(--mut);",
+  "margin-right:.45rem}",
+  "a.nav-h .nav-num{color:var(--accent);font-weight:700}",
+  ".tnum,.fnum{font-family:var(--mono);font-size:.74rem;color:var(--mut);",
+  "font-weight:600}",
+  ".tabbtn.active .tnum{color:var(--accent)}",
+  ".tabdet summary .tnum{flex:0 0 auto}",
+  ".fnum{margin-right:.35rem}",
+  ".fignote{color:var(--mut);font-size:.8rem;margin:.35rem 0 0;max-width:85ch}",
+  # ---- search bar --------------------------------------------------------------
+  # Sticky inside the reading column, so it stays reachable from anywhere in a
+  # long report without covering the contents list. The negative top margin
+  # pulls it up into main's own padding, so it sits flush with the top of the
+  # window once scrolled.
+  ".topbar{position:sticky;top:0;z-index:80;display:flex;gap:.5rem;",
+  "align-items:center;background:rgba(255,255,255,.97);padding:.55rem 0;",
+  "margin:-1.5rem 0 .9rem;border-bottom:1px solid var(--line)}",
+  ".sbox{position:relative;flex:1 1 auto;min-width:0}",
+  "#cyq{width:100%;padding:.48rem 2.2rem .48rem .75rem;border:1px solid var(--line);",
+  "border-radius:7px;font-size:.92rem;background:#fff}",
+  "#cyq:focus{outline:2px solid var(--accent);outline-offset:-1px;",
+  "border-color:var(--accent)}",
+  ".skey{position:absolute;right:.55rem;top:50%;transform:translateY(-50%);",
+  "font-family:var(--mono);font-size:.72rem;color:var(--mut);",
+  "border:1px solid var(--line);border-radius:4px;padding:0 .32rem;",
+  "background:var(--panel);pointer-events:none}",
+  "#cyres{position:absolute;left:0;right:0;top:calc(100% + 4px);",
+  "max-height:min(72vh,600px);overflow-y:auto;background:#fff;",
+  "border:1px solid var(--line);border-radius:8px;",
+  "box-shadow:0 10px 30px rgba(12,14,18,.18);z-index:85}",
+  "#cyres[hidden]{display:none}",
+  ".res{display:block;padding:.48rem .75rem;border-bottom:1px solid var(--line);",
+  "cursor:pointer;color:var(--fg);text-decoration:none}",
+  ".res:last-child{border-bottom:none}",
+  ".res:hover,.res.on{background:#eef5f1}",
+  ".res .k{font-size:.64rem;text-transform:uppercase;letter-spacing:.06em;",
+  "font-weight:700;color:#fff;background:var(--mut);border-radius:3px;",
+  "padding:.06rem .36rem;margin-right:.45rem;vertical-align:1px}",
+  ".res .k.Section{background:var(--accent)}.res .k.Figure{background:#2f6db3}",
+  ".res .k.Table{background:#8a6100}.res .k.Rows{background:#7a4ea3}",
+  ".res .n{font-family:var(--mono);font-size:.78rem;color:var(--mut);",
+  "margin-right:.4rem}",
+  ".res .t{font-weight:600;word-break:break-word}",
+  ".res .s{display:block;font-size:.78rem;color:var(--mut);margin-top:.12rem;",
+  "overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+  ".res mark{background:#ffe38a;color:inherit;padding:0 1px;border-radius:2px}",
+  ".res-none,.res-head{padding:.55rem .8rem;color:var(--mut);font-size:.82rem}",
+  ".res-head{border-bottom:1px solid var(--line);background:var(--panel);",
+  "font-size:.74rem}",
+  # Where a search result lands: a brief ring, so the eye finds the target
+  # after the page has jumped.
+  "section.sec,figure.fig,.tab{scroll-margin-top:4.4rem}",
+  ".flash{animation:cyflash 1.8s ease-out}",
+  "@keyframes cyflash{0%{box-shadow:0 0 0 3px #f2c230}",
+  "100%{box-shadow:0 0 0 3px rgba(242,194,48,0)}}",
+  ".navtoggle{display:none;flex:0 0 auto;width:2.4rem;height:2.3rem;",
+  "border:1px solid var(--line);border-radius:7px;background:#fff;",
+  "cursor:pointer;font-size:1.1rem;line-height:1}",
+  "#cyscrim{display:none}",
+  # ---- rendering cost -------------------------------------------------------
+  # A section body off screen is not laid out or painted until it scrolls near
+  # the viewport, so Expand all on a large report does not stall the page.
+  ".sec-body{content-visibility:auto;contain-intrinsic-size:auto 640px}",
+  "@media(prefers-reduced-motion:reduce){.flash{animation:none}}",
+  "@media print{nav.side,.side-grip,#cytop,.topbar{display:none}",
+  ".sec-body{content-visibility:visible}}",
+  # THE REPORT IS READ ON PHONES TOO, so below 900px the contents list becomes
+  # a drawer behind the button in the search bar instead of a block the reader
+  # has to scroll past before reaching any result. The drag handle has no edge
+  # to drag at this width and is removed rather than left inert.
+  "@media(max-width:900px){.wrap{display:block}",
+  "nav.side{position:fixed;top:0;left:0;bottom:0;height:100vh;",
+  "width:min(86vw,340px);z-index:96;transform:translateX(-105%);",
+  "transition:transform .18s ease;box-shadow:0 0 32px rgba(12,14,18,.28)}",
+  "body.side-open nav.side{transform:none}",
+  "body.side-open #cyscrim{display:block;position:fixed;inset:0;z-index:95;",
+  "background:rgba(12,14,18,.35)}",
+  ".side-grip{display:none}.navtoggle{display:inline-block}",
+  "main{padding:1rem .8rem 4rem}.topbar{margin:-1rem 0 .7rem}",
+  ".figbox{height:auto;min-height:200px}.figbox img{max-height:68vh}",
+  "img.brand{width:64px;height:64px}h1{font-size:1.35rem}",
+  ".sec-body{padding:.4rem .6rem 1rem}input.search{flex:1 1 100%;width:auto}",
+  "summary{padding:.6rem .7rem}}",
+  "@media(max-width:600px){.topbar .dl{display:none}.skey{display:none}",
+  ".res .s{white-space:normal}}")
 }
 
 #' Behaviour for the run report
@@ -782,7 +1111,7 @@ report_js <- function() {
   "Object.keys(CY).forEach(function(id){CY[id].sort=-1;",
   "var b=document.getElementById(id);var t=b&&b.querySelector('details');",
   "if(!t||t.open)cyShow(id);});",
-  "cySync();cyCur();}\n",
+  "cyIndex();cySync();cyCur();cyImgs();}\n",
   "function cyShow(id){if(!CY[id]||CY[id].drawn)return;CY[id].drawn=1;cyFilter(id);}\n",
   # Switch which pane of a section is showing. The table inside a pane is filled
   # on first reveal rather than at load, for the same reason the toggles were:
@@ -795,7 +1124,7 @@ report_js <- function() {
   "for(i=0;i<ps.length;i++){var on=ps[i].id===want;",
   "ps[i].classList.toggle('active',on);",
   "if(on){var t=ps[i].querySelector('.tab');if(t)cyShow(t.id);}}",
-  "cySync();cyCur();}\n",
+  "cySync();cyCur();cyImgs();}\n",
   # Activate whichever tab holds this element, if it is inside a pane.
   "function cyTabFor(el){for(var n=el;n&&n!==document.body;n=n.parentNode){",
   "if(n.classList&&n.classList.contains('pane')){",
@@ -818,6 +1147,7 @@ report_js <- function() {
   "var a=e.target&&e.target.closest?e.target.closest('a.nav-tab,a.nav-fig'):null;",
   "if(!a)return;var h=a.getAttribute('href')||'';if(h.charAt(0)!=='#')return;",
   "var el=document.getElementById(h.slice(1));if(!el)return;cyReveal(el);",
+  "cySide(false);cyImgs();",
   "setTimeout(function(){el.scrollIntoView({block:'start'});},0);});\n",
   "function cyRows(id){var d=CY[id];var box=document.getElementById(id);",
   "var q=box.querySelector('input.search').value.trim().toLowerCase();",
@@ -869,9 +1199,11 @@ report_js <- function() {
   # no request, so it works from a file:// path and with no network.
   "var LBZ=1;\n",
   "function cyZoom(img){var lb=document.getElementById('lb');",
-  "var i=document.getElementById('lbimg');i.src=img.src;LBZ=1;cyZset(1);",
+  # data-src first: the image may not have been put on screen yet.
+  "var u=img.getAttribute('data-src')||img.src;",
+  "var i=document.getElementById('lbimg');i.src=u;LBZ=1;cyZset(1);",
   "document.getElementById('lbname').textContent=img.getAttribute('alt')||'';",
-  "document.getElementById('lbdl').href=img.src;",
+  "document.getElementById('lbdl').href=u;",
   "document.getElementById('lbdl').download=img.getAttribute('alt')||'figure.png';",
   "lb.classList.add('on');document.body.style.overflow='hidden';}\n",
   "function cyZset(z){LBZ=Math.min(8,Math.max(0.1,z));var i=document.getElementById('lbimg');",
@@ -889,7 +1221,7 @@ report_js <- function() {
   "function cyAll(open){document.querySelectorAll('details').forEach(function(d){",
   "d.open=open;});",
   "if(open)Object.keys(CY).forEach(cyShow);",
-  "cySync();cyCur();}\n",
+  "cySync();cyCur();cyImgs();}\n",
   # THE SIDEBAR MIRRORS THE DOCUMENT. A section's figure and table links are
   # shown exactly when that section is open, so Expand all and Collapse all move
   # both at once and the contents list never claims a state the page is not in.
@@ -907,8 +1239,8 @@ report_js <- function() {
   "var s=document.getElementById(h.slice(1));if(!s)return;",
   "var d=s.querySelector('details');if(!d)return;",
   "e.preventDefault();d.open=!d.open;",
-  "if(d.open)s.scrollIntoView({block:'start'});",
-  "cySync();cyCur();});\n",
+  "if(d.open){s.scrollIntoView({block:'start'});cySide(false);}",
+  "cySync();cyCur();cyImgs();});\n",
   # WHICH SECTION AM I IN. The section whose top has most recently passed a line
   # near the top of the viewport, which is the one filling the screen. Chosen by
   # scan rather than IntersectionObserver because a collapsed section is only a
@@ -938,7 +1270,7 @@ report_js <- function() {
   "if(e.target.tagName!=='DETAILS')return;",
   "if(e.target.open){var b=e.target.parentNode;",
   "if(b&&b.classList&&b.classList.contains('tab'))cyShow(b.id);}",
-  "cySync();cyCur();},true);\n",
+  "cySync();cyCur();cyImgs();},true);\n",
   # BACK TO TOP. Shown once the masthead has scrolled away, which is the point
   # at which there is something to go back to. The threshold was a screen and a
   # half; but a report whose sections are all collapsed is only a couple of
@@ -982,6 +1314,97 @@ report_js <- function() {
   "var d=e.key==='ArrowLeft'?-16:e.key==='ArrowRight'?16:0;if(!d)return;",
   "e.preventDefault();var w=parseInt(getComputedStyle(document.documentElement)",
   ".getPropertyValue('--side-w'),10)||268;cySideSet(w+d,true);cyCur();});}\n",
+  # ---- lazy images, downloads, the contents drawer, and search -------------
+  # Written as one raw string: it is long, it is all one feature, and a raw
+  # string spares every quote and backslash the escaping the blocks above need.
+  r"---(
+function cyVis(el){for(var n=el.parentNode;n&&n!==document.body;n=n.parentNode){
+if(n.tagName==='DETAILS'&&!n.open)return false;
+if(n.classList&&n.classList.contains('pane')&&!n.classList.contains('active'))return false;}
+return true;}
+function cyImgs(all){document.querySelectorAll('img[data-src]').forEach(function(i){
+if(all||cyVis(i)){i.src=i.getAttribute('data-src');i.removeAttribute('data-src');}});}
+function cyDl(a){if(a.getAttribute('href')!=='#')return true;
+var f=a.closest?a.closest('figure'):null,i=f?f.querySelector('img'):null;if(!i)return false;
+a.href=i.getAttribute('data-src')||i.src;return true;}
+function cySide(open){var b=document.body;if(open===undefined)open=!b.classList.contains('side-open');
+b.classList.toggle('side-open',!!open);}
+var CYIX=[],CYHITS=[],CYSEL=-1;
+function cyTxt(el){return el?el.textContent.replace(/\s+/g,' ').trim():'';}
+function cyIndex(){CYIX=[];document.querySelectorAll('section.sec').forEach(function(s){
+var sn=cyTxt(s.querySelector('.sec-num')),st=cyTxt(s.querySelector('.sec-title')),d=[];
+var bd=s.querySelector('.sec-body');
+if(bd)for(var c=bd.firstElementChild;c;c=c.nextElementSibling)
+if(c.tagName==='P'||(c.classList&&c.classList.contains('banner')))d.push(cyTxt(c));
+CYIX.push({k:'Section',n:sn,t:st,d:d.join(' '),el:s,sec:''});
+s.querySelectorAll('.tabbtn').forEach(function(b){
+var pane=document.getElementById('pane-'+b.getAttribute('data-pane'));if(!pane)return;
+var n=cyTxt(b.querySelector('.tnum')),t=cyTxt(b).slice(n.length).trim();
+var fig=pane.querySelector('figure.fig'),tab=pane.querySelector('.tab');
+if(fig)CYIX.push({k:'Figure',n:n,t:t,d:cyTxt(fig.querySelector('.fignote')),el:fig,sec:sn+' '+st});
+if(tab)CYIX.push({k:'Table',n:n,t:t,d:cyTxt(tab.querySelector('.tabnote')),
+x:CY[tab.id]?CY[tab.id].cols.join(' '):'',el:tab,sec:sn+' '+st,tid:tab.id});});});}
+function cyRowCount(id,terms){var d=CY[id];if(!d)return 0;
+if(!d.hay)d.hay=d.rows.map(function(r){return r.join(' ').toLowerCase();});
+var c=0;for(var i=0;i<d.hay.length;i++){var h=d.hay[i],ok=true;
+for(var j=0;j<terms.length;j++)if(h.indexOf(terms[j])<0){ok=false;break;}if(ok)c++;}return c;}
+function cySearch(){var q=document.getElementById('cyq').value.trim().toLowerCase();
+clearTimeout(cySearch.t);var box=document.getElementById('cyres');
+if(!q){box.hidden=true;box.innerHTML='';CYHITS=[];CYSEL=-1;return;}
+cySearch.t=setTimeout(function(){cyRun(q);},80);}
+function cyRun(q){var terms=q.split(/\s+/).filter(Boolean),hits=[],named={};
+CYIX.forEach(function(e,i){var t=e.t.toLowerCase(),n=e.n.toLowerCase(),d=(e.d||'').toLowerCase(),
+x=(e.x||'').toLowerCase(),all=n+' '+t+' '+d+' '+x+' '+(e.sec||'').toLowerCase(),sc=0;
+for(var j=0;j<terms.length;j++){var w=terms[j],p=t.indexOf(w);if(all.indexOf(w)<0)return;
+sc+=p===0?12:p>0?8:(n===w?10:n.indexOf(w)===0?5:d.indexOf(w)>-1?3:x.indexOf(w)>-1?2:1);}
+if(e.tid)named[e.tid]=1;hits.push({e:e,s:sc+(e.k==='Section'?2:0),i:i,rows:0});});
+CYIX.forEach(function(e,i){if(!e.tid)return;var c=cyRowCount(e.tid,terms);
+if(c)hits.push({e:e,s:named[e.tid]?0.5:1.5,i:i+0.5,rows:c});});
+hits.sort(function(a,b){return b.s-a.s||a.i-b.i;});
+CYHITS=hits.slice(0,40);CYSEL=CYHITS.length?0:-1;cyDraw(terms,hits.length);}
+function cyHl(s,terms){s=String(s||'');var l=s.toLowerCase(),on=[],o='',m=false,i;
+terms.forEach(function(w){var p=0;while(w&&(p=l.indexOf(w,p))>-1){for(i=p;i<p+w.length;i++)on[i]=1;p+=w.length;}});
+for(i=0;i<s.length;i++){if(on[i]&&!m){o+='<mark>';m=true;}else if(!on[i]&&m){o+='</mark>';m=false;}
+o+=cyEsc(s.charAt(i));}return o+(m?'</mark>':'');}
+function cySnip(d,terms){if(!d)return '';var l=d.toLowerCase(),p=-1;
+terms.forEach(function(w){var q=l.indexOf(w);if(q>-1&&(p<0||q<p))p=q;});
+if(p<0)return d.length>150?d.slice(0,150)+'\u2026':d;var a=Math.max(0,p-50);
+return (a?'\u2026':'')+d.slice(a,a+150)+(a+150<d.length?'\u2026':'');}
+function cyDraw(terms,total){var box=document.getElementById('cyres');
+if(!CYHITS.length){box.innerHTML="<div class='res-none'>Nothing matches every word. Try fewer or shorter words.</div>";
+box.hidden=false;return;}
+var h="<div class='res-head'>"+total+" match"+(total===1?'':'es')+
+(total>CYHITS.length?', first '+CYHITS.length+' shown':'')+
+" &middot; &uarr;&darr; move &middot; Enter opens &middot; Esc closes</div>";
+CYHITS.forEach(function(r,i){var e=r.e,k=r.rows?'Rows':e.k,
+sub=r.rows?r.rows+' matching row'+(r.rows===1?'':'s')+', opened filtered':cySnip(e.d||e.x||'',terms);
+h+="<a class='res"+(i===CYSEL?' on':'')+"' role='option' onmousedown='event.preventDefault()' onclick='cyGo("+i+")'>"+
+"<span class='k "+k+"'>"+k+"</span><span class='n'>"+cyEsc(e.n)+"</span><span class='t'>"+cyHl(e.t,terms)+"</span>"+
+"<span class='s'>"+(e.sec?'in '+cyEsc(e.sec)+(sub?' &middot; ':''):'')+cyHl(sub,terms)+"</span></a>";});
+box.innerHTML=h;box.hidden=false;}
+function cyMark(){var rs=document.querySelectorAll('#cyres .res');
+for(var i=0;i<rs.length;i++){rs[i].classList.toggle('on',i===CYSEL);
+if(i===CYSEL&&rs[i].scrollIntoView)rs[i].scrollIntoView({block:'nearest'});}}
+function cyKey(e){var n=CYHITS.length;
+if(e.key==='ArrowDown'){e.preventDefault();if(n){CYSEL=(CYSEL+1)%n;cyMark();}}
+else if(e.key==='ArrowUp'){e.preventDefault();if(n){CYSEL=(CYSEL-1+n)%n;cyMark();}}
+else if(e.key==='Enter'){e.preventDefault();if(CYSEL>-1)cyGo(CYSEL);}
+else if(e.key==='Escape'){e.stopPropagation();e.target.value='';cySearch();e.target.blur();}}
+function cyGo(i){var r=CYHITS[i];if(!r)return;var e=r.e,el=e.el;
+document.getElementById('cyres').hidden=true;cySide(false);
+if(e.k==='Section'){var d=el.querySelector('details');if(d&&!d.open)d.open=true;}else cyReveal(el);
+if(r.rows&&e.tid){var box=document.getElementById(e.tid),inp=box&&box.querySelector('input.search');
+if(inp){inp.value=document.getElementById('cyq').value.trim();cyShow(e.tid);cyFilter(e.tid);}}
+cySync();cyCur();cyImgs();
+setTimeout(function(){el.scrollIntoView({block:'start'});el.classList.remove('flash');
+void el.offsetWidth;el.classList.add('flash');},0);}
+document.addEventListener('keydown',function(e){var t=e.target&&e.target.tagName;
+if((e.key==='/'&&t!=='INPUT'&&t!=='TEXTAREA'&&t!=='SELECT')||((e.ctrlKey||e.metaKey)&&e.key==='k')){
+var q=document.getElementById('cyq');if(q){e.preventDefault();q.focus();q.select();}}});
+document.addEventListener('click',function(e){var b=document.querySelector('.sbox'),r=document.getElementById('cyres');
+if(b&&r&&!b.contains(e.target))r.hidden=true;});
+window.addEventListener('beforeprint',function(){cyImgs(true);});
+)---",
   "document.addEventListener('DOMContentLoaded',function(){",
   "cyInit();cySideInit();cyTopSync();});\n")
 }
@@ -1008,13 +1431,28 @@ report_js <- function() {
 #' @param verdicts per-sample staining verdicts, used for the summary banner
 #' @param failure a condition or message; when given, the report is written as
 #'   the record of a failed run rather than a completed one.
+#' @param images "embed" to carry every figure inside the file (the default),
+#'   or "link" to reference the PNGs beside it, which makes a report of a few
+#'   megabytes that shows its figures only while it stays in the results
+#'   directory. Defaults to `opt$report_images`, then to
+#'   `getOption("cyRAVEN.report_images", "embed")`.
 #' @return the path, invisibly, or NULL when there is nothing to report
 #' @export
 write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
-                             failure = NULL) {
+                             failure = NULL, images = NULL) {
   if (!dir.exists(outdir)) return(invisible(NULL))
   path <- file.path(outdir, "report.html")
   failed <- !is.null(failure)
+  images <- images %||% opt$report_images %||% report_image_mode()
+  if (!tolower(images[1]) %in% c("embed", "link", "linked"))
+    log_msg("  NOTE --report-images '", images[1], "' is neither 'embed' nor ",
+            "'link'; embedding the figures")
+  .op <- options(cyRAVEN.report_images = images[1])
+  on.exit(options(.op), add = TRUE)
+  linked <- identical(report_image_mode(), "link")
+  # Files a multi-panel run writes once per panel, as stem_panel_N.
+  panels_of <- function(stem, ext = "png")
+    sort(list.files(outdir, paste0("^", stem, "(_panel_[0-9]+)?[.]", ext, "$")))
 
   # The banner. A run whose staining QC excluded samples says so before anything
   # else, because every frequency below is computed without them.
@@ -1052,7 +1490,7 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
             "per file. acquisition_qc_impact.csv states how far each population",
             "would move if the flagged intervals were dropped, and that is the",
             "number the decision rests on: compare it against the same",
-            "population's gate uncertainty in section 6. Nothing is removed",
+            "population's gate uncertainty in @@REF:s6@@. Nothing is removed",
             "unless --drop-unstable-events was given."),
       figures = "acquisition_qc.png",
       tables = c("acquisition_qc.csv", "acquisition_qc_impact.csv",
@@ -1078,6 +1516,26 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
             "count, so an uneven split is not an artefact of unequal group",
             "sizes."),
       figures = c("population_marker_heatmap.png", "cohort_composition_heatmap.png")),
+
+    report_section(outdir, "s4b", "Marker intensity (MFI)",
+      paste("Median fluorescence intensity per population and marker, in the",
+            "instrument's own units. Each sample's median is taken first and",
+            "the cohort value is the median of those, so donors rather than",
+            "events are the replicates; the interquartile range across donors",
+            "is in the summary table. The heatmap prints the value in every",
+            "tile and colours it on the analysis scale rescaled per marker, so",
+            "colour reads as bright for this marker and the number as how",
+            "bright; the bar beside each row is the population's median share",
+            "of CD45+ cells. In the dot plot, size is the percent of the",
+            "population above its own sample's threshold and colour the same",
+            "scaled intensity: a large pale dot is a uniformly dim population,",
+            "a small dark one a bright minority. Where there are study groups,",
+            "the by-group heatmap puts them side by side on one colour scale.",
+            "Between-group tests on these medians are in @@REF:s8@@."),
+      figures = c(panels_of("population_mfi_heatmap"),
+                  panels_of("population_mfi_dotplot"),
+                  panels_of("population_mfi_heatmap_by_group")),
+      tables = c("population_mfi_summary.csv", "population_marker_mfi.csv")),
 
     report_section(outdir, "s5", "Threshold provenance and spillover spreading",
       paste("thresholds_used.csv records how every cut was obtained: a density",
@@ -1123,12 +1581,16 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
       # bottom of the report -- written to disk, but invisible where a reader
       # would look for them. Pooled first, then the days: the order this
       # section's description asks the reader to follow.
-      figures = c("population_frequencies.png", "umap_populations.png",
+      # umap_composition first among the embeddings: it is the one figure that
+      # says what every colour on the map is and how much of it there is.
+      figures = c("population_frequencies.png", panels_of("umap_composition"),
+                  "umap_populations.png",
                   "umap_overview.png", "umap_overview_by_group.png",
                   pooled_then_split(outdir, "umap_markers"),
                   "umap_density.png", "umap_density_by_group.png",
                   "umap_multigraph_overlay.png", "unsupervised_clusters.png"),
-      tables = c("population_frequencies.csv", "population_marker_mfi.csv",
+      tables = c("population_frequencies.csv",
+                 panels_of("population_composition", "csv"),
                  "gate_counts.csv", "cluster_gate_agreement_populations.csv",
                  "cluster_gate_agreement_clusters.csv",
                  "subcluster_marker_shifts.csv", "unsupervised_clusters.csv",
@@ -1316,12 +1778,16 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
   # sense in which a declared specification comes to be derived from explore.
   .exd <- file.path(outdir, "explore")
   if (dir.exists(.exd)) {
-    .exfig <- c("explore_cluster_identity.png", "explore_umap_clusters.png",
+    .exfig <- c("explore_cluster_identity.png", "explore_umap_composition.png",
+                "explore_umap_clusters.png",
+                "explore_cluster_mfi_heatmap.png", "explore_cluster_mfi_dotplot.png",
+                "explore_cluster_mfi_heatmap_by_group.png",
                 "explore_cluster_median_heatmap.png", "explore_cluster_heatmap.png",
                 "explore_umap_markers.png", "explore_umap_by_group.png",
                 "explore_absolute_vs_share.png", "explore_total_counts_qc.png")
     .exfig <- .exfig[file.exists(file.path(.exd, .exfig))]
     .extab <- c("explore_cluster_identity.csv", "explore_findings.csv",
+                "explore_cluster_composition.csv", "explore_cluster_mfi.csv",
                 "explore_cluster_profile.csv", "explore_vs_populations.csv",
                 "explore_population_split.csv", "explore_cluster_abundance.csv",
                 "explore_provenance.csv")
@@ -1395,6 +1861,7 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
     "s5",          # STEP 2/3 threshold provenance and spreading
     "s3",          # STEP 3   staining quality control
     "s4",          # STEP 4   phenotype concordance
+    "s4b",         # STEP 7   marker intensity (MFI), read with the phenotype
     "s6",          # STEP 4b  gate uncertainty and detection limits
     "s7",          # STEP 6/7 abundance and the shared embedding
     "s7b",         # STEP 6   the embedding, one marker at a time
@@ -1463,10 +1930,23 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
     paste("What produced this folder, and what this file is."),
     tables = provenance_tables,
     body = paste0(
-      "<p>This report is self-contained. Every figure above is embedded at full",
-      " resolution and every table is embedded in full, so the file can be",
-      " moved, attached to an email or archived on its own with nothing lost;",
-      " it references no other file and needs no network. Click any figure to",
+      if (linked) paste0(
+        "<p>This report LINKS its figures rather than embedding them",
+        " (--report-images link), so it stays a few megabytes and opens at once,",
+        " but shows its figures only while it sits in this results directory.",
+        " Every table is still embedded in full.")
+      else paste0(
+        "<p>This report is self-contained. Every figure is embedded at full",
+        " resolution and every table is embedded in full, so the file can be",
+        " moved, attached to an email or archived on its own with nothing lost;",
+        " it references no other file and needs no network. A figure is decoded",
+        " only when its tab is opened, so the page stays responsive however",
+        " many it carries; --report-images link writes a much smaller report",
+        " that references the PNGs instead."),
+      " Every section, figure and table is numbered, and the search bar at the",
+      " top finds sections, figures and tables by name or description, and",
+      " tables by the values in their rows (press / to start typing).",
+      " Click any figure to",
       " zoom, or use its download link for the original PNG. Any table can be",
       " searched, sorted by clicking a column heading, shown 10, 50, 100 or all",
       " rows at a time, and exported to CSV exactly as filtered and sorted.</p>",
@@ -1477,7 +1957,7 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
       ", which record the package versions, the invocation and every option in",
       " force.</p>"), open = TRUE)), secs)
 
-  secs <- Filter(function(s) nzchar(s$html), secs)
+  secs <- report_number(secs)
   # A failed run that produced nothing still gets a report: the diagnosis is
   # the point of it, and an empty directory is exactly the case where the user
   # has least else to go on.
@@ -1486,81 +1966,49 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
   nfig <- sum(vapply(secs, `[[`, integer(1), "n_fig"))
   ntab <- sum(vapply(secs, `[[`, integer(1), "n_tab"))
 
-  head <- c(
-    "<!doctype html><html lang='en'><head><meta charset='utf-8'>",
-    "<meta name='viewport' content='width=device-width,initial-scale=1'>",
-    "<title>cyRAVEN run report</title>",
-    sprintf("<style>%s</style>", report_css()), "</head><body>",
-    "<div id='lb' onclick='if(event.target.id===\"lb\")cyClose()'>",
-    "<div id='lbbar'><span id='lbname'></span>",
-    "<button onclick='cyZset(LBZ/1.25)'>&minus;</button>",
-    "<span id='lbpct'>100%</span>",
-    "<button onclick='cyZset(LBZ*1.25)'>+</button>",
-    "<button onclick='cyZset(1)'>Fit</button>",
-    "<a class='dl' id='lbdl' download href='#'>Download</a>",
-    "<button onclick='cyClose()'>Close</button></div>",
-    "<img id='lbimg' alt='' onclick='event.stopPropagation()'/></div>",
-    "<div class='wrap'>",
-    "<nav class='side'><h2>Contents</h2>",
-    paste(vapply(secs, `[[`, character(1), "nav"), collapse = "\n"),
-    # The grip is a sibling of the nav, not a child: as a child of a scrolling
-    # sticky column it would scroll away from the edge it resizes.
-    "</nav><div class='side-grip'></div><main>",
-    # The masthead is a flex row: mark, identity, actions. The two buttons used
-    # to be a float:right span INSIDE the note below, which is why they hung off
-    # its bottom-right corner and overlapped its border -- a float is taken out
-    # of flow, so a note long enough to wrap pushed them past its own box. They
-    # are controls for the whole document, not part of the note, and now sit
-    # where that is legible.
-    # One masthead block: the mark, and to its right the name, then what this
-    # file is and when, then the note on how to read it. Everything identifying
-    # the document sits in one column against the logo instead of trailing down
-    # the page as three unrelated blocks.
-    local({
-      logo <- report_logo_uri()
-      paste0(
-        "<header class='masthead'>",
-        if (!is.na(logo))
-          sprintf("<img class='brand' src='%s' alt='cyRAVEN'/>", logo) else "",
-        "<div class='mast-id'>",
-        sprintf("<h1>cyRAVEN%s</h1>", if (failed) " &mdash; FAILED" else ""),
-        sprintf(paste0("<p class='meta'>Run report &middot; %s &middot; ",
-                       "cyRAVEN %s &middot; %d figures, %d tables, ",
-                       "all embedded</p>"),
-                html_escape(format(Sys.time(), tz = "UTC", usetz = TRUE)),
-                html_escape(tryCatch(as.character(utils::packageVersion("cyRAVEN")),
-                                     error = function(e) "unknown")),
-                nfig, ntab),
-        # Only the failed run carries a masthead note. A completed one used to
-        # carry a reading-order instruction here; it said nothing the section
-        # order does not already say, and it sat above every report whether or
-        # not the reader had asked for guidance.
-        if (failed)
-          sprintf("<div class='banner warn mast-note'>%s</div>",
-            paste("What follows is everything the run wrote before it stopped,",
-                  "in the order a completed run is read in. Stages after the",
-                  "failure are absent, so a section missing here did not run",
-                  "rather than finding nothing."))
-        else "",
-        "</div>",
-        "<div class='mast-actions'>",
-        "<button class='dl' onclick='cyAll(true)'>Expand all</button>",
-        "<button class='dl' onclick='cyAll(false)'>Collapse all</button>",
-        "</div></header>")
-    }),
-    banner)
+  # One masthead block: the mark, and to its right the name, then what this
+  # file is and when, then the note on how to read it. Everything identifying
+  # the document sits in one column against the logo instead of trailing down
+  # the page as three unrelated blocks. Expand and Collapse all live in the
+  # search bar above it, which stays on screen.
+  masthead <- local({
+    logo <- report_logo_uri()
+    paste0(
+      "<header class='masthead'>",
+      if (!is.na(logo))
+        sprintf("<img class='brand' src='%s' alt='cyRAVEN'/>", logo) else "",
+      "<div class='mast-id'>",
+      sprintf("<h1>cyRAVEN%s</h1>", if (failed) " &mdash; FAILED" else ""),
+      sprintf(paste0("<p class='meta'>Run report &middot; %s &middot; ",
+                     "cyRAVEN %s &middot; %d sections, %d figures, %d tables, ",
+                     "%s</p>"),
+              html_escape(format(Sys.time(), tz = "UTC", usetz = TRUE)),
+              html_escape(tryCatch(as.character(utils::packageVersion("cyRAVEN")),
+                                   error = function(e) "unknown")),
+              length(secs), nfig, ntab,
+              if (linked) "figures linked from this directory" else "all embedded"),
+      # Only the failed run carries a masthead note. A completed one used to
+      # carry a reading-order instruction here; it said nothing the section
+      # order does not already say, and it sat above every report whether or
+      # not the reader had asked for guidance.
+      if (failed)
+        sprintf("<div class='banner warn mast-note'>%s</div>",
+          paste("What follows is everything the run wrote before it stopped,",
+                "in the order a completed run is read in. Stages after the",
+                "failure are absent, so a section missing here did not run",
+                "rather than finding nothing."))
+      else "",
+      "</div></header>")
+  })
 
-  writeLines(c(head, vapply(secs, `[[`, character(1), "html"),
-               "</main></div>",
-               paste0("<button id='cytop' type='button' onclick='cyTop()' ",
-                      "title='Back to top' aria-label='Back to top'>&uarr;</button>"),
-               sprintf("<script>%s</script>", report_js()),
-               "</body></html>"), path)
+  writeLines(report_page(secs, "cyRAVEN run report", masthead, banner), path,
+             useBytes = TRUE)
   sz <- file.size(path)
   log_msg("wrote report.html (", if (failed) "FAILED run, " else "",
-          length(secs), " section(s), ", nfig,
-          " figure(s) and ", ntab, " table(s) embedded, ",
-          format(round(sz / 1024^2, 1), nsmall = 1), " MB, ",
-          "self-contained: it references no other file)")
+          length(secs), " numbered section(s), ", nfig, " figure(s) ",
+          if (linked) "linked" else "embedded", " and ", ntab,
+          " table(s) embedded, ", format(round(sz / 1024^2, 1), nsmall = 1),
+          " MB, ", if (linked) "figures read from this directory"
+                   else "self-contained: it references no other file", ")")
   invisible(path)
 }

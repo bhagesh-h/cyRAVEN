@@ -1,5 +1,81 @@
 # cyRAVEN (development)
 
+## MFI, composition, and a numbered, searchable, lighter report
+
+All on by default, in declared runs and in explore mode, with no flag to ask for
+them.
+
+**Median fluorescence intensity, as a table and two figures.**
+`population_mfi_summary.csv` gives, per population and marker, the median over
+donors of each sample's median intensity, in instrument units with its
+interquartile range, overall and per study group, beside the median percent
+positive. Donors are the replicates, so the donor with the most events does not
+set the value. The median is taken on the analysis scale and inverted through the
+run's own transform; every transform is monotone, so this is the median in
+instrument units exactly, not an approximation. `population_marker_mfi.csv` gains
+the same per-sample value as a new `mfi` column beside `median_asinh`.
+
+- `population_mfi_heatmap.png` prints the value in every tile and colours it on
+  the analysis scale rescaled per marker between its 1st and 99th percentile, as
+  CATALYST's expression heatmaps do. A bar beside each row gives the population's
+  median share of CD45+ cells.
+- `population_mfi_dotplot.png` follows Seurat's DotPlot: dot size is the percent
+  above the sample's own threshold, colour the scaled intensity. A large pale dot
+  is a uniformly dim population, a small dark one a bright minority.
+- `population_mfi_heatmap_by_group.png` puts the study groups side by side on one
+  colour scale.
+
+**The composition of the embedding.** `umap_composition.png` draws the shared
+UMAP with a legend that says what each colour is: the population's name, its
+defining markers from the specification, a bar of its share of the embedded
+cells, and its share within each study group. `population_composition.csv` has
+the same numbers with the spread across donors. Each embedded cell carries its
+most specific label, so the shares sum to 100, unlike
+`population_frequencies.csv`, where the gates overlap. The catch-all is part of
+the composition and is drawn in its own colour beneath the populations.
+
+**Explore mode writes the same.** `explore_cluster_mfi.csv` with
+`explore_cluster_mfi_heatmap.png`, `explore_cluster_mfi_dotplot.png` and a by-group
+heatmap; `explore_cluster_composition.csv` with `explore_umap_composition.png`,
+whose legend gives each cluster's matched immune subset and measured phenotype.
+
+**Every section, figure and table is numbered.** Sections are numbered once they
+are in reading order, so the numbers have no gaps whichever sections a run
+writes; figures and tables are numbered within their section (4.1, 4.2, ...) on
+their tabs, captions and contents entries. Descriptions that point to another
+section say its number, or say that this run did not write it. The explore
+report's hand-written "2b." titles are gone for the same numbering.
+
+**A search bar at the top of both reports.** It finds sections, figures and
+tables by their titles, names and descriptions, tables by their column names,
+and tables by the values in their rows: a search for `CD4` lists every table
+with a CD4 row, and opening one shows it already filtered. Press `/` or Ctrl+K
+to start typing, the arrow keys to move, Enter to open. Every figure now
+carries a one-line description under it, which is what the search matches when
+a reader types what they are looking for rather than a file name.
+
+**The report is half the size, and opens quickly.** Every figure was embedded
+twice, once for the view and once in its download link: the sepsis cohort's
+report was 222 MB, of which 110 MB was the second copy. The link now reads the
+image when it is clicked. Figures are decoded only when their tab is opened,
+not all at load, and a section off screen is not laid out until it scrolls into
+view. `--report-images link` writes a report of a few megabytes that references
+the PNGs beside it instead of carrying them, for reading results in place;
+the default still embeds, so the report can be moved on its own.
+
+**The report works on a phone.** Below 900px the contents list is a drawer
+behind a button in the search bar, figures size to the screen, and the table
+controls wrap.
+
+**Explore mode no longer stops when the total cell cap applies.** When the
+per-sample draws added up to more than `--explore-max-cells` (or `--max-cells`
+for the declared embedding), the plan was rescaled with `pmax(1L, ...)`, which
+drops the sample names every caller looks the draws up by. Every lookup then
+failed, and explore mode ended with "subscript out of bounds" -- on the
+35-sample demonstration cohort, which reaches explore's default cap of 150,000
+cells, it never ran. The names are kept now, and a sample the plan leaves out
+because it has no events is skipped rather than looked up.
+
 ## Fixes found by running cyRAVEN beside cyCONDOR
 
 These came out of analysing one 24-sample whole-blood cohort with both tools,

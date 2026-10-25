@@ -190,3 +190,14 @@ test_that("a borrowed cut reports no resampling uncertainty rather than a fake o
   expect_true(is.na(u$u_combined))
   expect_match(u$basis, "other samples")
 })
+
+test_that("the total cap keeps every sample's name", {
+  # Callers look each sample's draw up by name. The cap used to rebuild the
+  # vector through pmax(1L, ...), which drops names, so a capped plan made every
+  # lookup fail and explore mode stopped on the 35-sample demonstration cohort.
+  n <- stats::setNames(c(17289L, 4530L, 6765L, 0L, 25515L), paste0("s", 1:5))
+  take <- suppressMessages(plan_subsample(n, cap = 6000L, total_cap = 10000L))
+  expect_identical(names(take), c("s1", "s2", "s3", "s5"))
+  expect_lte(sum(take), 10000L)
+  expect_true(is.na(take["s4"]))
+})

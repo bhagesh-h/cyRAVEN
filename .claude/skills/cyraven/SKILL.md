@@ -679,8 +679,15 @@ tests. Never present the catalogue as a menu to pick a test from.
 every figure embedded at full resolution, every table embedded in full, no
 external reference of any kind. It can be emailed or archived on its own.
 
-Sections are collapsible with a sidebar index. Figures share one display box
-whatever their aspect ratio, zoom on click, and download at full resolution.
+Sections are collapsible with a sidebar index, and every section, figure and
+table is numbered (section 4, figure 4.2), so a user can point at "table 7.3"
+unambiguously. A **search bar** at the top finds sections, figures and tables by
+name, description or column name, and tables by the values in their rows; a row
+match opens the table already filtered. `/` or Ctrl+K focuses it. Below 900px the
+contents become a drawer, so the report is readable on a phone.
+
+Figures share one display box whatever their aspect ratio, carry a one-line
+description, zoom on click, and download at full resolution.
 Tables are searchable, sortable, paged at 10/50/100/all rows, and export to CSV
 exactly as filtered and sorted. Section headings state what they report rather
 than posing a question, and each carries a description of how to read the
@@ -693,10 +700,21 @@ document, and the default width truncates many of them. The width is remembered
 per report. A **back-to-top button** appears at the bottom right once they are a
 screen down.
 
-Its size is the sum of its figures, so tens of megabytes on a full run. That is
-the price of self-containment and is expected, not a fault. A table over 8 MB is
+Its size is the sum of its figures, each stored once, so tens of megabytes on a
+full run. That is the price of self-containment and is expected, not a fault;
+figures are decoded only when shown, so it stays responsive. If the size is the
+problem, `--report-images link` writes a few-megabyte report that references the
+PNGs instead, readable only inside the results directory. A table over 8 MB is
 named with its row count instead of embedded, which in practice means only the
 per-cell exports.
+
+**MFI and composition** are on by default in both modes:
+`population_mfi_summary.csv` (median over donors of per-sample medians, in
+instrument units, overall and per group) with `population_mfi_heatmap.png` and
+`population_mfi_dotplot.png`; `population_composition.csv` with
+`umap_composition.png`, whose legend gives each population's defining markers
+and share. Explore mode writes `explore_cluster_mfi.csv` and
+`explore_cluster_composition.csv` with the matching figures.
 
 **A failed run writes it too**, with the diagnosis first: the error, the stage
 reached, the log leading up to it, what the message means for the data rather

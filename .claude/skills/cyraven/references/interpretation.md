@@ -7,7 +7,8 @@ dead.
 Sections 1 to 3 reject most compromised runs. Read them first, every time.
 
 **`report.html`** indexes everything below in this order and is the fastest way
-in. It is written by default and read in the results directory.
+in. It is written by default, numbers every section, figure and table, and has a
+search bar that also searches table rows.
 
 ## 0. Was the acquisition stable?
 
@@ -351,9 +352,20 @@ any difference smaller than that is unresolved. Shares are never overwritten.
 
 ### 5.3 Marker expression
 
-**`marker_state_stats.csv`**, **`population_marker_mfi.csv`**
+**`marker_state_stats.csv`**, **`population_marker_mfi.csv`**,
+**`population_mfi_summary.csv`**
 
-Median intensity and percent positive, per sample per population per marker.
+Median intensity and percent positive, per sample per population per marker;
+`mfi` is the same median in instrument units. `population_mfi_summary.csv` is
+the cohort view: the median over donors of the per-sample medians, with its IQR,
+overall and per group, drawn as `population_mfi_heatmap.png` (value in each
+tile, colour scaled per marker) and `population_mfi_dotplot.png` (size = percent
+positive). Compare `mfi` across runs only at matched instrument settings.
+
+**`population_composition.csv`** / **`umap_composition.png`**: each population's
+share of the embedded cells under its most specific label, so the shares sum to
+100 -- unlike `population_frequencies.csv`, whose gates overlap. Do not quote a
+composition share as a frequency of CD45+.
 Multiplicity is adjusted **within each measure**, not across both, because the
 two are strongly correlated summaries of the same events and pooling them would
 over-penalise every result.
