@@ -1394,25 +1394,80 @@ run_cyraven_impl <- function(opt) {
     # only with it, and it is drawn in grey beneath the populations rather than
     # left out. The colours are population_colours() over the same labels, so
     # each population keeps the colour it has in umap_populations.png.
+    #
+    # BY MARKER TOO. Beside the cell-type legend, the percent of each cell type
+    # above its own sample's threshold for every marker the panel thresholds --
+    # read from the scored populations, so the markers the UMAP was not built
+    # on are covered as well. And ONE FIGURE PER TIMEPOINT, on the pooled
+    # map's axes and in its row order, so a visit is compared with another by
+    # looking across, not by re-reading a reordered legend.
     tryCatch({
       .ac <- all_cells[[p$name]]
       .lv <- sort(unique(stats::na.omit(as.character(.ac$population_label))))
+      .cols <- population_colours(.lv)
+      .s1 <- intersect(unique(.ac$sample_id), names(pops))
+      .mk <- unique(unlist(lapply(.s1, function(s)
+        setdiff(colnames(pops[[s]]$tmat), names(reads[[s]]$scatter_cols %||% list())))))
+      .pos <- if (length(.mk)) cell_marker_positivity(.ac, pops, .mk) else NULL
+      .w <- if ("sampling_weight" %in% names(.ac)) .ac$sampling_weight else NULL
+      .lab <- as.character(.ac$population_label)
       .comp <- composition_table(.ac, "population_label",
                                  phenotype = population_phenotype(spec),
                                  group_col = if (.gcol %in% names(.ac)) .gcol else NULL,
-                                 colours = population_colours(.lv))
+                                 colours = .cols,
+                                 marker_pct = composition_marker_pct(.lab, .pos, .w))
       if (!is.null(.comp) && nrow(.comp)) {
         write.csv(.comp, file.path(opt$outdir,
                                    paste0("population_composition", sfx, ".csv")),
                   row.names = FALSE)
+        .plab <- if (length(fpr$panels) > 1L) paste0(", ", p$name) else ""
         fig_umap_composition(.ac, .comp,
           file.path(opt$outdir, paste0("umap_composition", sfx, ".png")),
-          title = paste0("Composition of the shared CD45+ UMAP",
-                         if (length(fpr$panels) > 1L) paste0(", ", p$name) else ""),
+          title = paste0("Composition of the shared CD45+ UMAP", .plab),
           subtitle = paste0(format(nrow(.ac), big.mark = ","), " embedded cells, ",
                             "each under its most specific population, so the ",
                             "shares sum to 100%; defining markers from the ",
-                            "population specification"))
+                            "population specification; on the right, the share ",
+                            "of each population above its own sample's ",
+                            "threshold for every marker"))
+        if ("timepoint" %in% names(.ac)) {
+          .tps <- sort(unique(stats::na.omit(as.character(.ac$timepoint))))
+          .tps <- .tps[nzchar(.tps)]
+          if (length(.tps) > 1L) {
+            .xl <- range(.ac$umap_1, na.rm = TRUE); .yl <- range(.ac$umap_2, na.rm = TRUE)
+            .by_tp <- list()
+            for (.tp in .tps) {
+              .i <- which(!is.na(.ac$timepoint) & as.character(.ac$timepoint) == .tp)
+              if (!length(.i)) next
+              .sub <- .ac[.i, , drop = FALSE]
+              .ct <- composition_table(.sub, "population_label",
+                phenotype = population_phenotype(spec),
+                group_col = if (.gcol %in% names(.sub)) .gcol else NULL,
+                colours = .cols, levels = .comp$population_label,
+                marker_pct = composition_marker_pct(
+                  .lab[.i], if (!is.null(.pos)) .pos[.i, , drop = FALSE] else NULL,
+                  if (!is.null(.w)) .w[.i] else NULL))
+              if (is.null(.ct) || !nrow(.ct)) next
+              .by_tp[[.tp]] <- cbind(timepoint = .tp, .ct, stringsAsFactors = FALSE)
+              fig_umap_composition(.sub, .ct,
+                file.path(opt$outdir, paste0("umap_composition", sfx, "_",
+                                             gsub("[^A-Za-z0-9]+", "_", .tp), ".png")),
+                title = paste0("Composition of the shared CD45+ UMAP at ", .tp, .plab),
+                subtitle = paste0(format(nrow(.sub), big.mark = ","),
+                                  " embedded cells from this visit, on the pooled ",
+                                  "map's axes and in its row order; a population ",
+                                  "absent at this visit reads 0%"),
+                xlim = .xl, ylim = .yl)
+            }
+            # Filled, not rbind(): a visit with one study group has no
+            # per-group columns, and the bind must not fail on it.
+            if (length(.by_tp))
+              write.csv(as.data.frame(data.table::rbindlist(.by_tp, fill = TRUE)),
+                        file.path(opt$outdir, paste0("population_composition",
+                                                     sfx, "_by_timepoint.csv")),
+                        row.names = FALSE)
+          }
+        }
       }
     }, error = function(e)
       log_msg("  WARNING umap_composition failed: ", conditionMessage(e),

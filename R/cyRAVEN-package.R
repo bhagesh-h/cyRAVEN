@@ -117,6 +117,6 @@ utils::globalVariables(c(
   # MFI heatmap and dot plot, and the composition legend (R/figures-mfi.R):
   # `scaled`, `txt` and `ink` are the per-marker colour, tile text and its ink,
   # `pct_positive_median` a column of the MFI summary, `line1`/`ph` the two
-  # text lines of a legend row.
-  "ink", "line1", "pct_positive_median", "ph", "scaled", "txt"
+  # text lines of a legend row, `v` the percent positive in the marker grid.
+  "ink", "line1", "pct_positive_median", "ph", "scaled", "txt", "v"
 ))

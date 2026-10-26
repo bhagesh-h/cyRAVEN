@@ -290,10 +290,20 @@ explore_mfi_composition <- function(cells, feats, prof, subs = NULL, tr = NULL,
 
   # ---- composition ----------------------------------------------------------
   cols <- stats::setNames(scales::hue_pal()(length(ks)), ks)
+  # The marker grid comes from the profile's fraction positive, which is each
+  # cluster's share above its own sample's threshold where the declared run
+  # supplied thresholds and the pooled call otherwise. Scatter is left out.
+  fpc <- grep("^frac_pos\\.", names(prof), value = TRUE)
+  fpc <- fpc[!sub("^frac_pos\\.", "", fpc) %in% scatter]
+  mpct <- if (length(fpc)) {
+    M <- 100 * as.matrix(prof[, fpc, drop = FALSE])
+    dimnames(M) <- list(prof$cluster, sub("^frac_pos\\.", "", fpc))
+    M
+  } else NULL
   comp <- composition_table(cells, "cluster",
                             phenotype = stats::setNames(prof$phenotype, prof$cluster),
                             group_col = if ("group" %in% names(cells)) "group" else NULL,
-                            colours = cols, name_of = name_of)
+                            colours = cols, name_of = name_of, marker_pct = mpct)
   if (!is.null(comp) && nrow(comp)) {
     f <- sprintf("explore_cluster_composition%s.csv", tag)
     utils::write.csv(comp, file.path(ex_dir, f), row.names = FALSE)
@@ -303,7 +313,9 @@ explore_mfi_composition <- function(cells, feats, prof, subs = NULL, tr = NULL,
           title = paste0("Explore: composition of the embedding", plab),
           subtitle = paste0(format(nrow(cells), big.mark = ","),
                             " cells after the cluster-level QC gate; markers are ",
-                            "each cluster's measured phenotype, not a definition"),
+                            "each cluster's measured phenotype, not a definition; ",
+                            "on the right, the share of each cluster positive for ",
+                            "every marker"),
           header = "Cluster and measured phenotype")))
       written <- c(written, basename(fz))
   }
