@@ -1,5 +1,44 @@
 # cyRAVEN (development)
 
+## Control tubes are kept out of every cohort-wide estimate
+
+A declared control is gated like a sample, but it is not one of the cohort.
+Three places counted it as one, and on the 30-sample sepsis cohort each of
+them changed cuts in markers the control had nothing to do with.
+
+**The transform.** The pooled arcsinh cofactor and the pooled logicle
+parameters were estimated from an evenly spaced subset of every file in the
+panel, controls included. Adding a minus-multiple tube and a full-stain tube
+moved the cofactor from 261 to 326, which rescales every marker in every sample
+and moved 373 cuts outside the twelve markers the tube controls. Declared
+controls are now left out of the estimate (`transform_samples()`), unless a
+panel holds nothing else.
+
+**The peer cuts.** `--peer-cuts` and `--auto-fix-gates` replace a cut the sample
+could not support with the median of the other samples' cuts; the control
+tubes' own cuts were among those peers. So was the peer comparison behind
+`threshold_scale_qc.csv`. Both pools are now the cohort's samples only.
+
+**The unstained reference.** Every tube declared `is_control = TRUE` was eligible to be its panel's unstained
+reference, whose 99.5th percentile sets the cut for every unimodal marker. A
+declared control is not necessarily unstained: an FMO or minus-multiple tube is
+declared to keep it out of the statistics, and is stained for everything it does
+not leave out.
+
+On the 30-sample sepsis cohort with its minus-multiple tube, that tube became the
+reference for the whole panel and set the cuts for CD3, CD8 and NKG2D in 25
+samples, CD56 and CD16 in 22, and CD19, Vd1, Vd2 and BTN3A1/2/3 in 12 to 16:
+182 thresholds taken from the top of a stained distribution. An earlier run on
+the same tubes had escaped it only because the tubes' panel fingerprint differed
+from the samples', so the reference applied to the tubes alone; widening
+`--panel-optional-markers` merged them into the samples' panel.
+
+A declared control is now the reference only if it is not named in an `fmo_for`
+column and its own CD45 gate finds no stained population, the same test that
+calls a biological sample stained. A tube refused as the reference keeps its
+other roles: an FMO still anchors the markers it leaves out. Each refusal is
+logged and appended to that tube's verdict in `staining_qc.csv`.
+
 ## MFI, composition, and a numbered, searchable, lighter report
 
 All on by default, in declared runs and in explore mode, with no flag to ask for

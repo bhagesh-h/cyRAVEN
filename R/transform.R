@@ -81,6 +81,40 @@ derive_cofactor <- function(ex, marker_cols, target_iqr = 0.5,
   cf
 }
 
+#' The samples a panel's transform is estimated from
+#'
+#' The biological samples, never the declared controls. A control is in the
+#' panel to be compared against, not to set the scale everything is measured
+#' on: an unstained tube drags the cofactor down, and a stained FMO or
+#' full-stain tube is one donor's distribution counted again. Including them
+#' also changes WHICH samples the pooled estimate draws, since it takes an
+#' evenly spaced subset of the panel. On the 30-sample sepsis cohort adding two
+#' control tubes moved the cofactor from 261 to 326 and every cut in every
+#' sample with it, in markers the controls had nothing to do with. When a panel
+#' holds nothing but controls they are all it has, and are used.
+#' @param sids sample ids in the panel.
+#' @param smap the sample map, or NULL.
+#' @return the sample ids to estimate from.
+#' @keywords internal
+transform_samples <- function(sids, smap = NULL) {
+  keep <- setdiff(sids, declared_controls(smap))
+  if (length(keep)) keep else sids
+}
+
+#' Sample ids the sample sheet declares as controls
+#'
+#' Used wherever a cohort-wide quantity is pooled over samples -- the
+#' transform, and the peer cuts and peer comparison of thresholds -- so that a
+#' control tube is gated like a sample but never counted as one of the cohort.
+#' @param smap the sample map, or NULL.
+#' @return character vector of sample ids, empty when none are declared.
+#' @keywords internal
+declared_controls <- function(smap = NULL) {
+  if (is.null(smap) || !all(c("sample_id", "is_control") %in% names(smap)))
+    return(character(0))
+  as.character(smap$sample_id[vapply(smap$is_control, isTRUE, logical(1))])
+}
+
 #' Derive the panel cofactor from SEVERAL samples, not from whichever file was
 #' read first
 #'

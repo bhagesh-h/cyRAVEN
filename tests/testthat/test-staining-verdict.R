@@ -101,3 +101,21 @@ test_that("a low CD45 fraction fails a declared sample", {
   expect_false(v$include)
   expect_false(v$is_reference)
 })
+
+test_that("a stained or FMO control is never the unstained reference", {
+  # The sepsis cohort's failure: a minus-multiple tube, declared is_control so
+  # it stays out of the statistics, became the panel's unstained reference once
+  # it shared the samples' panel, and set CD3, CD8 and CD56 cuts from its own
+  # stained distribution.
+  gates <- list(unstained = fake_gate(0.4, "quantile_fallback"),
+                fmm       = fake_gate(62),
+                full      = fake_gate(71),
+                blank_lo  = fake_gate(1.2))
+  rc <- reference_controls(names(gates), gates, fmo_tubes = "fmm")
+  expect_identical(rc$keep, c("unstained", "blank_lo"))
+  expect_setequal(names(rc$refused), c("fmm", "full"))
+  expect_match(rc$refused[["fmm"]], "fmo_for markers only", fixed = TRUE)
+  expect_match(rc$refused[["full"]], "stained", fixed = TRUE)
+  # Nothing to choose from is not an error.
+  expect_identical(reference_controls(character(0), list())$keep, character(0))
+})

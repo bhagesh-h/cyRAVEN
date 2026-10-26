@@ -312,6 +312,47 @@ apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,
          do.call(rbind, adjustments) else NULL)
 }
 
+#' Which declared controls may serve as the unstained reference
+#'
+#' A declared control is a tube kept out of the cohort statistics. That does
+#' not make it UNSTAINED, and only an unstained tube can be the reference whose
+#' 99.5th percentile sets the cut for every unimodal marker in its panel. Two
+#' kinds of declared control are stained and are refused here:
+#'
+#'   - an FMO or minus-multiple tube, named in `fmo_for`. It is the reference
+#'     for the markers it leaves out and is applied to those alone. As the
+#'     panel-wide reference it puts every OTHER marker's cut at the top of a
+#'     stained distribution. On one sepsis cohort that set CD3, CD8, NKG2D, CD56
+#'     and CD16 cuts from a minus-multiple tube in 22 to 25 of 30 samples. The
+#'     tube had been kept out of the way only because its panel fingerprint
+#'     differed; once optional markers merged it into the samples' panel it
+#'     became their reference.
+#'   - any tube whose own CD45 gate finds a separable positive population, the
+#'     same test that calls a biological sample stained: a full-stain tube
+#'     carried for comparison, for example.
+#'
+#' @param candidates sample ids whose verdict marks them as possible references.
+#' @param gates named list of gate results, as from [apply_gate_hierarchy()].
+#' @param fmo_tubes sample ids that are FMO or minus-multiple controls.
+#' @param min_cd45_pct passed to [staining_verdict()].
+#' @return list(keep = sample ids usable as the reference, refused = named
+#'   character vector, sample id -> reason).
+#' @keywords internal
+reference_controls <- function(candidates, gates, fmo_tubes = character(0),
+                               min_cd45_pct = 5) {
+  why <- vapply(candidates, function(s) {
+    if (s %in% fmo_tubes)
+      return("an FMO/minus-multiple control: the reference for its fmo_for markers only")
+    v <- staining_verdict(gates[[s]], declared_control = NA,
+                          min_cd45_pct = min_cd45_pct)
+    if (identical(v$qc_status, "pass"))
+      return(sprintf("stained: its CD45 gate finds a positive population (%.1f%% of the parent)",
+                     v$pct_cd45_of_live))
+    ""
+  }, character(1))
+  list(keep = candidates[!nzchar(why)], refused = why[nzchar(why)])
+}
+
 #' Staining QC verdict per file
 #'
 #' WHY: an unstained or failed-staining file has essentially no CD45+ events.

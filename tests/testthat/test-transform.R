@@ -102,3 +102,23 @@ test_that("maybe_compensate survives a spillover matrix with no rownames", {
                  "applying spillover")
   expect_equal(unname(out), unname(ex), tolerance = 1e-12)
 })
+
+test_that("declared controls do not set the transform", {
+  smap <- data.frame(sample_id = c("s1", "s2", "fmm", "fs"),
+                     is_control = c(FALSE, FALSE, TRUE, TRUE))
+  expect_identical(transform_samples(c("s1", "fmm", "s2", "fs"), smap),
+                   c("s1", "s2"))
+  # A panel of nothing but controls keeps them: they are all it has.
+  expect_identical(transform_samples(c("fmm", "fs"), smap), c("fmm", "fs"))
+  # No sheet, or no is_control column, changes nothing.
+  expect_identical(transform_samples(c("a", "b")), c("a", "b"))
+  expect_identical(transform_samples(c("a", "b"), data.frame(sample_id = "a")),
+                   c("a", "b"))
+})
+
+test_that("declared controls are read from the sheet, and only from it", {
+  smap <- data.frame(sample_id = c("s1", "fmm"), is_control = c(FALSE, TRUE))
+  expect_identical(declared_controls(smap), "fmm")
+  expect_identical(declared_controls(NULL), character(0))
+  expect_identical(declared_controls(data.frame(sample_id = "s1")), character(0))
+})
