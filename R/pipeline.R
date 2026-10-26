@@ -464,7 +464,8 @@ run_cyraven_impl <- function(opt) {
     log_step("EXPLORE ONLY - unsupervised discovery, declared analysis skipped")
     tr_only <- list()
     for (p in fpr$panels) {
-      cf <- opt[["cofactor", exact = TRUE]] %||% derive_cofactor_pooled(reads, p$samples)
+      cf <- opt[["cofactor", exact = TRUE]] %||%
+        derive_cofactor_pooled(reads, transform_samples(p$samples, smap))
       tr_only[[p$name]] <- make_transform("arcsinh", cofactor = cf)
     }
 
@@ -532,6 +533,13 @@ run_cyraven_impl <- function(opt) {
   transforms <- list()
   for (p in fpr$panels) {
     sids <- p$samples
+    # The transform is estimated from the biological samples alone; declared
+    # controls are gated on it but do not set it. See transform_samples().
+    tsids <- transform_samples(sids, smap)
+    if (length(tsids) < length(sids))
+      log_msg(p$name, ": transform estimated from ", length(tsids),
+              " sample(s); ", length(sids) - length(tsids),
+              " declared control(s) left out of the estimate")
     # Cofactor sources, in priority order: an explicit --cofactor, a value
     # recorded in the config, then derivation from the data. Derivation now pools
     # across samples by default (derive_cofactor_pooled) instead of trusting
@@ -542,8 +550,8 @@ run_cyraven_impl <- function(opt) {
     .cf_opt <- opt[["cofactor", exact = TRUE]]
     cf <- .cf_opt %||% cfg$transform$cofactor$derived_from_batch[[p$name]] %||%
           (if (isTRUE(opt$first_sample_cofactor))
-             derive_cofactor(reads[[sids[1]]]$exprs, reads[[sids[1]]]$marker_cols)
-           else derive_cofactor_pooled(reads, sids))
+             derive_cofactor(reads[[tsids[1]]]$exprs, reads[[tsids[1]]]$marker_cols)
+           else derive_cofactor_pooled(reads, tsids))
     # A cofactor of zero or less is not a setting, it is a bug upstream: the
     # transform is asinh(x / cofactor), so it yields Inf for every marker and
     # every downstream threshold. Fail here, naming the value, rather than let it
@@ -562,7 +570,7 @@ run_cyraven_impl <- function(opt) {
     # cross-sample comparisons this package exists for meaningless.
     tmethod <- opt$transform %||% "arcsinh"
     transforms[[p$name]] <- if (identical(tmethod, "logicle")) {
-      lp <- derive_logicle_pooled(reads, sids, m = opt$logicle_m %||% 4.5,
+      lp <- derive_logicle_pooled(reads, tsids, m = opt$logicle_m %||% 4.5,
                                   seed = opt$seed %||% 42L)
       if (is.null(lp))
         stop("panel '", p$name, "': no logicle parameters could be derived")
@@ -575,7 +583,7 @@ run_cyraven_impl <- function(opt) {
     log_msg(p$name, ": cofactor ", round(cf, 1),
             if (!is.null(.cf_opt)) " (supplied)"
             else if (isTRUE(opt$first_sample_cofactor))
-              paste0(" (derived from ", sids[1], " only)")
+              paste0(" (derived from ", tsids[1], " only)")
             else paste0(" (median of ", attr(cf, "n_samples") %||% 1L,
                         " per-sample derivations)"))
     for (s in sids) {
@@ -657,6 +665,26 @@ run_cyraven_impl <- function(opt) {
         " [no control declared in the sheet, so NOT used as a reference]")
     }
     discovered <- character(0)
+  }
+
+  # A DECLARED CONTROL IS THE REFERENCE ONLY IF IT IS UNSTAINED. An FMO or a
+  # full-stain tube is declared a control to keep it out of the statistics, and
+  # is stained; as the panel's reference it would set every unimodal marker's
+  # cut at the top of a stained distribution. See reference_controls().
+  if (length(discovered)) {
+    .rc <- reference_controls(discovered, gates,
+                              fmo_tubes = if (!is.null(.fmo_map))
+                                unique(.fmo_map$sample_id) else character(0),
+                              min_cd45_pct = min_cd45 * 1)
+    for (s in names(.rc$refused)) {
+      verdicts[[s]]$is_reference <- FALSE
+      verdicts[[s]]$verdict <- paste0(verdicts[[s]]$verdict,
+                                      " [not the unstained reference: ",
+                                      .rc$refused[[s]], "]")
+      log_msg("NOTE declared control ", s, " is not used as the unstained ",
+              "reference: ", .rc$refused[[s]])
+    }
+    discovered <- .rc$keep
   }
 
   for (s in discovered) {
@@ -883,7 +911,11 @@ run_cyraven_impl <- function(opt) {
   # peer_cut_replacements() in gate-autofix.R. --auto-fix-gates implies it.
   if ((isTRUE(opt$peer_cuts) || isTRUE(opt$auto_fix_gates)) && length(thr_rows)) {
     .thr_df <- do.call(rbind, thr_rows)
-    .rep <- peer_cut_replacements(.thr_df)
+    # Peers are the cohort's samples. A control tube's cuts describe a
+    # different experiment, and as a peer they would move the median that a
+    # sample's unsupported cut is replaced by.
+    .thr_df <- .thr_df[!.thr_df$sample_id %in% declared_controls(smap), , drop = FALSE]
+    .rep <- if (nrow(.thr_df)) peer_cut_replacements(.thr_df) else NULL
     if (!is.null(.rep)) {
       .row_of <- setNames(seq_along(thr_rows), paste(.thr_df$sample_id, .thr_df$marker, sep = "\r"))
       for (r in seq_len(nrow(.rep))) {
@@ -1596,13 +1628,17 @@ run_cyraven_impl <- function(opt) {
   if (!is.null(thr_all) && nrow(thr_all)) {
     if (!"panel" %in% names(thr_all))
       thr_all$panel <- unlist(fpr$assignment[thr_all$sample_id], use.names = FALSE)
+    .ctl_ids <- declared_controls(smap)
     for (key in unique(paste(thr_all$panel, thr_all$marker, sep = "\r"))) {
       idx <- which(paste(thr_all$panel, thr_all$marker, sep = "\r") == key)
       v <- thr_all$threshold[idx]
+      # Peers are the cohort's samples; a control is compared against them but
+      # is not one of them. See declared_controls().
+      peer <- !thr_all$sample_id[idx] %in% .ctl_ids
       # Need enough peers for "the others" to mean anything.
-      if (sum(is.finite(v)) < 4L) next
+      if (sum(is.finite(v[peer])) < 4L) next
       for (j in seq_along(idx)) {
-        others <- v[-j]; others <- others[is.finite(others)]
+        others <- v[-j][peer[-j]]; others <- others[is.finite(others)]
         if (length(others) < 3L || !is.finite(v[j])) next
         med <- median(others)
         # MAD floored so a marker with near-identical peer thresholds does not
