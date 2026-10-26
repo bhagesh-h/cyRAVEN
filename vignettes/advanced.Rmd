@@ -1024,7 +1024,8 @@ version-controlled beside the config it describes.
 | `population_frequencies.csv` | Percentage of parent per population per sample |
 | `population_marker_mfi.csv` | Per sample, population and marker: the median intensity on the analysis scale (`median_asinh`), the same median in instrument units (`mfi`), and the percent positive |
 | `population_mfi_summary.csv` | Median fluorescence intensity per population and marker: the median over donors of each sample's median, in instrument units with its interquartile range, overall and per study group, with the median percent positive |
-| `population_composition.csv` | Each population's share of the embedded cells, its defining markers, its spread across donors and its share within each study group |
+| `population_composition.csv` | Each population's share of the embedded cells, its defining markers, its spread across donors, its share within each study group, and the percent of it positive for each marker (`pct_pos_<marker>`) |
+| `population_composition_by_timepoint.csv` | The same table for each timepoint, in the pooled table's row order |
 | `functional_markers.csv` | The same restricted to functional marker blocks declared in the config |
 | `population_ratios.csv` | Derived ratios where declared |
 | `gate_counts.csv` | Event counts at each level of the gate hierarchy |
@@ -1033,7 +1034,8 @@ version-controlled beside the config it describes.
 | `population_mfi_heatmap.png` | MFI per population and marker, the value printed in each tile, colour scaled per marker; a bar per row gives the population's share |
 | `population_mfi_dotplot.png` | Dot size is the percent positive, colour the scaled MFI |
 | `population_mfi_heatmap_by_group.png` | The MFI heatmap per study group, on one colour scale |
-| `umap_composition.png` | The shared UMAP with a legend of each population's defining markers, share of the embedded cells and share per study group |
+| `umap_composition.png` | The shared UMAP with a legend of each population's defining markers, share of the embedded cells and share per study group, and a grid of the percent of each population positive for each marker |
+| `umap_composition_<timepoint>.png` | The same figure for each visit, on the pooled map's axes and in its row order |
 
 `count` is an event count and scales with acquisition duration. It is not an
 abundance. Report `pct_of_cd45_pos` unless absolute counts were supplied through

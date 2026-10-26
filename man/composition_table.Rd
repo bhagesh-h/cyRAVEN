@@ -10,7 +10,9 @@ composition_table(
   phenotype = NULL,
   group_col = NULL,
   colours = NULL,
-  name_of = NULL
+  name_of = NULL,
+  levels = NULL,
+  marker_pct = NULL
 )
 }
 \arguments{
@@ -27,6 +29,13 @@ table so a row can be matched to the figure.}
 
 \item{name_of}{Optional named character, label -> a second name (explore
 mode's matched subset).}
+
+\item{levels}{Optional label order. Every label in it gets a row, at 0\%
+where absent, and rows keep this order -- so the per-timepoint tables and
+figures list the cell types in the same order as the pooled one.}
+
+\item{marker_pct}{Optional numeric matrix, labels x markers, of the percent
+of each label positive for each marker; appended as \verb{pct_pos_<marker>}.}
 }
 \value{
 data.frame, largest share first and the catch-all last.

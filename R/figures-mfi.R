@@ -404,19 +404,26 @@ fig_mfi_dotplot <- function(summ, outfile, label_col = "population",
 #'   table so a row can be matched to the figure.
 #' @param name_of Optional named character, label -> a second name (explore
 #'   mode's matched subset).
+#' @param levels Optional label order. Every label in it gets a row, at 0%
+#'   where absent, and rows keep this order -- so the per-timepoint tables and
+#'   figures list the cell types in the same order as the pooled one.
+#' @param marker_pct Optional numeric matrix, labels x markers, of the percent
+#'   of each label positive for each marker; appended as `pct_pos_<marker>`.
 #' @return data.frame, largest share first and the catch-all last.
 #' @keywords internal
 composition_table <- function(cells, label_col = "population_label",
                               phenotype = NULL, group_col = NULL,
-                              colours = NULL, name_of = NULL) {
+                              colours = NULL, name_of = NULL, levels = NULL,
+                              marker_pct = NULL) {
   if (is.null(cells) || !nrow(cells) || !label_col %in% names(cells)) return(NULL)
   d <- cells[!is.na(cells[[label_col]]), , drop = FALSE]
   if (!nrow(d)) return(NULL)
   lab <- as.character(d[[label_col]])
   w <- if ("sampling_weight" %in% names(d) && all(is.finite(d$sampling_weight)))
     d$sampling_weight else rep(1, nrow(d))
-  tot <- tapply(w, lab, sum)
-  lv <- names(tot)
+  lv <- if (is.null(levels)) sort(unique(lab)) else unique(c(levels, sort(unique(lab))))
+  tot <- tapply(w, factor(lab, levels = lv), sum)
+  tot[is.na(tot)] <- 0
   m <- tapply(w, list(as.character(d$sample_id), factor(lab, levels = lv)), sum)
   m[is.na(m)] <- 0
   sh <- 100 * m / rowSums(m)
@@ -448,10 +455,72 @@ composition_table <- function(cells, label_col = "population_label",
       out[[paste0("pct_", G)]] <- round(100 * as.numeric(tg) / sum(w[i]), 3)
     }
   }
-  out <- out[order(is_catch_all_label(out$label), -out$pct_of_embedded), , drop = FALSE]
+  if (!is.null(marker_pct) && length(marker_pct)) {
+    # By match(), not by name: a label in `levels` that is absent from this
+    # subset has no row in the matrix, and reads NA rather than failing.
+    r <- match(lv, rownames(marker_pct))
+    for (mk in colnames(marker_pct))
+      out[[paste0("pct_pos_", mk)]] <- round(unname(marker_pct[r, mk]), 2)
+  }
+  out <- if (is.null(levels))
+    out[order(is_catch_all_label(out$label), -out$pct_of_embedded), , drop = FALSE]
+  else out[order(match(out$label, lv)), , drop = FALSE]
   rownames(out) <- NULL
   names(out)[names(out) == "label"] <- label_col
   out
+}
+
+#' Percent of each label positive for each marker, from per-cell calls
+#'
+#' @param labels Character vector, one label per cell.
+#' @param pos Logical matrix, cells x markers: is the cell above its own
+#'   sample's threshold for the marker. NA where no threshold exists.
+#' @param w Optional per-cell weights (`sampling_weight`).
+#' @return Numeric matrix, labels x markers, in percent; NA where a label has no
+#'   cell with a call for the marker.
+#' @keywords internal
+composition_marker_pct <- function(labels, pos, w = NULL) {
+  if (is.null(pos) || !ncol(pos)) return(NULL)
+  if (is.null(w)) w <- rep(1, length(labels))
+  lv <- sort(unique(stats::na.omit(labels)))
+  out <- matrix(NA_real_, length(lv), ncol(pos), dimnames = list(lv, colnames(pos)))
+  for (j in seq_len(ncol(pos))) {
+    ok <- !is.na(pos[, j]) & !is.na(labels)
+    if (!any(ok)) next
+    num <- tapply(w[ok] * pos[ok, j], factor(labels[ok], levels = lv), sum)
+    den <- tapply(w[ok], factor(labels[ok], levels = lv), sum)
+    out[, j] <- 100 * as.numeric(num) / as.numeric(den)
+  }
+  out
+}
+
+#' Is each embedded cell above its own sample's threshold, per marker
+#'
+#' Read from the scored populations rather than from the embedding's own
+#' columns, so every marker with a threshold is covered and not only the ones
+#' the UMAP was built on. Scatter channels are left out: "positive" for side
+#' scatter is a gate, not a marker.
+#' @param cells Embedded cell table with `sample_id` and `event_index`.
+#' @param pops Scored populations per sample, carrying `tmat` and `thresholds`.
+#' @param markers Markers to call.
+#' @return Logical matrix, cells x markers.
+#' @keywords internal
+cell_marker_positivity <- function(cells, pops, markers) {
+  pos <- matrix(NA, nrow(cells), length(markers),
+                dimnames = list(NULL, markers))
+  for (s in unique(cells$sample_id)) {
+    P <- pops[[s]]
+    if (is.null(P) || is.null(P$tmat)) next
+    i <- which(cells$sample_id == s)
+    ev <- cells$event_index[i]
+    ok <- is.finite(ev) & ev >= 1 & ev <= nrow(P$tmat)
+    for (m in intersect(markers, colnames(P$tmat))) {
+      t <- suppressWarnings(as.numeric(P$thresholds[[m]] %||% NA_real_))
+      if (!length(t) || !is.finite(t)) next
+      pos[i[ok], m] <- P$tmat[ev[ok], m] > t
+    }
+  }
+  pos
 }
 
 #' The shared embedding coloured by label, with a legend of composition
@@ -459,7 +528,13 @@ composition_table <- function(cells, label_col = "population_label",
 #' Beside the map, one row per label: its colour, its name, its defining
 #' markers, a bar of its share of the embedded cells, and its share within each
 #' study group (up to four; the table carries any number). The catch-all is
-#' drawn in grey beneath everything else and listed last.
+#' drawn in its own colour beneath everything else and listed last.
+#'
+#' To the right of that, where `comp` carries `pct_pos_<marker>` columns, a grid
+#' of the percent of each cell type positive for each marker, on the same rows:
+#' the composition by cell type and, across the row, by marker. A cell type's
+#' defining markers read near 0 or 100 by construction; the others are what
+#' the figure adds.
 #'
 #' @param cells Embedded cell table with `umap_1`, `umap_2` and the label column.
 #' @param comp Output of [composition_table()], with a `colour` column.
@@ -467,6 +542,8 @@ composition_table <- function(cells, label_col = "population_label",
 #' @param label_col Label column.
 #' @param title,subtitle Figure title and subtitle.
 #' @param header Heading over the legend's name column.
+#' @param xlim,ylim Optional axis limits for the map, so figures of subsets of
+#'   one embedding (a timepoint each) are drawn on the same extent.
 #' @param dpi Resolution.
 #' @return The plot, invisibly, or NULL when there was nothing to draw.
 #' @keywords internal
@@ -475,6 +552,7 @@ fig_umap_composition <- function(cells, comp, outfile,
                                  title = "Composition of the shared embedding",
                                  subtitle = NULL,
                                  header = "Cell type and defining markers",
+                                 xlim = NULL, ylim = NULL,
                                  dpi = 220) {
   if (is.null(comp) || !nrow(comp) || is.null(cells) ||
       !all(c("umap_1", "umap_2", label_col) %in% names(cells)))
@@ -494,7 +572,7 @@ fig_umap_composition <- function(cells, comp, outfile,
     geom_point(size = a$size * 1.3, alpha = min(1, a$alpha + 0.25), stroke = 0) +
     scale_colour_manual(values = pal, guide = "none") +
     labs(x = "UMAP 1", y = "UMAP 2") +
-    coord_equal() + theme_cyto()
+    coord_equal(xlim = xlim, ylim = ylim) + theme_cyto()
 
   # ---- the legend, drawn as a table ----------------------------------------
   # In character units on x, so the column positions follow the longest name
@@ -509,6 +587,9 @@ fig_umap_composition <- function(cells, comp, outfile,
   ph <- ifelse(nchar(ph) > 56, paste0(substr(ph, 1, 55), "..."), ph)
   gcols <- grep("^pct_", setdiff(names(comp), c("pct_of_embedded",
     "pct_median_per_sample", "pct_q1_per_sample", "pct_q3_per_sample")), value = TRUE)
+  gcols <- gcols[!startsWith(gcols, "pct_pos_")]
+  mcols <- grep("^pct_pos_", names(comp), value = TRUE)
+  mcols <- mcols[vapply(mcols, function(k) any(is.finite(comp[[k]])), logical(1))]
   if (length(gcols) > 4L) gcols <- character(0)
   tw <- max(nchar(line1) * 1.05, nchar(ph) * 0.85, nchar(header) * 0.95, 14) + 1.5
   x_sw <- 0.9; x_tx <- 2.7; x_bar <- x_tx + tw; bar_w <- 15
@@ -550,11 +631,49 @@ fig_umap_composition <- function(cells, comp, outfile,
                vjust = 0, size = 3, fontface = "bold", colour = "grey30",
                lineheight = 0.9)
   }
-  h <- max(6.8, 0.42 * nr + 1.7)
+  # ---- percent positive per marker, on the same rows -----------------------
+  # Drawn in the same panel as the legend so each row lines up exactly with
+  # its cell type. Marker names are set at an angle above their columns, and
+  # the header area grows with the longest name.
+  hdr <- 1.05
+  if (length(mcols)) {
+    mk <- sub("^pct_pos_", "", mcols)
+    cw <- 4.6
+    x_m <- W + 1.2 + cw * (seq_along(mk) - 0.5)
+    hm <- data.frame(x = rep(x_m, each = nr), y = rep(rows$y, length(mk)),
+                     v = as.numeric(unlist(comp[mcols], use.names = FALSE)))
+    hm$txt <- ifelse(is.finite(hm$v), sprintf("%.0f", hm$v), "")
+    hm$ink <- ifelse(is.finite(hm$v) & hm$v > 55, "white", "grey15")
+    hdr <- max(1.05, 0.16 * max(nchar(mk)) + 0.75)
+    mtitle <- "% of the cell type positive for each marker"
+    pl <- pl +
+      geom_tile(data = hm, aes(x = x, y = y, fill = v), width = cw * 0.94,
+                height = 0.84, colour = "white", linewidth = 0.3,
+                inherit.aes = FALSE) +
+      geom_text(data = hm, aes(x = x, y = y, label = txt), colour = hm$ink,
+                size = 2.5, inherit.aes = FALSE) +
+      scale_fill_gradientn(colours = c("#f3f5f8", "#c6dbef", "#6baed6",
+                                       "#2171b5", "#08306b"),
+                           limits = c(0, 100), na.value = "white", guide = "none") +
+      annotate("text", x = x_m - cw * 0.3, y = nr + 0.7, label = mk, angle = 50,
+               hjust = 0, vjust = 0, size = 2.8, fontface = "bold",
+               colour = "grey30") +
+      annotate("text", x = min(x_m) - cw * 0.5, y = nr + 0.7 + hdr - 0.15,
+               label = mtitle, hjust = 0, vjust = 0, size = 3, fontface = "bold",
+               colour = "grey30")
+    # Wide enough for the last angled name and for the block's own title: with
+    # three or four markers the grid is narrower than its title, which was cut
+    # off at the edge of the image.
+    W <- max(max(x_m) + cw * 0.5 + 0.8 + 0.12 * nchar(mk[length(mk)]),
+             min(x_m) - cw * 0.5 + 0.95 * nchar(mtitle) + 1)
+    hdr <- hdr + 0.55
+  }
+
+  h <- max(6.8, 0.42 * (nr + hdr) + 1.3)
   # Rows stack from the top at a fixed pitch rather than spreading over the
   # whole height, so a legend of five rows beside a tall map stays a compact
   # block instead of five lines an inch apart.
-  y_hi <- nr + 1.75
+  y_hi <- nr + 0.7 + hdr
   y_lo <- min(0.45, y_hi - (h - 1.1) / 0.42)
   pl <- pl +
     scale_x_continuous(limits = c(0, W), expand = c(0, 0)) +

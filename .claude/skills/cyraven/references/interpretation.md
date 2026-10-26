@@ -365,7 +365,11 @@ positive). Compare `mfi` across runs only at matched instrument settings.
 **`population_composition.csv`** / **`umap_composition.png`**: each population's
 share of the embedded cells under its most specific label, so the shares sum to
 100 -- unlike `population_frequencies.csv`, whose gates overlap. Do not quote a
-composition share as a frequency of CD45+.
+composition share as a frequency of CD45+. The `pct_pos_<marker>` columns (the
+grid right of the legend) are the percent of each population above its own
+sample's threshold; a population's defining markers read near 0 or 100 by
+construction. `umap_composition_<timepoint>.png` and
+`population_composition_by_timepoint.csv` repeat it per visit.
 Multiplicity is adjusted **within each measure**, not across both, because the
 two are strongly correlated summaries of the same events and pooling them would
 over-penalise every result.

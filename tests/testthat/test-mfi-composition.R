@@ -119,3 +119,51 @@ test_that("explore mode writes its MFI and composition outputs", {
   comp <- utils::read.csv(file.path(d, "explore_cluster_composition.csv"))
   expect_equal(sum(comp$pct_of_embedded), 100, tolerance = 1e-3)
 })
+
+test_that("percent positive per cell type is read from each cell's own call", {
+  lab <- c("A", "A", "A", "A", "B", "B")
+  pos <- cbind(CD3 = c(TRUE, TRUE, TRUE, FALSE, FALSE, FALSE),
+               CD19 = c(FALSE, FALSE, FALSE, FALSE, TRUE, NA))
+  mp <- composition_marker_pct(lab, pos)
+  expect_equal(mp["A", "CD3"], 75)
+  expect_equal(mp["B", "CD3"], 0)
+  # A cell with no call does not count against the cell type.
+  expect_equal(mp["B", "CD19"], 100)
+  # Weights follow sampling_weight.
+  expect_equal(composition_marker_pct(lab, pos, w = c(3, 1, 1, 1, 1, 1))["A", "CD3"],
+               100 * 5 / 6)
+})
+
+test_that("calls come from each sample's own threshold, at each cell's event", {
+  pops <- list(
+    s1 = list(tmat = cbind(CD3 = c(0.5, 2.5, 3.0)), thresholds = list(CD3 = 1)),
+    s2 = list(tmat = cbind(CD3 = c(0.5, 2.5, 3.0)), thresholds = list(CD3 = 2.8)))
+  cells <- data.frame(sample_id = c("s1", "s1", "s2", "s2"),
+                      event_index = c(1L, 2L, 2L, 3L))
+  pos <- cell_marker_positivity(cells, pops, c("CD3", "CD19"))
+  expect_identical(pos[, "CD3"], c(FALSE, TRUE, FALSE, TRUE))
+  # A marker with no threshold has no calls, rather than all negative ones.
+  expect_true(all(is.na(pos[, "CD19"])))
+})
+
+test_that("a per-timepoint table keeps the pooled order and lists absent types at 0", {
+  cells <- synth_cells()
+  pooled <- composition_table(cells, "population_label")
+  sub <- cells[cells$population_label != "B cells", ]
+  mp <- composition_marker_pct(sub$population_label,
+                               cbind(CD3 = sub$population_label == "CD4 T cells"))
+  tp <- composition_table(sub, "population_label",
+                          levels = pooled$population_label, marker_pct = mp)
+  expect_identical(tp$population_label, pooled$population_label)
+  expect_equal(tp$pct_of_embedded[tp$population_label == "B cells"], 0)
+  expect_equal(sum(tp$pct_of_embedded), 100, tolerance = 1e-3)
+  expect_equal(tp$pct_pos_CD3[tp$population_label == "CD4 T cells"], 100)
+  expect_true(is.na(tp$pct_pos_CD3[tp$population_label == "B cells"]))
+  # The marker columns are not mistaken for study-group columns in the figure.
+  d <- withr::local_tempdir()
+  tp$colour <- population_colours(tp$population_label)
+  suppressMessages(fig_umap_composition(sub, tp, file.path(d, "tp.png"),
+                                        xlim = range(cells$umap_1),
+                                        ylim = range(cells$umap_2)))
+  expect_figure_contract(file.path(d, "tp.png"), "per-timepoint composition")
+})

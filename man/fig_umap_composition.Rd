@@ -12,6 +12,8 @@ fig_umap_composition(
   title = "Composition of the shared embedding",
   subtitle = NULL,
   header = "Cell type and defining markers",
+  xlim = NULL,
+  ylim = NULL,
   dpi = 220
 )
 }
@@ -28,6 +30,9 @@ fig_umap_composition(
 
 \item{header}{Heading over the legend's name column.}
 
+\item{xlim, ylim}{Optional axis limits for the map, so figures of subsets of
+one embedding (a timepoint each) are drawn on the same extent.}
+
 \item{dpi}{Resolution.}
 }
 \value{
@@ -37,6 +42,13 @@ The plot, invisibly, or NULL when there was nothing to draw.
 Beside the map, one row per label: its colour, its name, its defining
 markers, a bar of its share of the embedded cells, and its share within each
 study group (up to four; the table carries any number). The catch-all is
-drawn in grey beneath everything else and listed last.
+drawn in its own colour beneath everything else and listed last.
+}
+\details{
+To the right of that, where \code{comp} carries \verb{pct_pos_<marker>} columns, a grid
+of the percent of each cell type positive for each marker, on the same rows:
+the composition by cell type and, across the row, by marker. A cell type's
+defining markers read near 0 or 100 by construction; the others are what
+the figure adds.
 }
 \keyword{internal}

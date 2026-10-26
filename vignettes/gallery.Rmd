@@ -378,7 +378,11 @@ knitr::include_graphics("figures/demo_cohort_composition_heatmap.png")
 
 The shared embedding coloured by population, with a legend that says what each
 colour is: the population's name, its defining markers from the specification,
-its share of the embedded cells, and its share within each study group.
+its share of the embedded cells, and its share within each study group. To the
+right, on the same rows, the percent of each population above its own sample's
+threshold for every marker the panel thresholds. A sheet with a `timepoint`
+column also gets one copy per visit, `umap_composition_<timepoint>.png`, on the
+same axes and in the same row order.
 
 ```{r, fig.alt="Shared UMAP coloured by population beside a legend of each population's defining markers, share of embedded cells and share per GvHD grade"}
 knitr::include_graphics("figures/demo_umap_composition.png")
@@ -394,7 +398,12 @@ match none of them. Lymphocytes are 24.9% of the grade 1 cells and 3.9% of the
 grade 3 cells, but `population_composition.csv` gives their median share per
 sample as 0: only 5 of the 22 embedded samples hold any. Read that column before
 quoting a pooled share, and the per-donor test in `group_comparison.png` before
-reading the difference as one between grades.
+reading the difference as one between grades. In the marker grid, monocytes are
+100% CD14-positive and 68% CD33-positive, while the CD33-positive myeloid row
+is only 14% CD14-positive: each cell carries its most specific label, so the
+CD14-positive CD33-positive cells are counted as monocytes, and the row holds
+what is left. The dot plot in section 3, which scores the overlapping gates,
+puts the whole CD33-positive population at about 50%.
 
 ### umap_overview.png
 

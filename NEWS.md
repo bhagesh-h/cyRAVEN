@@ -73,6 +73,14 @@ most specific label, so the shares sum to 100, unlike
 `population_frequencies.csv`, where the gates overlap. The catch-all is part of
 the composition and is drawn in its own colour beneath the populations.
 
+To the right of the legend, on the same rows, a grid gives the percent of each
+cell type above its own sample's threshold for every marker the panel
+thresholds, not only the markers the UMAP was built on; the table carries the
+same numbers as `pct_pos_<marker>` columns. Where the sheet has a `timepoint`
+column, `umap_composition_<timepoint>.png` repeats the figure for each visit on
+the pooled map's axes and in its row order, a population absent at a visit
+reading 0%, and `population_composition_by_timepoint.csv` holds the tables.
+
 **Explore mode writes the same.** `explore_cluster_mfi.csv` with
 `explore_cluster_mfi_heatmap.png`, `explore_cluster_mfi_dotplot.png` and a by-group
 heatmap; `explore_cluster_composition.csv` with `explore_umap_composition.png`,
