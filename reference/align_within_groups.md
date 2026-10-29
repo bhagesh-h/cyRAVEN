@@ -1,0 +1,51 @@
+# Align each batch towards a goal that respects the design
+
+WHY NOT ONE POOLED GOAL. Mapping each batch's distribution onto the
+pooled distribution of every sample assumes the batches hold the same
+mixture of biology. Where one batch holds mostly patients and another
+mostly controls, the pooled goal is a blend of the two groups, each
+batch is pulled towards it, and a real difference between the groups is
+reduced along with the batch effect. That homogeneity is exactly what
+anchor samples exist to avoid assuming (Schuyler et al. 2019). Without
+anchors, CytoNorm 2.0 tailors its goal distribution to the experimental
+design (Quintelier et al. 2025).
+
+## Usage
+
+``` r
+align_within_groups(x, batch, group = NULL, goal = "batch_mean")
+```
+
+## Arguments
+
+- x:
+
+  numeric vector for one marker.
+
+- batch:
+
+  batch label per cell.
+
+- group:
+
+  study group per cell, or NULL for one goal over all cells.
+
+- goal:
+
+  passed to
+  [`align_quantiles()`](https://bhagesh-h.github.io/cyRAVEN/reference/align_quantiles.md).
+
+## Value
+
+numeric vector, corrected.
+
+## Details
+
+WHAT IS DONE. Each study group is aligned separately: a batch's cells of
+group g are mapped onto group g's goal, the mean of its batches'
+quantiles (see
+[`align_quantiles()`](https://bhagesh-h.github.io/cyRAVEN/reference/align_quantiles.md)).
+A batch effect common to the groups is removed in each of them, and the
+groups keep whatever separates them. A group measured in only one batch
+has nothing to align against and is left as it is. Cells with no group
+are aligned against the pooled distribution, as before.
