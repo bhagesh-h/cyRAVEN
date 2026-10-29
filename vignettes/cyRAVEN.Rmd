@@ -1400,8 +1400,9 @@ by the files' `$PnN`; and a vertex table in the linear units the FCS file
 stores, edges subdivided so the polygon describes the same region the fit did.
 To apply a file whose gates reference the files' own compensation
 (`compensation-ref="FCS"`) with flowCore and flowUtils, use flowCore 2.25 or
-later: releases 2.18 to 2.22 stop on R 4.2 or later when they read a
-`$SPILLOVER` keyword ("the condition has length > 1").
+later, or the cyRAVEN image, whose flowCore 2.18.0 carries the one-line fix:
+releases 2.18 to 2.22 stop on R 4.2 or later when they read a `$SPILLOVER`
+keyword ("the condition has length > 1").
 `--flowjo-export` writes UMAP-annotated FCS: open `_ALL_SAMPLES.fcs`, plot UMAP-1
 against UMAP-2, and the populations are there as channels.
 

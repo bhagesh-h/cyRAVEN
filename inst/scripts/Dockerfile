@@ -16,10 +16,11 @@
 #   release rather than today's. Bioconductor is pinned separately below, because
 #   flowCore comes from Bioconductor and follows its own release cycle.
 #
-# VERSIONS THIS IMAGE REPRODUCES (the environment the pipeline was validated in):
-#   R 4.4.3 . flowCore 2.18.0 . uwot 0.2.4 . data.table 1.18.4
-#   ggplot2 4.0.3 . patchwork 1.3.2 . viridisLite 0.4.2 . scales 1.4.0
-#   yaml 2.3.12 . optparse 1.8.2 . hexbin 1.28.5
+# VERSIONS THIS IMAGE REPRODUCES (the environment the pipeline was validated in,
+# as the build-time check below prints them):
+#   R 4.4.3 . Bioconductor 3.20 . flowCore 2.18.0 (with the fix below) . uwot 0.2.3
+#   data.table 1.17.0 . ggplot2 3.5.2 . patchwork 1.3.0 . viridisLite 0.4.2
+#   scales 1.3.0 . yaml 2.3.10 . optparse 1.7.5 . hexbin 1.28.5
 #
 # BUILD (from the package root -- the directory holding DESCRIPTION):
 #   docker build -f inst/scripts/Dockerfile -t cyraven:1.0.0 .
@@ -106,6 +107,17 @@ RUN Rscript -e "install.packages('BiocManager', repos='https://cloud.r-project.o
                 BiocManager::install(version=Sys.getenv('BIOC_VERSION'), ask=FALSE, update=FALSE)" \
  && Rscript /opt/cyraven/install_deps.R
 
+# flowCore 2.18.0 with one upstream fix. Its getSpilloverFromFlowFrame() fails
+# under R 4.2 or later on a $SPILLOVER keyword held as a matrix, which is how
+# read.FCS() stores it, so flowCore cannot apply a Gating-ML gate declared
+# compensation-ref="FCS", such as an --export-gates file. The fix (upstream
+# 903b5b3) is in Bioconductor devel only. cyRAVEN's own analysis never reaches
+# that function; the patch is for applying its exported gates with flowCore in
+# this image. See patch_flowcore.R; a layer of its own, so the dependency layer
+# above stays cached.
+COPY inst/scripts/patch_flowcore.R /opt/cyraven/
+RUN Rscript /opt/cyraven/patch_flowcore.R
+
 # Now the package itself, installed from source so library(cyRAVEN) works and the
 # CLI resolves through system.file().
 COPY . /opt/cyraven/src
@@ -119,7 +131,8 @@ RUN R CMD INSTALL --no-multiarch --with-keep.source /opt/cyraven/src \
 RUN Rscript "$(Rscript -e "cat(system.file('scripts','cyraven.R',package='cyRAVEN'))")" --help > /dev/null \
  && Rscript -e "for (p in c('cyRAVEN','flowCore','uwot','data.table','ggplot2', \
                             'patchwork','viridisLite','scales','yaml','optparse','hexbin')) \
-                  cat(sprintf('%-12s %s\n', p, as.character(packageVersion(p))))"
+                  cat(sprintf('%-12s %s\n', p, as.character(packageVersion(p))))" \
+ && Rscript -e "cat('flowCore patch:', packageDescription('flowCore')\$cyRAVENPatch, '\n')"
 
 # Results are written here by default; mount over it to get them on the host.
 VOLUME ["/results"]

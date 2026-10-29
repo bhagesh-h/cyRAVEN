@@ -228,7 +228,11 @@ strict `>`; it is moved off the block.
   simulated flowFrame, counts exactly the events computed directly. Applying an
   `FCS` file needs flowCore 2.25 (Bioconductor devel) or its one-line fix;
   flowCore 2.18 to 2.22 stop on a `$SPILLOVER` keyword held as a matrix under R
-  4.2 or later.
+  4.2 or later. The image installs flowCore 2.18.0 with that fix
+  (`inst/scripts/patch_flowcore.R`, recorded as `cyRAVENPatch` in flowCore's
+  DESCRIPTION); cyRAVEN's own analysis never reaches the function, so no result
+  changes. The Dockerfile now lists the package versions the image actually
+  installs.
 - `--single-stains` computes the published spillover spreading matrix from
   single-stain controls, and `spreading_pairs.csv` gains `trend_rho`, a screen
   for compensation and unmixing errors. A negative trend on a pair whose
