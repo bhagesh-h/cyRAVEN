@@ -84,9 +84,10 @@ file's \verb{$SPILLOVER} itself. flowCore 2.18 to 2.22, every release up to
 Bioconductor 3.22, stops there on R 4.2 or later ("the condition has length >
 1": \code{getSpilloverFromFlowFrame()} tests \code{class(mySpill) != "matrix"}, and a
 matrix has two classes since R 4.0); the fix (\code{!is(mySpill, "matrix")},
-upstream commit 903b5b3) is in flowCore 2.25 (Bioconductor devel). Checked
-with flowUtils 1.63.0: on a patched 2.18 the three cases apply and count
-exactly the events computed directly.
+upstream commit 903b5b3) is in flowCore 2.25 (Bioconductor devel), and the
+cyRAVEN image installs 2.18.0 with it (\code{inst/scripts/patch_flowcore.R}).
+Checked with flowUtils 1.63.0: on the patched 2.18 the three cases apply and
+count exactly the events computed directly.
 
 DIMENSION NAMES. Gating-ML 2.0 names a dimension of an FCS file by its \verb{$PnN}
 (section 4.1), also under \code{"FCS"} (4.2.2), so \code{channel_map} should map each
