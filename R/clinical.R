@@ -326,8 +326,9 @@ clin_associate <- function(d, key_col, value_col, clin, patient_of = NULL,
         if (nlevels(f) < 2L || min(table(f)) < 2L) next
         if (nlevels(f) == 2L) {
           a <- y[f == levels(f)[1]]; b <- y[f == levels(f)[2]]
-          wt <- try(stats::wilcox.test(b, a, exact = FALSE), silent = TRUE)
-          if (inherits(wt, "try-error")) next
+          # Exact, ties included: see R/rank-tests.R.
+          p_wt <- rank_sum_p(b, a)
+          if (!is.finite(p_wt)) next
           # Stratified resample: within each arm separately, so every resample
           # keeps both groups non-empty and the group sizes it was asked about.
           ci <- clin_boot_ci(function(i) {
@@ -343,7 +344,7 @@ clin_associate <- function(d, key_col, value_col, clin, patient_of = NULL,
             estimate = round(clin_cliff(a, b), 4), effect = "Cliff's delta",
             signed = TRUE,
             ci_low = round(ci[1], 4), ci_high = round(ci[2], 4),
-            p_value = wt$p.value,
+            p_value = p_wt,
             levels_or_range = paste0(levels(f)[1], " (n=", sum(f == levels(f)[1]),
                                      ") vs ", levels(f)[2], " (n=",
                                      sum(f == levels(f)[2]), ")"),

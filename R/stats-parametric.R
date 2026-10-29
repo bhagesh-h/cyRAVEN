@@ -21,11 +21,19 @@
 # THE PROPORTION PROBLEM. Population frequencies are proportions. They are bound
 # to [0, 100], their variance depends on their mean, and near 0 or 100 they are
 # strongly skewed. A t-test on raw percentages violates its own assumptions
-# hardest exactly where rare populations live. The arcsine square root transform
-# stabilises that variance and is the standard remedy for proportion data, so the
-# parametric tests run on transformed values and the table records that they did.
-# The effect sizes are reported on both scales, because a difference in arcsine
-# units is not something anyone can interpret.
+# hardest exactly where rare populations live. The tests therefore run on the
+# LOGIT of each proportion, which is symmetric about 50%, unbounded, and
+# stabilises the variance where the arcsine square root, the older remedy, does
+# not: "the arcsine transform should not be used" for proportions (Warton & Hui
+# 2011), and for flow cytometry results the logit gives symmetric distributions
+# and homogeneous variances near 0 and 100% (Seiffert et al. 2024). The table
+# records the transform, and means are reported on the percentage scale,
+# because a difference in logits is not something anyone reads directly.
+#
+# AN ABSOLUTE CONCENTRATION IS NOT A PROPORTION. When the run has cells/uL the
+# abundance measure is the concentration, and a proportion transform clipped
+# every value above 100 to the same number. Concentrations are right-skewed and
+# multiplicative, and are log-transformed instead.
 # =============================================================================
 
 #' Arcsine square root transform for percentages
@@ -38,6 +46,48 @@
 asin_sqrt_pct <- function(pct) {
   p <- pmin(pmax(as.numeric(pct) / 100, 0), 1)
   asin(sqrt(p))
+}
+
+#' Empirical logit for percentages
+#'
+#' log((p + e) / (1 - p + e)), with `e` the smallest non-zero value of p or of
+#' 1 - p among the values transformed together, so a population at 0% or 100%
+#' in some samples stays finite (Warton & Hui 2011).
+#'
+#' @param pct Numeric vector of percentages.
+#' @return Numeric vector on the logit scale.
+#' @keywords internal
+logit_pct <- function(pct) {
+  p <- pmin(pmax(as.numeric(pct) / 100, 0), 1)
+  nz <- c(p[is.finite(p) & p > 0], 1 - p[is.finite(p) & p < 1])
+  e <- if (length(nz)) min(nz) else 0.5
+  log((p + e) / (1 - p + e))
+}
+
+#' Log transform for concentrations, zeros kept finite
+#'
+#' @param x Non-negative numeric vector.
+#' @return log(x + e), `e` half the smallest positive value.
+#' @keywords internal
+log_conc <- function(x) {
+  x <- pmax(as.numeric(x), 0)
+  pos <- x[is.finite(x) & x > 0]
+  log(x + if (length(pos)) min(pos) / 2 else 1)
+}
+
+#' Transform a measure for a parametric test
+#'
+#' @param x Values.
+#' @param transform "logit", "asin_sqrt" or "none".
+#' @param absolute TRUE when `x` is a concentration rather than a percentage.
+#' @return list(value, label).
+#' @keywords internal
+parametric_scale <- function(x, transform = "logit", absolute = FALSE) {
+  if (identical(transform, "none")) return(list(value = x, label = "none"))
+  if (isTRUE(absolute)) return(list(value = log_conc(x), label = "log"))
+  if (identical(transform, "asin_sqrt"))
+    return(list(value = asin_sqrt_pct(x), label = "arcsine sqrt"))
+  list(value = logit_pct(x), label = "logit")
 }
 
 #' Cohen's d, pooled standard deviation
@@ -147,9 +197,9 @@ dunn_test <- function(values, groups) {
 
 #' Parametric group comparison with its assumptions recorded
 #'
-#' Runs the test an immunology paper usually reports, on arcsine square root
-#' transformed percentages, and states beside each result whether the two
-#' assumptions behind it held.
+#' Runs the test an immunology paper usually reports, on logit-transformed
+#' percentages (log concentrations when the measure is cells/uL), and states
+#' beside each result whether the two assumptions behind it held.
 #'
 #' Two groups give Welch's t-test, which does not assume equal variances, plus
 #' Student's t-test for reference. More than two give Welch's ANOVA plus the
@@ -162,12 +212,13 @@ dunn_test <- function(values, groups) {
 #' @param reference Reference group, or NULL for the first alphabetically.
 #' @param value_col Value column; defaults to the resolved abundance measure.
 #' @param min_n Minimum samples per group.
-#' @param transform "asin_sqrt" (default) or "none".
+#' @param transform "logit" (default), "asin_sqrt" or "none". A concentration
+#'   is log-transformed whatever this says, unless it is "none".
 #' @return data.frame, or NULL when nothing is testable.
 #' @keywords internal
 parametric_group_tests <- function(freq, group_of, reference = NULL,
                                    value_col = NULL, min_n = 3L,
-                                   transform = "asin_sqrt") {
+                                   transform = "logit") {
   meas <- if (!is.null(value_col)) list(col = value_col) else
     abundance_measure(freq, "auto")
   d <- freq[!is.na(freq[[meas$col]]), , drop = FALSE]
@@ -179,12 +230,13 @@ parametric_group_tests <- function(freq, group_of, reference = NULL,
   if (length(groups) < 2L) return(NULL)
   if (is.null(reference) || !reference %in% groups) reference <- groups[1]
 
-  use_asin <- identical(transform, "asin_sqrt")
+  absolute <- isTRUE(meas$absolute) || identical(meas$col, "cells_per_ul")
   rows <- list()
   for (pop in sort(unique(d$population))) {
     dp <- d[d$population == pop, , drop = FALSE]
     raw <- dp[[meas$col]]
-    val <- if (use_asin) asin_sqrt_pct(raw) else raw
+    ps <- parametric_scale(raw, transform, absolute)
+    val <- ps$value
     g <- as.character(dp$group)
     n_by <- vapply(groups, function(x) sum(g == x & is.finite(val)), integer(1))
     if (any(n_by < min_n)) next
@@ -208,7 +260,7 @@ parametric_group_tests <- function(freq, group_of, reference = NULL,
       st <- try(stats::t.test(b, a, var.equal = TRUE), silent = TRUE)
       rows[[length(rows) + 1L]] <- data.frame(
         population = pop, measure = meas$col,
-        transform = if (use_asin) "arcsine sqrt" else "none",
+        transform = ps$label,
         n_groups = 2L, reference_group = reference,
         comparison_group = setdiff(groups, reference)[1],
         n_reference = length(a), n_comparison = length(b),
@@ -237,7 +289,7 @@ parametric_group_tests <- function(freq, group_of, reference = NULL,
       sst <- sum((val - gm)^2)
       rows[[length(rows) + 1L]] <- data.frame(
         population = pop, measure = meas$col,
-        transform = if (use_asin) "arcsine sqrt" else "none",
+        transform = ps$label,
         n_groups = length(groups), reference_group = reference,
         comparison_group = NA_character_,
         n_reference = unname(n_by[reference]),
@@ -279,11 +331,11 @@ parametric_group_tests <- function(freq, group_of, reference = NULL,
 #' the choice is documented rather than made silently.
 #'
 #' @param freq,group_of,value_col,min_n As in [parametric_group_tests()].
-#' @param transform "asin_sqrt" or "none".
+#' @param transform "logit" (default), "asin_sqrt" or "none".
 #' @return data.frame, or NULL.
 #' @keywords internal
 posthoc_group_tests <- function(freq, group_of, value_col = NULL, min_n = 3L,
-                                transform = "asin_sqrt") {
+                                transform = "logit") {
   meas <- if (!is.null(value_col)) list(col = value_col) else
     abundance_measure(freq, "auto")
   d <- freq[!is.na(freq[[meas$col]]), , drop = FALSE]
@@ -293,11 +345,11 @@ posthoc_group_tests <- function(freq, group_of, value_col = NULL, min_n = 3L,
   if (!nrow(d)) return(NULL)
   if (length(unique(d$group)) < 3L) return(NULL)
 
-  use_asin <- identical(transform, "asin_sqrt")
+  absolute <- isTRUE(meas$absolute) || identical(meas$col, "cells_per_ul")
   out <- list()
   for (pop in sort(unique(d$population))) {
     dp <- d[d$population == pop, , drop = FALSE]
-    val <- if (use_asin) asin_sqrt_pct(dp[[meas$col]]) else dp[[meas$col]]
+    val <- parametric_scale(dp[[meas$col]], transform, absolute)$value
     g <- as.character(dp$group)
     if (any(table(g) < min_n)) next
 

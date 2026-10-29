@@ -140,7 +140,23 @@ run_cyraven_impl <- function(opt) {
   }, add = TRUE)
 
   cfg <- if (!is.null(opt$config)) yaml::read_yaml(opt$config) else list()
-  spec   <- cfg$populations       %||% default_population_spec()
+  # `parent:` keys resolved here, once: every consumer below sees each
+  # population's complete conditions, and the cuts a child places within its
+  # parent are derived per sample at scoring. See resolve_population_parents().
+  spec   <- resolve_population_parents(cfg$populations %||% default_population_spec())
+  # The built-in specification transcribes one laboratory's gating document,
+  # and its myeloid entries are sets defined by marker, not the monocyte subsets
+  # of the consensus nomenclature (Ziegler-Heitbrock et al. 2010): "CD16 pos"
+  # holds NK cells and neutrophils as well as monocytes, and intermediate
+  # monocytes are CD14-high, not CD14-intermediate. Said every time it is used,
+  # because a run without --config gets it silently otherwise.
+  if (is.null(cfg$populations))
+    log_msg("NOTE no --config: scoring the built-in population specification, ",
+            "a transcription of one lab's gating document. Its CD14/CD16 ",
+            "populations are marker-defined sets, not the classical, ",
+            "intermediate and non-classical monocytes; for those, and for a ",
+            "consensus panel, pass --config ",
+            "system.file('config', 'config_cohorts.yaml', package = 'cyRAVEN')")
   blocks <- cfg$functional_blocks %||% default_functional_blocks()
   # Unlike `blocks`, no built-in default: a ratio hardcoded to population
   # names from one study's panel would be silently wrong (or absent) on
@@ -167,6 +183,10 @@ run_cyraven_impl <- function(opt) {
   # Anchors the study colours (green = reference) for every discrete scale.
   set_reference_group(opt$reference_group)
   min_cd45 <- cfg$gating$staining_qc$min_cd45_pct_of_live %||% opt$min_cd45_pct
+  # No published minimum exists, so the share is reported and judged only
+  # against one the assay declares.
+  min_live <- as.numeric(cfg$gating$staining_qc$min_live_pct_of_singlets %||%
+                           opt[["min_live_pct", exact = TRUE]] %||% NA_real_)
   mad_k    <- cfg$gating$singlet_band$mad_k %||% opt$singlet_mad_k
 
   # ---- inputs: one sheet, or the three separate tables ----------------------
@@ -276,11 +296,21 @@ run_cyraven_impl <- function(opt) {
     } else NA
     if (is.na(sid) || !nzchar(as.character(sid))) NULL else sid
   }
+  # A spillover matrix supplied on the command line replaces every file's own.
+  # Read once, before any file, so a malformed matrix stops the run here.
+  .ext_spill <- read_spillover_file(opt[["spillover", exact = TRUE]])
+  if (!is.null(.ext_spill))
+    log_msg("compensating every file with the supplied spillover matrix (",
+            ncol(.ext_spill), " detectors) in place of its own $SPILLOVER")
   .read_one <- function(f) {
     rd <- read_fcs_resolved(f, sample_id = .sid_for(f),
                             max_events = opt$max_events_per_file %||% 0L,
-                            ignore_channels = ignore_ch)
-    rd$exprs <- maybe_compensate(rd$exprs, rd$keywords)
+                            ignore_channels = ignore_ch,
+                            margins = if (isTRUE(opt$keep_margin_events)) "cap" else "remove")
+    rd$exprs <- maybe_compensate(rd$exprs, rd$keywords, external = .ext_spill)
+    rd$compensation <- attr(rd$exprs, "compensation") %||% NA_character_
+    attr(rd$exprs, "compensation") <- NULL
+    rd$lower_limit <- lower_limit_outliers(rd$exprs, unname(rd$marker_cols))
     rd
   }
 
@@ -336,6 +366,40 @@ run_cyraven_impl <- function(opt) {
       reads[[rd$sample_id]] <- rd
     }
   }
+  # ---- what reading did to each file ------------------------------------------
+  # Margin events removed (or capped under --keep-margin-events), log channels
+  # linearised, and the compensation actually applied. Written for every run,
+  # because each of these changes the events every later number is computed
+  # from, and none of them is visible in the files themselves.
+  .rq <- do.call(rbind, lapply(reads, function(r) {
+    mg <- r$margin %||% list()
+    sc <- r$channel_scale
+    data.frame(sample_id = r$sample_id, file = basename(r$file %||% NA_character_),
+               events_kept = r$n_events,
+               margin_events = mg$n_at_margin %||% 0L,
+               margin_removed = mg$n %||% 0L,
+               pct_margin = round(100 * (mg$n_at_margin %||% 0L) /
+                                    max(1L, r$n_events + (mg$n %||% 0L)), 4),
+               margin_channels = paste(sprintf("%s %d", names(mg$by_channel),
+                                               mg$by_channel), collapse = "; "),
+               # counted, not removed: see lower_limit_outliers()
+               below_lower_limit = attr(r$lower_limit, "events") %||% 0L,
+               lower_limit_channels = paste(sprintf("%s %d", names(r$lower_limit),
+                                                    r$lower_limit), collapse = "; "),
+               linearised_channels = if (is.null(sc)) "" else
+                 paste(sc$channel[sc$stored == "log, linearised"], collapse = "; "),
+               range_not_used = if (is.null(sc)) "" else
+                 paste(sc$channel[sc$stored == "log declared on floats, used as stored"],
+                       collapse = "; "),
+               compensation = r$compensation %||% NA_character_,
+               stringsAsFactors = FALSE)
+  }))
+  if (!is.null(.rq) && nrow(.rq)) {
+    write.csv(.rq, file.path(opt$outdir, "margin_events.csv"), row.names = FALSE)
+    log_msg("wrote margin_events.csv (", sum(.rq$margin_events), " margin event(s) ",
+            if (isTRUE(opt$keep_margin_events)) "capped" else "removed",
+            " across ", sum(.rq$margin_events > 0), " of ", nrow(.rq), " file(s))")
+  }
   .opt_mk <- if (!is.null(opt$panel_optional_markers))
     trimws(strsplit(opt$panel_optional_markers, ",")[[1]]) else character(0)
   if (length(.opt_mk))
@@ -370,7 +434,8 @@ run_cyraven_impl <- function(opt) {
       av <- read.csv(opt$calibration_values, stringsAsFactors = FALSE,
                      check.names = FALSE)
       fit_bead_calibration(bd$exprs, bd$marker_cols, av,
-                           min_r2 = opt$calibration_min_r2 %||% 0.98)
+                           min_r2 = opt$calibration_min_r2 %||% 0.98,
+                           channel_names = bd$channel_names)
     }, error = function(e) {
       log_msg("WARNING bead calibration failed: ", conditionMessage(e),
               ". The run continues in instrument units")
@@ -388,7 +453,8 @@ run_cyraven_impl <- function(opt) {
                 "not be compared. See the verdict column")
       if (.nok) {
         for (s in names(reads)) {
-          ap <- apply_bead_calibration(reads[[s]]$exprs, reads[[s]]$marker_cols, .cal)
+          ap <- apply_bead_calibration(reads[[s]]$exprs, reads[[s]]$marker_cols, .cal,
+                                       channel_names = reads[[s]]$channel_names)
           reads[[s]]$exprs <- ap$exprs
         }
         log_msg("  applied to ", length(reads), " sample(s); every intensity ",
@@ -465,8 +531,13 @@ run_cyraven_impl <- function(opt) {
     tr_only <- list()
     for (p in fpr$panels) {
       cf <- opt[["cofactor", exact = TRUE]] %||%
-        derive_cofactor_pooled(reads, transform_samples(p$samples, smap))
-      tr_only[[p$name]] <- make_transform("arcsinh", cofactor = cf)
+        derive_cofactor_pooled(reads, transform_samples(p$samples, smap),
+                               cells = !isTRUE(opt$all_events_cofactor))
+      tr_only[[p$name]] <- make_transform(
+        "arcsinh", cofactor = cf,
+        per_marker = if (isTRUE(opt$per_marker_cofactor) &&
+                         is.null(opt[["cofactor", exact = TRUE]]))
+          attr(cf, "per_marker_negative") else NULL)
     }
 
     # THE GROUPING, RESOLVED HERE RATHER THAN BORROWED FROM STEP 6.
@@ -548,10 +619,12 @@ run_cyraven_impl <- function(opt) {
     # opt[["cofactor", exact = TRUE]], never opt$cofactor -- see the dest comment
     # on --cofactor-from-first-sample for what partial matching did here.
     .cf_opt <- opt[["cofactor", exact = TRUE]]
+    .cells <- !isTRUE(opt$all_events_cofactor)
     cf <- .cf_opt %||% cfg$transform$cofactor$derived_from_batch[[p$name]] %||%
           (if (isTRUE(opt$first_sample_cofactor))
-             derive_cofactor(reads[[tsids[1]]]$exprs, reads[[tsids[1]]]$marker_cols)
-           else derive_cofactor_pooled(reads, tsids))
+             derive_cofactor(reads[[tsids[1]]]$exprs, reads[[tsids[1]]]$marker_cols,
+                             rows = if (.cells) cofactor_rows(reads[[tsids[1]]]))
+           else derive_cofactor_pooled(reads, tsids, cells = .cells))
     # A cofactor of zero or less is not a setting, it is a bug upstream: the
     # transform is asinh(x / cofactor), so it yields Inf for every marker and
     # every downstream threshold. Fail here, naming the value, rather than let it
@@ -578,8 +651,18 @@ run_cyraven_impl <- function(opt) {
                       p$name, length(lp), attr(lp, "n_samples_pooled") %||% NA))
       make_transform("logicle", logicle = lp)
     } else {
-      make_transform(tmethod, cofactor = cf)
+      # Per-marker cofactors where asked for and derivable; a supplied
+      # --cofactor is a decision to use one value, and is respected as one.
+      .pm <- if (isTRUE(opt$per_marker_cofactor) && is.null(.cf_opt))
+        attr(cf, "per_marker_negative") else NULL
+      make_transform(tmethod, cofactor = cf, per_marker = .pm)
     }
+    .pmu <- transforms[[p$name]]$params$per_marker
+    if (length(.pmu))
+      log_msg(p$name, ": per-marker cofactors for ", length(.pmu), " marker(s), ",
+              round(min(.pmu)), " to ", round(max(.pmu)), " (median ",
+              round(stats::median(.pmu)), "); the panel value below is used for ",
+              "any marker without one")
     log_msg(p$name, ": cofactor ", round(cf, 1),
             if (!is.null(.cf_opt)) " (supplied)"
             else if (isTRUE(opt$first_sample_cofactor))
@@ -599,7 +682,8 @@ run_cyraven_impl <- function(opt) {
                                 autofix = isTRUE(opt$auto_fix_gates),
                                 adaptive = isTRUE(opt$adaptive_gates))
       v <- staining_verdict(g, declared, min_cd45 * 1,
-                            force_include = isTRUE(opt$include_qc_failed))
+                            force_include = isTRUE(opt$include_qc_failed),
+                            min_live_pct = min_live)
       log_msg("  ", v$verdict)
       gates[[s]] <- g; verdicts[[s]] <- v
     }
@@ -698,6 +782,10 @@ run_cyraven_impl <- function(opt) {
             "sample. Check thresholds_used.csv: a 'source' of control_q995 on ",
             "most markers, with frequencies far below what the panel should ",
             "yield, means the reference is not an unstained tube.")
+    log_msg("  an unstained tube carries no spreading from the panel's other ",
+            "fluorochromes, so a control_q995 cut is PERMISSIVE on any channel ",
+            "that receives spreading, as an fmm_q995 cut is. An FMO is the ",
+            "reference for those channels (see spreading_receivers.csv).")
   }
 
   # ---- what --auto-fix-gates changed ----------------------------------------
@@ -747,7 +835,7 @@ run_cyraven_impl <- function(opt) {
 
   # ---- populations ----------------------------------------------------------
   log_step("STEP 4 - scoring populations")
-  pops <- list(); thr_rows <- list(); qc_recon <- list()
+  pops <- list(); thr_rows <- list(); qc_recon <- list(); .scoped_rows <- list()
   for (s in names(gates)) {
     g <- gates[[s]]; rd <- reads[[s]]; cf <- g$cofactor
     pn <- fpr$assignment[[s]]
@@ -848,11 +936,13 @@ run_cyraven_impl <- function(opt) {
             reason = .cc$verdict, stringsAsFactors = FALSE)
       }
       .cc_ok <- !is.null(.cc) && is.finite(.cc$threshold)
-      rr <- resolve_threshold(m, tmat[g$masks$cd45_pos, m], cfg_thr[[m]]$threshold,
+      rr <- resolve_threshold(m, tmat[g$masks$cd45_pos, m], cfg_threshold(cfg_thr[[m]]),
                               if (.cc_ok) cx else NULL, override = .ov,
                               control_kind = .kind,
                               control_threshold = if (.cc_ok) .cc$threshold else NULL,
                               adaptive = isTRUE(opt$adaptive_gates),
+                              fmo_sets_cut = isTRUE(opt$fmo_sets_cut),
+                              tail = cfg_tail(cfg_thr[[m]]),
                               # zero signal on this marker's scale; scatter is
                               # log10 and strictly positive, so it has no floor
                               floor = if (m %in% names(rd$marker_cols)) tr$fn(0, m) else -Inf)
@@ -860,7 +950,9 @@ run_cyraven_impl <- function(opt) {
       qdens[[m]] <- tmat[g$masks$cd45_pos, m]
       thr_rows[[length(thr_rows) + 1L]] <- data.frame(
         sample_id = s, panel = pn, marker = m, threshold = rr$threshold,
-        source = rr$source, needs_review = rr$needs_review, cofactor = cf,
+        source = rr$source, needs_review = rr$needs_review,
+        cofactor = if (!is.null(tr$cofactor_of) && m %in% names(rd$marker_cols))
+          tr$cofactor_of(m) else cf,
         # The cut the sample's own density implied, kept even where a control
         # replaced it, so the two remain comparable downstream.
         derived_threshold = rr$derived_threshold %||% NA_real_,
@@ -874,9 +966,30 @@ run_cyraven_impl <- function(opt) {
         stringsAsFactors = FALSE)
     }
     hi <- derive_intermediate_bounds(tmat, thr, g$masks$cd45_pos, spec)
-    sp <- score_populations(tmat, thr, g$masks$cd45_pos, spec, hi_thr = hi)
+    # Cuts a population places within its parent, derived on the parent's
+    # events by the same rule as the CD45+ ones. Controls are not used here:
+    # they are gated to CD45+, which is not the parent these cuts describe.
+    .scoped <- derive_scoped_cuts(
+      tmat, thr, g$masks$cd45_pos, spec, hi_thr = hi,
+      resolve = function(k, x) resolve_threshold(
+        k, x, adaptive = isTRUE(opt$adaptive_gates), tail = cfg_tail(cfg_thr[[k]]),
+        floor = if (k %in% names(rd$marker_cols)) tr$fn(0, k) else -Inf))
+    for (.P in names(.scoped)) for (.k in names(.scoped[[.P]]$thr)) {
+      .d <- .scoped[[.P]]$details[[.k]]
+      .scoped_rows[[length(.scoped_rows) + 1L]] <- data.frame(
+        sample_id = s, panel = pn, marker = .k, within = .P,
+        n_parent_events = .scoped[[.P]]$n_parent,
+        threshold = .scoped[[.P]]$thr[[.k]],
+        upper_bound = .scoped[[.P]]$hi[[.k]] %||% NA_real_,
+        source = .d$source %||% NA_character_,
+        needs_review = isTRUE(.d$needs_review),
+        cd45_threshold = thr[[.k]] %||% NA_real_,
+        stringsAsFactors = FALSE)
+    }
+    sp <- score_populations(tmat, thr, g$masks$cd45_pos, spec, hi_thr = hi,
+                            scoped = .scoped)
     pops[[s]] <- list(scored = sp, thresholds = thr, hi_thresholds = hi,
-                      details = tdet, tmat = tmat)
+                      details = tdet, tmat = tmat, scoped = .scoped)
     qc_recon[[s]] <- list(sample_id = s, thresholds = tdet, marker_densities = qdens)
 
     # ---- release the raw expression matrix -----------------------------------
@@ -932,7 +1045,8 @@ run_cyraven_impl <- function(opt) {
       for (s in unique(.rep$sample_id)) {
         P <- pops[[s]]; cd45 <- gates[[s]]$masks$cd45_pos
         hi <- derive_intermediate_bounds(P$tmat, P$thresholds, cd45, spec)
-        pops[[s]]$scored <- score_populations(P$tmat, P$thresholds, cd45, spec, hi_thr = hi)
+        pops[[s]]$scored <- score_populations(P$tmat, P$thresholds, cd45, spec,
+                                              hi_thr = hi, scoped = P$scoped)
         pops[[s]]$hi_thresholds <- hi
       }
       .padj <- do.call(rbind, lapply(seq_len(nrow(.rep)), function(r)
@@ -999,7 +1113,8 @@ run_cyraven_impl <- function(opt) {
       if (is.null(P$tmat) || is.null(g) || is.null(fl)) next
       if (length(fl) != nrow(P$tmat) || !any(fl)) next
       d <- tryCatch(frequency_delta_if_cleaned(P$tmat, P$thresholds,
-                                               g$masks$cd45_pos, spec, !fl),
+                                               g$masks$cd45_pos, spec, !fl,
+                                               scoped = P$scoped),
                     error = function(e) NULL)
       if (is.null(d)) next
       d$sample_id <- s
@@ -1225,11 +1340,12 @@ run_cyraven_impl <- function(opt) {
             .bm <- "quantile"
           }
           bres <- correct_batch(.fmat, bvec, gvec,
-                                max_cramers_v = opt$batch_max_cramers_v %||% 0.6,
+                                max_cramers_v = opt$batch_max_cramers_v,
                                 force = isTRUE(opt$force_batch_correction),
                                 method = .bm,
                                 cluster_k = opt$batch_cluster_k %||% 10L,
-                                seed = opt$seed %||% 42L)
+                                seed = opt$seed %||% 42L,
+                                goal = if (isTRUE(opt$batch_pooled_goal)) "pooled" else "group")
           .fmat <- bres$tmat
           for (cc in colnames(.fmat)) data.table::set(cells, j = cc, value = .fmat[, cc])
           batch_info <- bres
@@ -1242,7 +1358,7 @@ run_cyraven_impl <- function(opt) {
             fitted_as     = bres$how %||% NA_character_,
             corrected     = bres$corrected,
             cramers_v     = bres$cramers_v,
-            max_cramers_v = opt$batch_max_cramers_v %||% 0.6,
+            max_cramers_v = bres$max_cramers_v %||% NA_real_,
             forced        = isTRUE(opt$force_batch_correction),
             n_markers     = length(bres$markers),
             markers       = paste(bres$markers, collapse = ";"),
@@ -1630,6 +1746,9 @@ run_cyraven_impl <- function(opt) {
     sample_id = s, panel = fpr$assignment[[s]], file = reads[[s]]$file,
     n_events = reads[[s]]$n_events,
     pct_cd45_of_live = round(verdicts[[s]]$pct_cd45_of_live, 3),
+    pct_live_of_singlets = round(verdicts[[s]]$pct_live_of_singlets %||% NA_real_, 3),
+    pct_live_if_dominant_dead = round(verdicts[[s]]$pct_live_if_dominant_dead %||%
+                                        NA_real_, 3),
     verdict = verdicts[[s]]$verdict, qc_status = verdicts[[s]]$qc_status %||% NA,
     included = verdicts[[s]]$include,
     stringsAsFactors = FALSE)))
@@ -1724,7 +1843,7 @@ run_cyraven_impl <- function(opt) {
           min = round(min(d$threshold, na.rm = TRUE), 3),
           max = round(max(d$threshold, na.rm = TRUE), 3),
           n_outlier = sum(d$scale_outlier, na.rm = TRUE),
-          n_fallback = sum(d$source == "quantile_fallback"),
+          n_fallback = sum(no_minimum(d$source)),
           stringsAsFactors = FALSE)))
       write.csv(sm[order(-sm$n_outlier), ],
                 file.path(opt$outdir, "threshold_scale_qc.csv"), row.names = FALSE)
@@ -1732,6 +1851,49 @@ run_cyraven_impl <- function(opt) {
   }
   write.csv(thr_all, file.path(opt$outdir, "thresholds_used.csv"),
             row.names = FALSE)
+  # Cuts a population places within its parent. A separate table, because
+  # thresholds_used.csv holds one cut per sample and marker and every consumer
+  # of it relies on that.
+  if (length(.scoped_rows)) {
+    .sr <- do.call(rbind, .scoped_rows)
+    write.csv(.sr, file.path(opt$outdir, "thresholds_within_parents.csv"),
+              row.names = FALSE)
+    log_msg("wrote thresholds_within_parents.csv (", nrow(.sr), " cut(s) derived ",
+            "within ", length(unique(.sr$within)), " parent population(s); ",
+            sum(!is.finite(.sr$threshold)), " not derivable)")
+  }
+
+  # ---- the published spillover spreading matrix, from single stains ---------
+  # Only where the controls are supplied. Named by detector, and by the marker
+  # the samples carry on that detector where the first sample says.
+  if (!is.null(opt[["single_stains", exact = TRUE]])) {
+    .ssm <- tryCatch({
+      .sf <- list.files(opt$single_stains, pattern = "[.]fcs$", full.names = TRUE,
+                        ignore.case = TRUE)
+      .st <- lapply(.sf, function(f) {
+        r <- read_fcs_resolved(f, max_events = opt$max_events_per_file %||% 0L,
+                               ignore_channels = ignore_ch)
+        r$exprs <- maybe_compensate(r$exprs, r$keywords, external = .ext_spill)
+        r
+      })
+      names(.st) <- basename(.sf)
+      spillover_spreading_matrix(.st)
+    }, error = function(e) {
+      log_msg("WARNING --single-stains: ", conditionMessage(e)); NULL })
+    if (!is.null(.ssm)) {
+      .r1 <- reads[[1]]
+      .mk_of <- stats::setNames(names(.r1$marker_cols),
+                                .r1$channel_names[unname(.r1$marker_cols)])
+      .ssm$source_marker <- unname(.mk_of[.ssm$source_detector])
+      .ssm$receiver_marker <- unname(.mk_of[.ssm$receiver_detector])
+      write.csv(.ssm, file.path(opt$outdir, "spillover_spreading_matrix.csv"),
+                row.names = FALSE)
+      log_msg("wrote spillover_spreading_matrix.csv (",
+              length(unique(.ssm$control)), " single-stain control(s), ",
+              nrow(.ssm), " coefficient(s))")
+    } else log_msg("NOTE --single-stains: no control gave a usable positive and ",
+                   "negative population; no spreading matrix written")
+  }
 
   # ---- spillover spreading ---------------------------------------------------
   # Diagnostic only, and the explanation for a class of quantile_fallback this
@@ -1886,6 +2048,31 @@ run_cyraven_impl <- function(opt) {
       m <- m[!is.na(m$wbc_per_ul) & !is.na(m$sample_id), , drop = FALSE]
       if (nrow(m))
         wbc_lookup <- setNames(as.numeric(m$wbc_per_ul), m$sample_id)
+    }
+  }
+  # DUAL-PLATFORM COUNTING NEEDS WHOLE BLOOD. The percentage and the blood
+  # count must describe the same specimen (Brando et al. 2000): a PBMC
+  # preparation has lost its granulocytes, so its %CD45+ times the blood's WBC
+  # is not a concentration of anything. A sample whose type says so gets none.
+  if (!is.null(wbc_lookup)) {
+    .st <- sample_types(smap, patients)
+    if (is.null(.st)) {
+      log_msg("NOTE cells_per_ul assumes whole blood (lysed, not density-",
+              "separated): it multiplies each population's share of CD45+ ",
+              "cells by the blood's WBC. Add a sample_type column to the sheet ",
+              "and PBMC samples are left out of it")
+    } else {
+      .not_wb <- names(.st)[grepl(non_whole_blood_pattern(), .st, ignore.case = TRUE)]
+      .not_wb <- intersect(.not_wb, names(wbc_lookup))
+      if (length(.not_wb)) {
+        wbc_lookup <- wbc_lookup[setdiff(names(wbc_lookup), .not_wb)]
+        log_msg("NOTE ", length(.not_wb), " sample(s) are not whole blood by ",
+                "their sample_type (", paste(utils::head(unique(.st[.not_wb]), 3),
+                                             collapse = ", "), "), so no ",
+                "cells_per_ul: a share of a PBMC preparation times a blood count ",
+                "is not a concentration")
+      }
+      if (!length(wbc_lookup)) wbc_lookup <- NULL
     }
   }
   if (!is.null(wbc_lookup)) {
@@ -2790,7 +2977,16 @@ run_cyraven_impl <- function(opt) {
         log_msg("  NOTE multi-panel run: CLR is computed within each sample (so ",
                 "never across panels), but the stats table below pools panels, ",
                 "as population_frequencies.csv does.")
-      fclr <- clr_frequencies(freq)
+      # THE PARTS ARE THE EXCLUSIVE LABELS, NOT THE DECLARED POPULATIONS.
+      # population_frequencies.csv counts each population's own gate, and gates
+      # nest and overlap by design: "CD3 pos" contains "CD3 pos CD4 pos". Those
+      # are not parts of one whole, and a centred log-ratio over them changes
+      # with which nested populations happen to be declared. Every CD45+ cell
+      # carries exactly one most-specific label, the remainder included, so the
+      # label counts are a composition in Aitchison's sense, and the CLR and its
+      # raw-percentage comparison are computed over them.
+      fexcl <- exclusive_label_frequencies(pops, gates, verdicts, fpr$assignment)
+      fclr <- clr_frequencies(fexcl)
       if (!is.null(fclr)) {
         cstats <- stats_group_comparison(fclr, group_of,
                                          reference = opt$reference_group,
@@ -2802,8 +2998,9 @@ run_cyraven_impl <- function(opt) {
                   " tests on centred log-ratios; ", attr(fclr, "clr_n_zeros"),
                   " zero value(s) replaced at delta = ",
                   signif(attr(fclr, "clr_delta"), 3), ")")
-          raw <- try(stats_group_comparison(freq, group_of,
-                                            reference = opt$reference_group),
+          raw <- try(stats_group_comparison(fexcl, group_of,
+                                            reference = opt$reference_group,
+                                            value_col = "pct_of_cd45_pos"),
                      silent = TRUE)
           if (!inherits(raw, "try-error")) {
             conc <- compositional_concordance(raw, cstats)
@@ -3184,6 +3381,13 @@ run_cyraven_impl <- function(opt) {
     })
   }
 
+  # The reads of one embedding's panel, whose $PnN the exported gates name; all
+  # of them where the embedding is not one panel's.
+  .in_panel <- function(pn) {
+    s <- names(fpr$assignment)[fpr$assignment %in% pn]
+    if (length(s)) s else names(reads)
+  }
+
   # ---- unsupervised clustering vs the gate spec -----------------------------
   if (isTRUE(opt$unsupervised) && TRUE) {
     for (pn in names(embeddings)) {
@@ -3250,7 +3454,10 @@ run_cyraven_impl <- function(opt) {
                       file.path(opt$outdir,
                                 paste0("cluster_gates", sfx2, ".gatingml.xml")),
                       transform = .tr, id_col = "cluster",
-                      x_col = "x_asinh", y_col = "y_asinh")
+                      x_col = "x_asinh", y_col = "y_asinh",
+                      channel_map = gating_ml_markers(reads[.in_panel(pn)]),
+                      compensation_ref = gating_ml_compensation(reads),
+                      spillover = gating_ml_spillover(reads[.in_panel(pn)], .ext_spill))
                     .lin <- polygons_linear_table(ex$polygons, .tr,
                               id_col = "cluster", x_col = "x_asinh",
                               y_col = "y_asinh")
@@ -3339,7 +3546,10 @@ run_cyraven_impl <- function(opt) {
             .tr <- transforms[[pn]]
             write_gating_ml(.xl$polygons, file.path(opt$outdir,
                             paste0("external_label_gates", sfx3, ".gatingml.xml")),
-                            transform = .tr)
+                            transform = .tr,
+                            channel_map = gating_ml_markers(reads[.in_panel(pn)]),
+                            compensation_ref = gating_ml_compensation(reads),
+                            spillover = gating_ml_spillover(reads[.in_panel(pn)], .ext_spill))
             .lin <- polygons_linear_table(.xl$polygons, .tr)
             if (!is.null(.lin))
               write.csv(.lin, file.path(opt$outdir,

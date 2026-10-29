@@ -108,18 +108,40 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
                 "); pass --keep-exprs to keep the events in memory instead")
         return(NULL)
       }
+      # The same arguments the declared run read with, so the same events
+      # survive: margin events are judged on the channels in use, and
+      # `event_index` below has to point at the same rows in both.
       re <- try(read_fcs_resolved(f, sample_id = s,
-                                  max_events = opt$max_events_per_file %||% 0L),
+                                  max_events = opt$max_events_per_file %||% 0L,
+                                  ignore_channels = .split_opt(opt[["ignore_channels", exact = TRUE]]),
+                                  margins = if (isTRUE(opt$keep_margin_events)) "cap" else "remove"),
                 silent = TRUE)
       if (inherits(re, "try-error")) {
         log_msg("  explore: re-reading ", basename(f), " failed: ",
                 conditionMessage(attr(re, "condition")))
         return(NULL)
       }
-      re$exprs <- maybe_compensate(re$exprs, re$keywords)
+      re$exprs <- maybe_compensate(re$exprs, re$keywords,
+                                   external = read_spillover_file(opt[["spillover", exact = TRUE]]))
+      attr(re$exprs, "compensation") <- NULL
       re
     }
+    # SINGLE CELLS ONLY. The scatter and singlet gates need neither the
+    # fluorescence transform nor CD45, so drawing from inside them keeps
+    # explore independent of the CD45 gate, which is the point of running it,
+    # while debris and doublets are removed before clustering rather than
+    # becoming clusters of their own (den Braanker et al. 2021). Dead and
+    # CD45-negative cells are still judged by the QC gate below.
+    .cells_of <- function(s, rd = NULL) {
+      m <- gates[[s]]$masks$single_cells
+      if (!is.null(m) && (is.null(rd) || length(m) == nrow(rd$exprs))) return(m)
+      rd <- rd %||% reads[[s]]
+      if (is.null(rd$exprs)) return(NULL)
+      cofactor_rows(rd)
+    }
     n_of <- function(s) {
+      m <- .cells_of(s)
+      if (!is.null(m)) return(sum(m))
       rd <- reads[[s]]
       if (!is.null(rd$exprs)) return(nrow(rd$exprs))
       as.integer(rd$n_events %||% 0L)
@@ -145,8 +167,10 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
         next
       }
       if (is.null(reads[[s]]$exprs)) n_reread <- n_reread + 1L
-      n <- nrow(rd$exprs)
-      take <- withr::with_seed(seed, sort(sample.int(n, min(n, planned[[s]]))))
+      pool <- .cells_of(s, rd)
+      pool <- if (is.null(pool)) seq_len(nrow(rd$exprs)) else which(pool)
+      n <- length(pool)
+      take <- pool[withr::with_seed(seed, sort(sample.int(n, min(n, planned[[s]]))))]
       # `take` is passed in rather than applied to the result: see the note in
       # explore_matrix(). The draw is identical either way; only the peak memory
       # differs, and on a full-depth run the difference is what decides whether
@@ -174,7 +198,7 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
     rm(rows)
     fcols <- intersect(feats, colnames(cells))
     note("cells_assembled", nrow(cells),
-         sprintf("%d sample(s), UNGATED, equalised at %d events per sample",
+         sprintf("%d sample(s), scatter-gated single cells (no CD45 or viability gate), equalised at %d events per sample",
                  length(sids), min(unlist(planned))))
 
     # Per-sample thresholds come from thresholds_used.csv, not from `gates`: the

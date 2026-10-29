@@ -9,11 +9,12 @@ correct_batch(
   batch,
   group = NULL,
   markers = NULL,
-  max_cramers_v = 0.6,
+  max_cramers_v = NULL,
   force = FALSE,
   method = c("quantile", "cluster", "cytonorm"),
   cluster_k = 10L,
-  seed = 42L
+  seed = 42L,
+  goal = c("group", "pooled")
 )
 }
 \arguments{
@@ -25,7 +26,8 @@ correct_batch(
 
 \item{markers}{markers to correct; defaults to all columns}
 
-\item{max_cramers_v}{refusal threshold}
+\item{max_cramers_v}{refusal threshold, or NULL (default) for Cohen's
+"large" association; see \code{\link[=cramers_v_limit]{cramers_v_limit()}}.}
 
 \item{force}{proceed despite confounding}
 
@@ -35,6 +37,8 @@ correct_batch(
 \item{cluster_k}{number of cell-type clusters when \code{method = "cluster"}}
 
 \item{seed}{RNG seed for the clustering, so a run reproduces}
+
+\item{goal}{"group" or "pooled"; see above.}
 }
 \value{
 list(tmat, cramers_v, corrected, markers, reason, method)
@@ -46,10 +50,16 @@ meaningful.
 }
 \details{
 TWO METHODS. \code{"quantile"} fits one map per marker over the whole file.
-\code{"cluster"} fits one map per marker per cell type, which is what CytoNorm
-does and what a whole-file map cannot do; see
-\code{\link[=align_quantiles_by_cluster]{align_quantiles_by_cluster()}}. \code{"cytonorm"} is accepted as a synonym for
-\code{"cluster"}, because that is the name the method is known by.
+\code{"cluster"} fits one map per marker per cell type, the idea CytoNorm is built
+on and what a whole-file map cannot do; see \code{\link[=align_quantiles_by_cluster]{align_quantiles_by_cluster()}}.
+\code{"cytonorm"} is still accepted for \code{"cluster"}, with a note: it is not the
+CytoNorm package, which learns its maps from anchor samples, and the name
+claimed otherwise.
+
+THE GOAL. With \code{group} supplied and \code{goal = "group"}, the default, each study
+group is aligned towards its own pooled distribution; see
+\code{\link[=align_within_groups]{align_within_groups()}}. \code{goal = "pooled"} aligns every batch towards all
+samples together, which assumes the batches hold the same biology.
 
 THE METHOD IS CHOSEN AFTER THE REFUSAL, NEVER BEFORE IT. A better alignment
 algorithm does not make a confounded design correctable. Where Cramer's V

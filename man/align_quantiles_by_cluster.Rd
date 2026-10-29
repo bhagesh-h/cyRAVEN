@@ -4,7 +4,15 @@
 \alias{align_quantiles_by_cluster}
 \title{Align quantiles within each cell type rather than over the whole file}
 \usage{
-align_quantiles_by_cluster(tmat, batch, markers, k = 10L, seed = 42L)
+align_quantiles_by_cluster(
+  tmat,
+  batch,
+  markers,
+  k = 10L,
+  seed = 42L,
+  group = NULL,
+  goal = "batch_mean"
+)
 }
 \arguments{
 \item{tmat}{numeric matrix, cells x markers, already transformed}

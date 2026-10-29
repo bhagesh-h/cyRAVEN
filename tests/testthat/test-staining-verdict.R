@@ -119,3 +119,66 @@ test_that("a stained or FMO control is never the unstained reference", {
   # Nothing to choose from is not an error.
   expect_identical(reference_controls(character(0), list())$keep, character(0))
 })
+
+test_that("the live share is reported, and judged only against a declared minimum", {
+  # den Braanker 2021: low-viability samples "should be excluded from analysis",
+  # with the minimum left to the assay. No minimum, no judgement.
+  g <- fake_gate(60)
+  g$counts$pct_of_parent[g$counts$gate == "live_cells"] <- 62
+  g$viability_source <- "valley"
+  v <- staining_verdict(g, declared_control = FALSE)
+  expect_equal(v$pct_live_of_singlets, 62)
+  expect_equal(v$qc_status, "pass")
+
+  v <- staining_verdict(g, declared_control = FALSE, min_live_pct = 80)
+  expect_equal(v$qc_status, "failed")
+  expect_false(v$include)
+  expect_false(v$is_reference)
+  expect_match(v$verdict, "low viability \\(62.0% of single cells live < 80%\\)")
+  # not a control either when the sheet declares nothing: low viability says
+  # nothing about whether the tube was stained
+  v <- staining_verdict(g, declared_control = NA, min_live_pct = 80)
+  expect_false(v$is_control)
+  expect_equal(v$qc_status, "failed")
+
+  v <- staining_verdict(g, declared_control = FALSE, min_live_pct = 80,
+                        force_include = TRUE)
+  expect_true(v$include)
+  expect_match(v$verdict, "included anyway")
+
+  expect_equal(staining_verdict(g, FALSE, min_live_pct = 50)$qc_status, "pass")
+})
+
+test_that("no viability gate means no live share, and nothing to judge", {
+  g <- fake_gate(60)
+  for (src in list(NULL, "skipped", "skipped_autofix")) {
+    g$viability_source <- src
+    v <- staining_verdict(g, declared_control = FALSE, min_live_pct = 80)
+    expect_true(is.na(v$pct_live_of_singlets))
+    expect_equal(v$qc_status, "pass")
+  }
+})
+
+test_that("a mostly dead sample shows its second live reading", {
+  # 30% live, 70% dead: the dye's tallest mode is the dead cells, so the gate
+  # (a valley only above that mode, else the tail gate) keeps nearly everyone.
+  # The minimum below the dominant mode gives the live share for this case.
+  withr::local_seed(31)
+  x <- c(rnorm(3000, 0.5, 0.3), rnorm(7000, 3.5, 0.4))
+  vmode <- live_mode(x)
+  expect_gt(vmode, 3)
+  expect_true(is.na(density_valley(x, floor = vmode)))
+  v_alt <- density_valley(x, floor = 0, ceiling = vmode)
+  expect_equal(100 * mean(x < v_alt), 30, tolerance = 0.05)
+  # a ceiling below every valley finds none
+  expect_true(is.na(density_valley(x, floor = 0, ceiling = 1)))
+
+  g <- fake_gate(60)
+  g$counts$pct_of_parent[g$counts$gate == "live_cells"] <- 99.6
+  g$viability_source <- "tailgate"
+  g$live_pct_if_dominant_dead <- 30.1
+  v <- staining_verdict(g, declared_control = FALSE)
+  expect_equal(v$pct_live_if_dominant_dead, 30.1)
+  g$viability_source <- "skipped_autofix"
+  expect_true(is.na(staining_verdict(g, FALSE)$pct_live_if_dominant_dead))
+})

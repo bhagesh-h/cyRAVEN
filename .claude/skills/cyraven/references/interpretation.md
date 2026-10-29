@@ -524,8 +524,10 @@ Cramér's *V* is high, in which case neither separates a reagent lot from biolog
 
 `--correct-batch` aligns each marker across batches by monotone quantile mapping;
 monotonicity means within-batch cell ordering cannot change, so location and
-scale move without structure being invented. **Above `--batch-max-cramers-v`
-(default 0.6) correction is refused**, because at that level of confounding
+scale move without structure being invented. Each study group is aligned
+towards the mean of its batches' quantiles, so a group difference survives.
+**Above `--batch-max-cramers-v` (default: Cohen's large association, 0.5 for two
+levels) correction is refused**, because at that level of confounding
 removing the batch effect and removing the biological effect are the same
 operation. `--force-batch-correction` overrides and the override is recorded in
 the manifest.

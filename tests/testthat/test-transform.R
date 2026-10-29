@@ -88,7 +88,55 @@ test_that("maybe_compensate leaves unmixed data alone and reports why", {
   ex <- matrix(stats::rnorm(300), ncol = 3,
                dimnames = list(NULL, c("A", "B", "C")))
   expect_message(out <- maybe_compensate(ex, list()), "no spillover matrix")
+  # The status is reported as unknown, not as "already compensated": an absent
+  # keyword cannot tell unmixed data from conventional data nobody compensated.
+  expect_match(attr(out, "compensation"), "^unknown")
+  attr(out, "compensation") <- NULL
   expect_identical(out, ex)
+})
+
+test_that("a supplied spillover matrix replaces the file's own", {
+  ex <- cbind(`FITC.A` = c(1000, 0, 500), `PE.A` = c(250, 800, 125))
+  own <- diag(2); colnames(own) <- c("FITC.A", "PE.A")
+  # row i: the share of detector i's fluorochrome seen in each detector
+  sup <- matrix(c(1, 0.25, 0, 1), 2, byrow = TRUE,
+                dimnames = list(NULL, c("FITC-A", "PE-A")))
+  out <- suppressMessages(maybe_compensate(ex, list(`$SPILLOVER` = own), external = sup))
+  # PE-A receives 25% of FITC, which compensation removes
+  expect_equal(unname(out[, "PE.A"]), c(0, 800, 0), tolerance = 1e-9)
+  expect_match(attr(out, "compensation"), "supplied")
+  f <- withr::local_tempfile(fileext = ".csv")
+  utils::write.csv(as.data.frame(sup, check.names = FALSE), f, row.names = FALSE)
+  expect_equal(unname(read_spillover_file(f)), unname(sup))
+  bad <- sup; bad[1, 1] <- 0.5
+  utils::write.csv(as.data.frame(bad, check.names = FALSE), f, row.names = FALSE)
+  expect_error(read_spillover_file(f), "diagonal")
+})
+
+test_that("per-marker cofactors come from each marker's negative population", {
+  # A marker almost every cell carries (CD45) and a mostly negative one with a
+  # wide negative population. The bulk criterion takes CD45's background band
+  # from its positive cells; the negative-population estimate does not.
+  withr::local_seed(11)
+  n <- 20000
+  ex <- cbind(CD45 = c(rnorm(n * 0.98, 6000, 1500), rnorm(n * 0.02, 0, 100)),
+              CCR9 = c(rnorm(n * 0.95, 0, 1200), rnorm(n * 0.05, 15000, 3000)))
+  mc <- c(CD45 = 1L, CCR9 = 2L)
+  cf <- derive_cofactor(ex, mc)
+  neg <- attr(cf, "per_marker_negative")
+  bulk <- attr(cf, "per_marker")
+  # about 1.6 sigma of each negative population, so they track the twelve-fold
+  # difference in negative spread
+  expect_equal(neg[["CD45"]], 1.6 * 100, tolerance = 0.25)
+  expect_equal(neg[["CCR9"]], 1.6 * 1200, tolerance = 0.25)
+  # while the bulk band for CD45 is its positive cells, and says nothing about
+  # its negatives
+  expect_gt(abs(log(bulk[["CD45"]] / neg[["CD45"]])), log(3))
+  tr <- make_transform("arcsinh", cofactor = 300, per_marker = neg)
+  expect_equal(tr$fn(1000, "CCR9"), asinh(1000 / neg[["CCR9"]]))
+  # a marker without its own cofactor, and scatter, use the panel value
+  expect_equal(tr$fn(1000, "CD3"), asinh(1000 / 300))
+  expect_equal(tr$inv(tr$fn(777, "CD45"), "CD45"), 777)
 })
 
 test_that("maybe_compensate survives a spillover matrix with no rownames", {
@@ -99,7 +147,9 @@ test_that("maybe_compensate survives a spillover matrix with no rownames", {
                dimnames = list(NULL, c("A", "B", "C")))
   sp <- diag(3); colnames(sp) <- c("A", "B", "C")   # rownames deliberately NULL
   expect_message(out <- maybe_compensate(ex, list(`$SPILLOVER` = sp)),
-                 "applying spillover")
+                 "applying file \\$SPILLOVER")
+  expect_identical(attr(out, "compensation"), "compensated, file $SPILLOVER")
+  attr(out, "compensation") <- NULL
   expect_equal(unname(out), unname(ex), tolerance = 1e-12)
 })
 

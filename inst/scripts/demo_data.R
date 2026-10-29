@@ -45,13 +45,23 @@
 # rule; other archives name channels differently and need a different mapping.
 #
 # The file also carries FL2-A, the pulse area of the same detector that FL2-H
-# records the height of. It is the only area channel present, and cyRAVEN keeps
-# area channels in preference to height precisely so that a marker appearing as
-# both is not counted twice. Left in place, that rule would select FL2-A alone
-# and discard the other three markers. It is dropped here, which leaves a
-# consistently height-only file: read_fcs_resolved() then falls back to height
-# for all four markers and says so, because height and area are different
-# measurements and thresholds from one are not interchangeable with the other.
+# records the height of. cyRAVEN takes one channel per detector, area where the
+# detector records it, so left in place FL2-A would stand for CD45 while the
+# other three markers came from pulse height. It is dropped here, which leaves
+# every marker on the same pulse feature: read_fcs_resolved() uses height for
+# all four and says so, because height and area are different measurements and
+# thresholds from one are not interchangeable with the other.
+#
+# THE KEYWORDS ARE MADE TO DESCRIBE THE VALUES. flowCore ships GvHD already
+# linearised from the FACSCalibur's log amplifiers, but keeps the original
+# keywords: `$PnE 4,0` (four decades) and `$PnR 1024` on fluorescence values
+# that now run to 10,000. write.FCS() writes them as floats, and FCS 3.1 allows
+# a log scale only on integer data. A reader taking those keywords at their word
+# treats 1024 as the top of a channel whose data run ten times higher; an
+# earlier cyRAVEN capped every value there, piled 6% of CD45 events onto one
+# value and emptied every population in half the samples. Each linearised
+# channel is therefore declared linear (`$PnE 0,0`) with a range of 10^4, the
+# top of its four decades.
 #
 # Nothing else is altered. Event values are written as flowCore ships them.
 #
@@ -88,6 +98,20 @@ prepare_frame <- function(ff, sid) {
   # Indices are those of the SUBSET frame, so the keywords stay consistent with
   # the parameter block after FL2-A is removed.
   for (i in which(has)) keyword(ff)[[paste0("$P", i, "S")]] <- d[i]
+  # Declare the linearised log channels linear, with the range their values
+  # now span; see the header.
+  for (i in seq_len(nrow(pdat))) {
+    e <- keyword(ff)[[paste0("$P", i, "E")]]
+    pne <- as.numeric(strsplit(if (is.null(e)) "0,0" else as.character(e), ",")[[1]])
+    if (length(pne) && is.finite(pne[1]) && pne[1] > 0) {
+      top <- 10^pne[1] * (if (length(pne) > 1L && pne[2] > 0) pne[2] else 1)
+      keyword(ff)[[paste0("$P", i, "E")]] <- "0,0"
+      keyword(ff)[[paste0("$P", i, "R")]] <- format(top, scientific = FALSE)
+      pdat$range[i] <- top
+      pdat$maxRange[i] <- top
+    }
+  }
+  pData(parameters(ff)) <- pdat
   keyword(ff)[["$FIL"]] <- paste0(sid, ".fcs")
   ff
 }
@@ -138,25 +162,25 @@ writeLines(c(
   "# These are conventional lineage definitions for a four-colour myeloid tube.",
   "# They are declared before the data are examined so that the phenotype,",
   "# threshold-drift and cluster-concordance outputs can contradict them.",
+  "#",
+  "# No population requires CD45 again. Each is already scored inside the CD45+",
+  "# parent, and a second CD45 cut within that parent separates CD45-dim from",
+  "# CD45-bright cells, which removes the CD45-dim granulocytes from every",
+  "# population that names it.",
   "populations:",
   "  Granulocytes:",
-  "    CD45: above",
   "    SSC-A: above",
   "    CD15: above",
   "  Monocytes:",
-  "    CD45: above",
   "    CD14: above",
   "    CD15: below",
   "  CD33 positive myeloid:",
-  "    CD45: above",
   "    CD33: above",
   "  Lymphocytes:",
-  "    CD45: above",
   "    SSC-A: below",
   "    CD33: below",
   "    CD14: below",
   "  Myeloid marker negative:",
-  "    CD45: above",
   "    CD14: below",
   "    CD15: below",
   "    CD33: below",

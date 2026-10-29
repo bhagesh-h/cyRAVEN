@@ -84,7 +84,7 @@ write_spec_baseline <- function(path, thr_all, freq, spec, opt = list(),
       panel = d$panel[1], marker = d$marker[1], n = nrow(d),
       median_threshold = median(d$threshold, na.rm = TRUE),
       mad_threshold = mad(d$threshold, na.rm = TRUE),
-      fallback_rate = mean(d$source == "quantile_fallback", na.rm = TRUE),
+      fallback_rate = mean(no_minimum(d$source), na.rm = TRUE),
       stringsAsFactors = FALSE)))
     rownames(mk) <- NULL
   }
@@ -188,7 +188,7 @@ specification_conformance <- function(thr_all, freq, spec, baseline,
     cur <- do.call(rbind, lapply(split(thr_all, key), function(d) data.frame(
       panel = d$panel[1], marker = d$marker[1], n = nrow(d),
       median_threshold = median(d$threshold, na.rm = TRUE),
-      fallback_rate = mean(d$source == "quantile_fallback", na.rm = TRUE),
+      fallback_rate = mean(no_minimum(d$source), na.rm = TRUE),
       # A marker some of whose cuts were placed by hand did not conform, it was
       # made to conform. That is a different statement and gets its own verdict
       # below rather than being counted as agreement with the baseline.

@@ -7,7 +7,8 @@
 make_transform(
   method = c("arcsinh", "logicle", "none"),
   cofactor = NULL,
-  logicle = NULL
+  logicle = NULL,
+  per_marker = NULL
 )
 }
 \arguments{
@@ -17,6 +18,10 @@ make_transform(
 
 \item{logicle}{named list of per-marker parameters from
 \code{\link[=derive_logicle_pooled]{derive_logicle_pooled()}} (required for method = "logicle")}
+
+\item{per_marker}{named numeric vector of arcsinh cofactors by marker, or
+NULL. A marker named here is transformed with its own cofactor; any other,
+and scatter, with \code{cofactor}. See \code{\link[=derive_cofactor]{derive_cofactor()}}.}
 }
 \value{
 list(method, fn, params, label)

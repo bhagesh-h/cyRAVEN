@@ -4,7 +4,7 @@
 \alias{frequency_delta_if_cleaned}
 \title{How far each population moves if the flagged windows are excluded}
 \usage{
-frequency_delta_if_cleaned(tmat, thr, parent, spec, keep)
+frequency_delta_if_cleaned(tmat, thr, parent, spec, keep, scoped = NULL)
 }
 \arguments{
 \item{tmat}{transformed marker matrix for one sample}
@@ -16,6 +16,8 @@ frequency_delta_if_cleaned(tmat, thr, parent, spec, keep)
 \item{spec}{population specification}
 
 \item{keep}{logical, TRUE for events to retain}
+
+\item{scoped}{cuts derived within parent populations, or NULL; held fixed.}
 }
 \value{
 data.frame with the reported and cleaned percentage per population

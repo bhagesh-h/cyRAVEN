@@ -125,3 +125,29 @@ test_that("a single batch level is a no-op, not an error", {
   expect_identical(r$tmat, tm)
   expect_match(r$reason, "only one batch")
 })
+
+test_that("the refusal threshold is Cohen's large association for the table", {
+  expect_equal(cramers_v_limit(rep(c("a", "b"), 10), rep(c("x", "y"), each = 10)), 0.5)
+  expect_equal(cramers_v_limit(rep(c("a", "b", "c"), 10), rep(c("x", "y", "z"), each = 10)),
+               0.5 / sqrt(2))
+})
+
+test_that("each group is aligned to its own distribution, so a group difference survives", {
+  # Batch b1 holds mostly cases, b2 mostly controls; cases sit 2 units higher;
+  # b2 also carries a 1-unit batch shift. A goal pooled over cells pulls the
+  # groups together; per-group goals averaged over batches, as CytoNorm
+  # averages them, keep the 2-unit difference and remove the shift.
+  withr::local_seed(8)
+  grp <- c(rep("case", 160), rep("ctrl", 40), rep("case", 40), rep("ctrl", 160))
+  bat <- rep(c("b1", "b2"), each = 200)
+  x <- stats::rnorm(400, 0, 0.3) + ifelse(grp == "case", 2, 0) + ifelse(bat == "b2", 1, 0)
+  tm <- cbind(CD3 = x, CD4 = x)
+  gdiff <- function(m) unname(diff(tapply(m[, "CD3"], grp, stats::median)))
+  g <- suppressMessages(correct_batch(tm, bat, grp, max_cramers_v = 1))
+  p <- suppressMessages(correct_batch(tm, bat, grp, max_cramers_v = 1, goal = "pooled"))
+  expect_equal(abs(gdiff(g$tmat)), 2, tolerance = 0.1)
+  expect_lt(abs(gdiff(p$tmat)), abs(gdiff(g$tmat)))
+  # the batch shift is gone within each group
+  within <- tapply(g$tmat[grp == "ctrl", "CD3"], bat[grp == "ctrl"], stats::median)
+  expect_lt(abs(diff(within)), 0.15)
+})

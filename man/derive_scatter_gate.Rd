@@ -16,8 +16,9 @@ derive_scatter_gate(ex, sc, fsc_hi_q = 0.999, ssc_q = c(0.005, 0.995))
 \item{ssc_q}{The ssc q. Default \code{c(0.005, 0.995)}.}
 }
 \description{
-WHAT: lower FSC bound = the deepest valley in log10 FSC-A; upper bound = a
-high percentile; SSC bounds = robust percentiles within the FSC window.
+WHAT: lower FSC bound = the lowest qualifying valley in log10 FSC-A; upper
+bound = a high percentile; SSC bounds = robust percentiles within the FSC
+window.
 }
 \details{
 WHY THIS IS COUNTER-INTUITIVE AND IMPORTANT: on this data a large majority of
@@ -26,5 +27,15 @@ sitting BELOW the FSC valley, and that debris is CD45-negative. A conventional
 "draw a box low on FSC/SSC for lymphocytes" gate therefore selects debris, not
 cells. Deriving the boundary from the valley puts the gate above the debris
 mode wherever that mode happens to fall for a given instrument and sample.
+
+WHY THE PERCENTILE TRIMS STAY. They drop about 1\% of events by construction,
+and an audit against published practice suggested bounding SSC by its
+margins instead. Tried, and scored against manual gating on 21 whole-blood
+files: in one sample the untrimmed top of the SSC distribution formed a
+small mode of its own, the SSC-A population cut then fell between it and
+the granulocytes, and the granulocytes went from 68\% to 0.4\% of CD45+
+cells. Margin events are now removed at reading as well
+(\code{\link[=margin_events]{margin_events()}}); the trims are what keeps the extreme scatter tail from
+becoming a mode.
 }
 \keyword{internal}

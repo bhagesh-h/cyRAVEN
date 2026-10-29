@@ -16,16 +16,24 @@
 #'
 #' `lineage` marks the three monocyte subsets, because the document scopes the
 #' functional marker blocks by monocyte vs non-monocyte membership.
+#'
+#' ONE DEPARTURE IN HOW, NOT WHAT. The regulatory T cell population keeps the
+#' document's name and markers, but its CD25 and CD127 cuts are derived within
+#' the CD3+ CD4+ T cells (`parent:`) rather than across every CD45+ cell. A
+#' CD25 cut across all leukocytes falls wherever the CD25+ cells of every
+#' lineage put it, and above it sit activated conventional T cells as well as
+#' regulatory ones; the consensus gate is CD25+ CD127lo within CD4+ T cells
+#' (Santegoets et al. 2015; Liu et al. 2006; Seddiki et al. 2006).
 #' @export
 default_population_spec <- function() {
-  list(
+  resolve_population_parents(list(
     "CD14 pos"                        = list(CD14 = "above"),
     "CD16 pos"                        = list(CD16 = "above"),
     "CD14 int CD16 int"               = list(CD14 = "intermediate",
                                             CD16 = "intermediate"),
     "CD3 pos"                         = list(CD3 = "above"),
     "CD3 pos CD4 pos"                 = list(CD3 = "above", CD4 = "above"),
-    "CD3 pos CD4 pos CD127 lo CD25 hi"= list(CD3 = "above", CD4 = "above",
+    "CD3 pos CD4 pos CD127 lo CD25 hi"= list(parent = "CD3 pos CD4 pos",
                                             CD127 = "below", CD25 = "above"),
     "CD3 pos CD4 pos Vd1 pos"         = list(CD3 = "above", CD4 = "above",
                                             `TCR-Vd1` = "above"),
@@ -40,7 +48,7 @@ default_population_spec <- function() {
     "CD3 pos Vd2 pos"                 = list(CD3 = "above", `TCR-Vd2` = "above"),
     "CD56 pos NKG2D pos"              = list(CD56 = "above", NKG2D = "above"),
     "CD19 pos"                        = list(CD19 = "above")
-  )
+  ))
 }
 
 #' The three monocyte subsets, named exactly as in the population spec.
@@ -143,6 +151,10 @@ resolve_block_populations <- function(block, spec, available) {
 #'   "intermediate" without an upper bound makes its population UNAVAILABLE
 #'   rather than silently collapsing to "above".
 #' @export
+#' @param scoped Cuts derived within parent populations, from
+#'   [derive_scoped_cuts()], or NULL. Used for every marker the specification's
+#'   `cut_scope` attribute (see [resolve_population_parents()]) places within a
+#'   parent; without it those markers fall back to the CD45+ cut.
 #' @param quiet Suppress the per-population NOTEs about `any_of` groups losing a
 #'   member. The gate-uncertainty bootstrap re-scores every population once per
 #'   replicate, and the note is a property of the SPECIFICATION against the
@@ -152,11 +164,24 @@ resolve_block_populations <- function(block, spec, available) {
 #'   between samples. Callers that score once leave it FALSE and see it once per
 #'   sample; callers that score in a loop pass TRUE.
 score_populations <- function(tmat, thr, parent, spec = default_population_spec(),
-                              hi_thr = NULL, quiet = FALSE) {
+                              hi_thr = NULL, quiet = FALSE, scoped = NULL) {
   avail <- colnames(tmat)
   masks <- list(); unavailable <- list()
+  cut_scope <- attr(spec, "cut_scope")
   for (nm in names(spec)) {
     req <- spec[[nm]]
+    # Cuts for this population: the CD45+ ones, with any marker its
+    # specification places within a parent population replaced by the cut
+    # derived on that parent's events. See resolve_population_parents().
+    sc <- cut_scope[[nm]]
+    thr_pop <- thr; hi_pop <- hi_thr %||% list()
+    if (length(sc) && !is.null(scoped)) {
+      for (mk in names(sc)[!is.na(sc)]) {
+        ws <- scoped[[sc[[mk]]]]
+        thr_pop[[mk]] <- if (mk %in% names(ws$thr)) ws$thr[[mk]] else NA_real_
+        hi_pop[[mk]] <- ws$hi[[mk]] %||% NA_real_
+      }
+    }
     # Check only the DIRECT marker requirements here. "any_of" is a reserved key
     # holding a nested disjunction, not a marker name, and its members are checked
     # separately below with different semantics: a direct requirement that is
@@ -165,10 +190,14 @@ score_populations <- function(tmat, thr, parent, spec = default_population_spec(
     # population carrying a disjunction as "marker not in panel".
     direct <- setdiff(names(req), "any_of")
     miss <- setdiff(direct, avail)
-    miss <- c(miss, direct[!is.na(match(direct, avail)) & !is.finite(thr[direct])])
+    miss <- c(miss, direct[!is.na(match(direct, avail)) & !is.finite(thr_pop[direct])])
     miss <- unique(miss[!is.na(miss)])
     if (length(miss)) {
-      unavailable[[nm]] <- paste("marker(s) not in panel:", paste(miss, collapse = ", "))
+      within <- miss[miss %in% names(sc)[!is.na(sc)] & miss %in% avail]
+      unavailable[[nm]] <- if (length(within) && !is.null(scoped))
+        paste0("no cut derivable within ", sc[[within[1]]], " for: ",
+               paste(within, collapse = ", "))
+      else paste("marker(s) not in panel:", paste(miss, collapse = ", "))
       next
     }
     # "any_of" requirements: a list under the reserved key any_of, itself a
@@ -185,7 +214,7 @@ score_populations <- function(tmat, thr, parent, spec = default_population_spec(
     if (!is.null(any_req)) {
       amiss <- setdiff(names(any_req), avail)
       amiss <- c(amiss, names(any_req)[!is.na(match(names(any_req), avail)) &
-                                       !is.finite(thr[names(any_req)])])
+                                       !is.finite(thr_pop[names(any_req)])])
       # A disjunction survives partial absence: CD16+ OR CD56+ is still a usable
       # gate when only CD56 is in the panel. Report the loss, do not drop the
       # population -- but if EVERY member is missing there is nothing left.
@@ -209,7 +238,7 @@ score_populations <- function(tmat, thr, parent, spec = default_population_spec(
     int_mk <- names(req)[vapply(req, function(d)
       identical(d, "intermediate") || identical(d, "bright"), logical(1))]
     no_hi <- int_mk[!vapply(int_mk, function(mk)
-      is.finite((hi_thr %||% list())[[mk]] %||% NA_real_), logical(1))]
+      is.finite(hi_pop[[mk]] %||% NA_real_), logical(1))]
     if (length(no_hi)) {
       unavailable[[nm]] <- paste("no upper bound derivable for intermediate marker(s):",
                                  paste(no_hi, collapse = ", "))
@@ -218,13 +247,13 @@ score_populations <- function(tmat, thr, parent, spec = default_population_spec(
     m <- parent
     for (mk in names(req)) {
       m <- m & switch(req[[mk]],
-        above        = tmat[, mk] > thr[[mk]],
-        below        = tmat[, mk] < thr[[mk]],
-        intermediate = tmat[, mk] > thr[[mk]] & tmat[, mk] < hi_thr[[mk]],
+        above        = tmat[, mk] > thr_pop[[mk]],
+        below        = tmat[, mk] < thr_pop[[mk]],
+        intermediate = tmat[, mk] > thr_pop[[mk]] & tmat[, mk] < hi_pop[[mk]],
         # The band above the intermediate one: CD56-bright NK cells and the
         # like, where the canonical subset is the upper mode of a bimodal
         # positive population rather than the whole of it.
-        bright       = tmat[, mk] > hi_thr[[mk]],
+        bright       = tmat[, mk] > hi_pop[[mk]],
         stop("unknown direction '", req[[mk]], "' for marker ", mk,
              " (use above/below/intermediate/bright)"))
     }
@@ -232,8 +261,8 @@ score_populations <- function(tmat, thr, parent, spec = default_population_spec(
       any_m <- rep(FALSE, nrow(tmat))
       for (mk in names(any_req))
         any_m <- any_m | switch(any_req[[mk]],
-          above = tmat[, mk] > thr[[mk]],
-          below = tmat[, mk] < thr[[mk]],
+          above = tmat[, mk] > thr_pop[[mk]],
+          below = tmat[, mk] < thr_pop[[mk]],
           stop("any_of supports only above/below (marker ", mk, ")"))
       m <- m & any_m
     }
@@ -255,6 +284,168 @@ score_populations <- function(tmat, thr, parent, spec = default_population_spec(
 }
 
 # =============================================================================
+
+#' Resolve `parent:` declarations in a population specification
+#'
+#' WHY. A cut on the whole CD45+ parent sits wherever the lineages that
+#' dominate that mixture put a valley, which is not where a subset is defined.
+#' Regulatory T cells are CD25+ CD127lo WITHIN CD4+ T cells (Santegoets et al.
+#' 2015), and the CD25 valley across all leukocytes is not the one that
+#' separates them from activated conventional CD4 T cells (Seddiki et al.
+#' 2006); monocyte subsets are split by CD14 and CD16 within monocytes (Abeles
+#' et al. 2012). Gating templates express this as a hierarchy, each gate
+#' derived on its parent's events (openCyto; Finak et al. 2014).
+#'
+#' WHAT. A population may name another in its `parent:` key:
+#'
+#' ```yaml
+#' Tregs:
+#'   parent: CD4 T cells
+#'   CD25: above
+#'   CD127: below
+#' ```
+#'
+#' Its own markers' cuts are then derived on the parent's events (see
+#' [derive_scoped_cuts()]), and it is scored within the parent. The parent's
+#' conditions are merged into the child here, so the definition every other
+#' part of the package reads is the complete one; attribute `cut_scope` records,
+#' per population and marker, which parent's events that marker's cut comes
+#' from (NA for the CD45+ cut), and `parents` the declared parent of each
+#' population.
+#'
+#' A child may not re-declare a marker its parent requires in a different
+#' direction, and parent and child cannot both carry an `any_of` group: both
+#' would leave the child's relation to its parent undefined.
+#'
+#' @param spec population specification as read from YAML.
+#' @return the specification with every `parent:` resolved, carrying
+#'   attributes `cut_scope` and `parents`; unchanged when no population names a
+#'   parent.
+#' @export
+resolve_population_parents <- function(spec) {
+  if (!length(spec)) return(spec)
+  has_par <- vapply(spec, function(d) is.list(d) && !is.null(d[["parent"]]), logical(1))
+  if (!any(has_par)) return(spec)
+  resolved <- list(); scope <- list(); visiting <- character(0)
+  marker_keys <- function(d) unique(c(setdiff(names(d), "any_of"), names(d[["any_of"]])))
+  res <- function(nm) {
+    if (!is.null(resolved[[nm]])) return(resolved[[nm]])
+    if (nm %in% visiting)
+      stop("population specification: the parent chain through '", nm,
+           "' loops back on itself", call. = FALSE)
+    d <- spec[[nm]]
+    p <- d[["parent"]]; d[["parent"]] <- NULL
+    own <- marker_keys(d)
+    if (is.null(p)) {
+      resolved[[nm]] <<- d
+      scope[[nm]] <<- stats::setNames(rep(NA_character_, length(own)), own)
+      return(d)
+    }
+    p <- as.character(p)[1]
+    if (!p %in% names(spec))
+      stop("population '", nm, "' names parent '", p, "', which the ",
+           "specification does not declare", call. = FALSE)
+    visiting <<- c(visiting, nm)
+    pd <- res(p)
+    visiting <<- setdiff(visiting, nm)
+    merged <- pd[setdiff(names(pd), "any_of")]
+    sc <- scope[[p]]
+    for (k in setdiff(names(d), "any_of")) {
+      if (k %in% names(merged)) {
+        if (!identical(as.character(merged[[k]]), as.character(d[[k]])))
+          stop("population '", nm, "' requires ", k, " ", d[[k]], " but its ",
+               "parent '", p, "' requires ", k, " ", merged[[k]], call. = FALSE)
+        next                     # restated: still the parent's condition and cut
+      }
+      merged[[k]] <- d[[k]]
+      sc[[k]] <- p
+    }
+    if (!is.null(d[["any_of"]]) && !is.null(pd[["any_of"]]))
+      stop("population '", nm, "' and its parent '", p, "' both carry an any_of ",
+           "group; a population holds one disjunction", call. = FALSE)
+    if (!is.null(d[["any_of"]])) {
+      merged[["any_of"]] <- d[["any_of"]]
+      for (k in names(d[["any_of"]])) sc[[k]] <- p
+    } else if (!is.null(pd[["any_of"]])) merged[["any_of"]] <- pd[["any_of"]]
+    resolved[[nm]] <<- merged; scope[[nm]] <<- sc
+    merged
+  }
+  for (nm in names(spec)) res(nm)
+  out <- resolved[names(spec)]
+  attr(out, "cut_scope") <- scope[names(spec)]
+  attr(out, "parents") <- vapply(spec, function(d)
+    as.character(d[["parent"]] %||% NA_character_)[1], "")
+  out
+}
+
+#' Derive the cuts a specification places within parent populations
+#'
+#' For each parent named in the specification's `cut_scope` (see
+#' [resolve_population_parents()]), the parent is scored in this sample and
+#' every marker a child places within it is cut on the parent's events alone,
+#' with the same rule the CD45+ cuts use (`resolve`). Bounds for `bright` and
+#' `intermediate` requirements are derived within the parent too. Parents are
+#' processed outermost first, so a parent that is itself scoped is scored with
+#' its own scoped cuts.
+#'
+#' A parent with fewer than `min_events` events gives no cut: its children are
+#' reported unavailable in that sample rather than cut on a handful of cells.
+#'
+#' @param tmat transformed marker matrix.
+#' @param thr named CD45+ cuts.
+#' @param parent the CD45+ mask.
+#' @param spec resolved specification.
+#' @param hi_thr CD45+ upper bounds, from [derive_intermediate_bounds()].
+#' @param resolve `function(marker, x)` returning a [resolve_threshold()]
+#'   result for values `x`. Default: `resolve_threshold()` with its defaults.
+#' @param min_events fewest parent events a cut is derived from. Default 200,
+#'   the least the tail rule accepts.
+#' @return list keyed by parent population, each `list(thr, hi, details,
+#'   n_parent)`, or NULL when the specification scopes nothing.
+#' @export
+derive_scoped_cuts <- function(tmat, thr, parent, spec, hi_thr = NULL,
+                               resolve = NULL, min_events = 200L) {
+  cs <- attr(spec, "cut_scope")
+  scopes <- unique(stats::na.omit(unlist(cs, use.names = FALSE)))
+  if (!length(scopes)) return(NULL)
+  resolve <- resolve %||% function(m, x) resolve_threshold(m, x)
+  pars <- attr(spec, "parents")
+  depth <- function(p) {
+    d <- 0L
+    while (!is.null(p) && p %in% names(pars) && !is.na(pars[[p]])) {
+      p <- pars[[p]]; d <- d + 1L
+    }
+    d
+  }
+  scopes <- scopes[order(vapply(scopes, depth, integer(1)))]
+  out <- list()
+  for (P in scopes) {
+    sp <- score_populations(tmat, thr, parent, spec, hi_thr = hi_thr, quiet = TRUE,
+                            scoped = out)
+    m <- sp$masks[[P]]
+    n <- if (is.null(m)) 0L else sum(m)
+    kids <- names(cs)[vapply(cs, function(x) any(x %in% P), logical(1))]
+    mk <- intersect(unique(unlist(lapply(kids, function(k) names(cs[[k]])[cs[[k]] %in% P]))),
+                    colnames(tmat))
+    thrP <- stats::setNames(rep(NA_real_, length(mk)), mk); det <- list()
+    for (k in mk) {
+      if (n < min_events) {
+        det[[k]] <- list(threshold = NA_real_, needs_review = TRUE,
+                         source = sprintf("none: %s holds %d event(s), fewer than %d",
+                                          P, n, as.integer(min_events)))
+        next
+      }
+      rr <- resolve(k, tmat[m, k])
+      thrP[[k]] <- rr$threshold; det[[k]] <- rr
+    }
+    # bright and intermediate bounds, within the parent, for the markers placed there
+    sub <- lapply(kids, function(k) spec[[k]][intersect(names(spec[[k]]),
+                                                       names(cs[[k]])[cs[[k]] %in% P])])
+    hiP <- if (n >= min_events) derive_intermediate_bounds(tmat, thrP, m, sub) else list()
+    out[[P]] <- list(thr = thrP, hi = hiP, details = det, n_parent = n)
+  }
+  out
+}
 
 # =============================================================================
 # THE CATCH-ALL LABEL

@@ -4,7 +4,13 @@
 \alias{fit_bead_calibration}
 \title{Fit a channel-units to assigned-units calibration from a bead acquisition}
 \usage{
-fit_bead_calibration(bead_exprs, channel_cols, assigned, min_r2 = 0.98)
+fit_bead_calibration(
+  bead_exprs,
+  channel_cols,
+  assigned,
+  min_r2 = 0.98,
+  channel_names = NULL
+)
 }
 \arguments{
 \item{bead_exprs}{the bead file's expression matrix, linear units}
@@ -15,10 +21,19 @@ fit_bead_calibration(bead_exprs, channel_cols, assigned, min_r2 = 0.98)
 population, or a long form carrying \code{marker}, \code{peak} and \code{value}}
 
 \item{min_r2}{fit quality below which a channel is reported as not calibrated}
+
+\item{channel_names}{the bead file's \verb{$PnN} values, as read, or NULL.}
 }
 \value{
 a data.frame, one row per channel
 }
 \description{
-Fit a channel-units to assigned-units calibration from a bead acquisition
+A BEAD FILE IS NAMED BY DETECTOR. Beads carry no antibody, so a bead file
+usually has no \verb{$PnS} and its channels resolve to detector names (\code{FITC-A})
+where the samples resolve to markers (\code{CD3}). The assigned-value table may
+therefore name either: a marker symbol, or a detector as \verb{$PnN} writes it.
+With \code{channel_names} supplied, a detector name is looked up there, and the
+detector each row was fitted on is returned in \code{channel}, so the fit is
+applied to the samples by detector (\verb{$PnN} names the detector, Spidlen et al.
+2010) rather than by a stain name the bead file does not have.
 }

@@ -3,8 +3,9 @@
 
 #' Derive the leukocyte scatter gate from the FSC-A density
 #'
-#' WHAT: lower FSC bound = the deepest valley in log10 FSC-A; upper bound = a
-#' high percentile; SSC bounds = robust percentiles within the FSC window.
+#' WHAT: lower FSC bound = the lowest qualifying valley in log10 FSC-A; upper
+#' bound = a high percentile; SSC bounds = robust percentiles within the FSC
+#' window.
 #'
 #' WHY THIS IS COUNTER-INTUITIVE AND IMPORTANT: on this data a large majority of
 #' recorded events (roughly two thirds in the test batch) are sub-cellular debris
@@ -12,6 +13,16 @@
 #' "draw a box low on FSC/SSC for lymphocytes" gate therefore selects debris, not
 #' cells. Deriving the boundary from the valley puts the gate above the debris
 #' mode wherever that mode happens to fall for a given instrument and sample.
+#'
+#' WHY THE PERCENTILE TRIMS STAY. They drop about 1% of events by construction,
+#' and an audit against published practice suggested bounding SSC by its
+#' margins instead. Tried, and scored against manual gating on 21 whole-blood
+#' files: in one sample the untrimmed top of the SSC distribution formed a
+#' small mode of its own, the SSC-A population cut then fell between it and
+#' the granulocytes, and the granulocytes went from 68% to 0.4% of CD45+
+#' cells. Margin events are now removed at reading as well
+#' ([margin_events()]); the trims are what keeps the extreme scatter tail from
+#' becoming a mode.
 #' @param ex Numeric expression matrix, events x channels.
 #' @param sc The sc.
 #' @param fsc_hi_q The fsc hi q. Default `0.999`.
@@ -76,7 +87,7 @@ cd45_cut_splits_positive <- function(x, cut, neg_ref, max_frac = 0.10) {
   mean(x > neg_ref & x < cut, na.rm = TRUE) > max_frac
 }
 
-#' Derive the singlet band from the FSC-H/FSC-A ridge
+#' Derive the singlet gate from the FSC height-to-area ridge
 #'
 #' WHY: doublet exclusion assumes height and area track together for single
 #' cells. The RATIO at which they track is instrument- and gain-dependent -- on
@@ -84,10 +95,24 @@ cd45_cut_splits_positive <- function(x, cut, neg_ref, max_frac = 0.10) {
 #' would assume, and a band centred on 1.0 discards essentially every real cell.
 #' Centering on the measured median with a MAD-scaled width adapts to any
 #' instrument. MAD is used rather than SD because doublets are a heavy tail.
+#'
+#' ONE-SIDED. Two cells passing together give a pulse of about twice the area
+#' and much less than twice the height, so a doublet's height-to-area ratio is
+#' LOW (Wersto et al. 2001). Nothing about a doublet raises it. The gate
+#' therefore has a lower bound only; an upper bound removed single cells from
+#' the top of the ridge for no reason.
+#'
+#' WHY NO SIDE-SCATTER STEP. SSC-H against SSC-A after the forward-scatter
+#' gate is common manual practice (Cossarizza et al. 2019), and was tried here
+#' with the same rule. Scored against manual gating on 21 whole-blood files it
+#' removed 3.8% of the low-scatter cells and 0.7% of the granulocytes: where
+#' little light is scattered the SSC ratio is noisy, and a cut below its median
+#' removes lymphocytes rather than doublets. Granulocyte shares rose by about
+#' a point against the manual counts, so it is not applied.
 #' @param ex Numeric expression matrix, events x channels.
 #' @param sc The sc.
 #' @param parent_mask The parent mask.
-#' @param k Neighbourhood size, or number of clusters, depending on the function. Default `3`.
+#' @param k Width of the band below the ridge, in MADs. Default `3`.
 #' @keywords internal
 derive_singlet_band <- function(ex, sc, parent_mask, k = 3) {
   # The two must be present AND be different columns. On a height-only
@@ -99,7 +124,7 @@ derive_singlet_band <- function(ex, sc, parent_mask, k = 3) {
   if (!have_both) {
     log_msg("  no distinct FSC-H and FSC-A, singlet gate skipped ",
             "(all parent events retained)")
-    return(list(lo = NA_real_, hi = NA_real_, ratio = NULL,
+    return(list(lo = NA_real_, hi = Inf, ratio = NULL,
                 mask = parent_mask, skipped = TRUE))
   }
   r <- ex[, sc[["FSC-H"]]] / pmax(ex[, sc[["FSC-A"]]], 1)
@@ -107,9 +132,29 @@ derive_singlet_band <- function(ex, sc, parent_mask, k = 3) {
   med <- median(rp, na.rm = TRUE)
   md  <- mad(rp, na.rm = TRUE)
   if (!is.finite(md) || md == 0) md <- sd(rp, na.rm = TRUE)
-  lo <- med - k * md; hi <- med + k * md
-  list(lo = lo, hi = hi, ratio = r, median = med, mad = md,
-       mask = parent_mask & r > lo & r < hi, skipped = FALSE)
+  lo <- med - k * md
+  list(lo = lo, hi = Inf, ratio = r, median = med, mad = md,
+       mask = parent_mask & r > lo, skipped = FALSE)
+}
+
+#' Where the live cells sit on a viability dye
+#'
+#' The tallest mode of the dye's density, which is the live cells in any
+#' sample with more live cells than dead ones. The lowest substantial mode was
+#' tried instead, to cover a mostly dead sample, and failed on real whole
+#' blood: there the dye often shows a second live mode near zero, as tall as a
+#' third of the main one, and the cut fell between the two live modes. A sample
+#' with more dead than live cells is the case this misses: its live/dead valley
+#' lies below the dominant mode and is not taken, and the tail gate placed
+#' above that mode instead is flagged for review.
+#' @param x numeric vector.
+#' @return the mode, or NA with fewer than 200 finite values.
+#' @keywords internal
+live_mode <- function(x) {
+  x <- x[is.finite(x)]
+  if (length(x) < 200L) return(NA_real_)
+  d <- stats::density(x, n = 1024, adjust = 2)
+  d$x[which.max(d$y)]
 }
 
 #' Locate the viability dye among the available markers
@@ -178,26 +223,41 @@ apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,
   tr <- transform %||% make_transform("arcsinh", cofactor = cofactor)
   tf <- function(m) tr$fn(ex[, mc[[m]]], m)           # transform one marker
 
-  # A --config thresholds: entry is {threshold, source, needs_review} (what
-  # write_config() emits and what the population-marker loop below reads via
-  # cfg_thr[[m]]$threshold) -- but resolve_threshold()'s cfg_value must be a
-  # bare number. Unwrap here too, for the two markers (viability, CD45) gated
-  # in THIS function rather than the spec-driven loop: passing the list
-  # through unwrapped previously crashed resolve_threshold's is.finite()
-  # check with "default method not implemented for type 'list'" the moment
-  # anyone tried to override either from --config, rather than applying it.
-  cfg_threshold <- function(v) if (is.list(v)) v$threshold else v
+  # A --config thresholds: entry may be {threshold, source, needs_review}, as
+  # write_config() emits it, while resolve_threshold()'s cfg_value must be a
+  # bare number; cfg_threshold() unwraps it. Passing the list through unwrapped
+  # once crashed resolve_threshold's is.finite() check the moment anyone tried
+  # to override viability or CD45 from --config.
 
   # --- live gate -------------------------------------------------------------
   vmk <- detect_viability_marker(names(mc), viability_name)
-  live <- sb$mask; v_thr <- NA_real_; v_src <- "skipped"
+  live <- sb$mask; v_thr <- NA_real_; v_src <- "skipped"; v_alt_live <- NA_real_
   adjustments <- list()
   if (!is.na(vmk)) {
     vx <- tf(vmk)
+    # THE LIVE/DEAD BOUNDARY LIES ABOVE THE LIVE CELLS. Dead cells take up more
+    # amine-reactive dye than live ones (Perfetto et al. 2006), so the cut sits
+    # between the dominant, live mode and a brighter one. A valley at or below
+    # the live mode is a ripple in the live cells' own distribution: on a
+    # whole-blood cohort with few dead cells the deepest one sat at 0.1, just
+    # above zero signal, and kept 3% of the singlets as live, which left the
+    # CD45 gate no parent and failed the sample. Floored at the live mode, such
+    # a dye resolves no valley and gets the tail gate above the live cells.
+    vmode <- live_mode(vx[sb$mask])
+    vfloor <- max(tr$fn(0, vmk), vmode, na.rm = TRUE)
+    # A SECOND READING, FOR REVIEW. A minimum BELOW the dominant mode means
+    # either that the dominant mode is the dead cells, a mostly dead sample the
+    # rule above reads as mostly live, or a second live mode near zero, which
+    # whole blood often shows. The share below it is what the live share would
+    # be in the first case; staining_qc.csv reports it beside the share kept,
+    # and only the dye's plot can say which case it is.
+    v_alt <- if (is.finite(vmode))
+      density_valley(vx[sb$mask], floor = tr$fn(0, vmk), ceiling = vmode) else NA_real_
+    v_alt_live <- if (is.finite(v_alt)) 100 * mean(vx[sb$mask] < v_alt) else NA_real_
     rr <- resolve_threshold(vmk, vx[sb$mask], cfg_threshold(cfg[[vmk]]),
                             control_ref[[vmk]], fallback_q = 0.90,
                             override = sample_override(list(x = overrides), "x", vmk),
-                            adaptive = adaptive, floor = tr$fn(0, vmk))
+                            adaptive = adaptive, floor = vfloor)
     v_thr <- rr$threshold; v_src <- rr$source
     # The candidate mask is built BEFORE the gate is judged, because one of the
     # two things being judged is how much it keeps. A "below" gate on a fallback
@@ -301,6 +361,7 @@ apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,
 
   list(masks = masks, counts = counts, scatter_gate = sg, singlet = sb,
        viability_marker = vmk, viability_threshold = v_thr, viability_source = v_src,
+       live_pct_if_dominant_dead = v_alt_live,
        cd45_threshold = c_thr, cd45_source = c_src, cd45_x = cd45_x,
        cd45_floor = if (cd45_name %in% names(mc)) tr$fn(0, cd45_name) else -Inf,
        cofactor = cofactor,
@@ -386,9 +447,54 @@ reference_controls <- function(candidates, gates, fmo_tubes = character(0),
 #'   space regardless of this flag. Only meant for the "too few samples to
 #'   afford losing any" situation; the verdict text still records the forcing
 #'   so it stays auditable in staining_qc.csv.
+#' @param min_live_pct the assay's minimum live share of single cells, in
+#'   percent, or NA (default) to report the share without judging it. A
+#'   sample below it fails QC: "in case of low viability ... samples should be
+#'   excluded from analysis" (den Braanker et al. 2021), which leaves the minimum
+#'   to the assay. Judged only where a viability gate was applied.
 #' @export
 staining_verdict <- function(gate, declared_control = NA, min_cd45_pct = 5,
-                             force_include = FALSE) {
+                             force_include = FALSE, min_live_pct = NA_real_) {
+  v <- cd45_verdict(gate, declared_control, min_cd45_pct, force_include)
+  live <- live_share(gate)
+  v$pct_live_of_singlets <- live
+  v$pct_live_if_dominant_dead <- if (is.finite(live))
+    gate$live_pct_if_dominant_dead %||% NA_real_ else NA_real_
+  if (!identical(v$qc_status, "pass") || !is.finite(min_live_pct) ||
+      !is.finite(live) || live >= min_live_pct) return(v)
+  # Low viability says nothing about whether the tube is an unstained control,
+  # so a sample below the minimum fails and is never promoted to reference.
+  low <- sprintf("low viability (%.1f%% of single cells live < %g%%)", live, min_live_pct)
+  if (force_include && identical(declared_control, FALSE)) {
+    v$verdict <- paste0(v$verdict, "; ", low, " - included anyway (--include-qc-failed)")
+    return(v)
+  }
+  v$verdict <- paste0(low, " - FAILED")
+  v$qc_status <- "failed"
+  v$include <- FALSE; v$is_control <- FALSE; v$is_reference <- FALSE
+  v
+}
+
+#' The live share of single cells, where a viability gate was applied
+#'
+#' What the gate kept, so a sample whose dead cells form the dye's tallest mode
+#' reads as mostly live (see [live_mode()]). The gate's
+#' `live_pct_if_dominant_dead` is the second reading for that case.
+#' @param gate a gate result from [apply_gate_hierarchy()].
+#' @return percent, or NA where no viability gate was applied.
+#' @keywords internal
+live_share <- function(gate) {
+  if (is.null(gate$viability_source) ||
+      startsWith(as.character(gate$viability_source), "skipped")) return(NA_real_)
+  gate$counts$pct_of_parent[gate$counts$gate == "live_cells"][1]
+}
+
+#' The CD45 half of [staining_verdict()]
+#' @inheritParams staining_verdict
+#' @return as [staining_verdict()], without `pct_live_of_singlets`.
+#' @keywords internal
+cd45_verdict <- function(gate, declared_control = NA, min_cd45_pct = 5,
+                         force_include = FALSE) {
   pct <- gate$counts$pct_of_parent[gate$counts$gate == "cd45_pos"]
   # A sample map that says FALSE is a positive assertion: this is a biological
   # sample. Failures below are then failures, not discovered controls.

@@ -18,9 +18,12 @@ which is also callable on its own:
 
 \enumerate{
 \item \strong{Read} -- \code{\link[=read_fcs_resolved]{read_fcs_resolved()}} resolves \verb{$PnN}/\verb{$PnS} to marker
-symbols and applies the spillover matrix when the file carries one.
+symbols, one channel per detector, linearises log-amplified channels,
+removes margin events, and applies the spillover matrix when the file
+carries one.
 \item \strong{Transform} -- \code{\link[=derive_cofactor_pooled]{derive_cofactor_pooled()}} derives the arcsinh
-cofactor from the data rather than assuming one.
+cofactor from the data rather than assuming one, on scatter-gated
+single cells, per panel or per marker.
 \item \strong{Gate} -- \code{\link[=apply_gate_hierarchy]{apply_gate_hierarchy()}} derives scatter, singlet,
 viability and CD45 gates per sample; \code{\link[=density_valley]{density_valley()}} places each
 marker threshold at that sample's own bimodal split.

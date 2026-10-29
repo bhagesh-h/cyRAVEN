@@ -60,13 +60,14 @@ test_that("the derived path is untouched when no override applies", {
   expect_false(r$needs_review)
   expect_true(is.na(r$override_reason))
   expect_true(is.na(r$override_by))
-  # And the fallback branch still flags itself for review. 20000 uniform draws,
-  # not fewer: density_valley() finds a spurious minimum in uniform noise at a
-  # few thousand events often enough to make a smaller fixture flaky, which is
-  # the property test-uncertainty.R measures directly.
+  # And the no-minimum branch still flags itself for review: the tail gate,
+  # which replaced the quantile there. 20000 uniform draws, not fewer:
+  # density_valley() finds a spurious minimum in uniform noise at a few
+  # thousand events often enough to make a smaller fixture flaky, which is the
+  # property test-uncertainty.R measures directly.
   withr::local_seed(1)
   f <- resolve_threshold("m", stats::runif(20000))
-  expect_identical(f$source, "quantile_fallback")
+  expect_true(f$source %in% c("tailgate", "quantile_fallback"))
   expect_true(f$needs_review)
 })
 

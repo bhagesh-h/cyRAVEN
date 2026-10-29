@@ -78,15 +78,32 @@ cramers_v <- function(a, b) {
 #' preserves the ORDER of cells within a batch -- the property that stops a
 #' correction from inventing structure.
 #'
+#' THE GOAL IS THE MEAN OF THE BATCHES' QUANTILES, as CytoNorm's is (Van Gassen
+#' et al. 2020), not the quantiles of every cell pooled. A pooled goal weights
+#' each batch by its cell count, so the batch holding most cells sets the
+#' scale everything is mapped onto, and when the batches differ in which
+#' samples they hold the goal carries that imbalance into every batch.
+#' `goal = "cells"` keeps the pooled form.
+#'
 #' @param x numeric vector for one marker, across all cells
 #' @param batch batch label per cell
 #' @param probs quantile grid used to build the map
+#' @param goal "batch_mean" (default) or "cells"; see above.
 #' @return numeric vector, corrected
 #' @keywords internal
-align_quantiles <- function(x, batch, probs = seq(0, 1, length.out = 101)) {
+align_quantiles <- function(x, batch, probs = seq(0, 1, length.out = 101),
+                            goal = c("batch_mean", "cells")) {
+  goal <- match.arg(goal)
   ok <- is.finite(x) & !is.na(batch)
   if (sum(ok) < 10L) return(x)
-  ref <- stats::quantile(x[ok], probs, na.rm = TRUE, names = FALSE)
+  qb <- lapply(unique(batch[ok]), function(b) {
+    i <- ok & batch == b
+    if (sum(i) < 10L) NULL else stats::quantile(x[i], probs, names = FALSE)
+  })
+  qb <- qb[!vapply(qb, is.null, logical(1))]
+  ref <- if (identical(goal, "cells") || !length(qb))
+    stats::quantile(x[ok], probs, na.rm = TRUE, names = FALSE)
+  else rowMeans(do.call(cbind, qb))
   out <- x
   for (b in unique(batch[ok])) {
     i <- ok & batch == b
@@ -103,6 +120,61 @@ align_quantiles <- function(x, batch, probs = seq(0, 1, length.out = 101)) {
   out
 }
 
+
+#' Align each batch towards a goal that respects the design
+#'
+#' WHY NOT ONE POOLED GOAL. Mapping each batch's distribution onto the pooled
+#' distribution of every sample assumes the batches hold the same mixture of
+#' biology. Where one batch holds mostly patients and another mostly controls,
+#' the pooled goal is a blend of the two groups, each batch is pulled towards
+#' it, and a real difference between the groups is reduced along with the batch
+#' effect. That homogeneity is exactly what anchor samples exist to avoid
+#' assuming (Schuyler et al. 2019). Without anchors, CytoNorm 2.0 tailors its
+#' goal distribution to the experimental design (Quintelier et al. 2025).
+#'
+#' WHAT IS DONE. Each study group is aligned separately: a batch's cells of
+#' group g are mapped onto group g's goal, the mean of its batches' quantiles
+#' (see [align_quantiles()]).
+#' A batch effect common to the groups is removed in each of them, and the
+#' groups keep whatever separates them. A group measured in only one batch has
+#' nothing to align against and is left as it is. Cells with no group are
+#' aligned against the pooled distribution, as before.
+#'
+#' @param x numeric vector for one marker.
+#' @param batch batch label per cell.
+#' @param group study group per cell, or NULL for one goal over all cells.
+#' @param goal passed to [align_quantiles()].
+#' @return numeric vector, corrected.
+#' @keywords internal
+align_within_groups <- function(x, batch, group = NULL, goal = "batch_mean") {
+  if (is.null(group) || length(unique(group[!is.na(group)])) < 2L)
+    return(align_quantiles(x, batch, goal = goal))
+  out <- x
+  for (g in unique(group[!is.na(group)])) {
+    i <- which(!is.na(group) & group == g)
+    out[i] <- align_quantiles(x[i], batch[i], goal = goal)
+  }
+  na <- which(is.na(group))
+  if (length(na)) out[na] <- align_quantiles(x[na], batch[na], goal = goal)
+  out
+}
+
+#' The Cramer's V above which batch correction is refused
+#'
+#' Cohen's convention puts a "large" association at w = 0.5, and Cramer's V is
+#' w scaled by sqrt(min(levels) - 1), so the same large association is a
+#' smaller V in a bigger table: 0.50 for two batches or two groups, 0.35 for
+#' three, 0.29 for four (Cohen 1988). A fixed V of 0.6 admitted a large
+#' association in every table.
+#'
+#' @param batch,group the two labelings.
+#' @return the threshold.
+#' @keywords internal
+cramers_v_limit <- function(batch, group) {
+  ok <- !is.na(batch) & !is.na(group)
+  k <- min(length(unique(batch[ok])), length(unique(group[ok])))
+  0.5 / sqrt(max(1L, k - 1L))
+}
 
 #' Align quantiles within each cell type rather than over the whole file
 #'
@@ -142,7 +214,8 @@ align_quantiles <- function(x, batch, probs = seq(0, 1, length.out = 101)) {
 #' @return list(tmat, clusters, method)
 #' @keywords internal
 align_quantiles_by_cluster <- function(tmat, batch, markers, k = 10L,
-                                       seed = 42L) {
+                                       seed = 42L, group = NULL,
+                                       goal = "batch_mean") {
   # CLUSTER ON ROUGHLY ALIGNED DATA, NOT ON THE RAW MATRIX.
   #
   # Measured, and the reason this two-stage form exists: cluster the raw matrix
@@ -179,12 +252,12 @@ align_quantiles_by_cluster <- function(tmat, batch, markers, k = 10L,
     # align against. align_quantiles() already returns its input unchanged in
     # that case; skipping here avoids the work and keeps the log honest.
     if (length(i) < 20L || length(unique(batch[i][!is.na(batch[i])])) < 2L) next
-    for (m in markers) tmat[i, m] <- align_quantiles(tmat[i, m], batch[i])
+    for (m in markers) tmat[i, m] <- align_within_groups(tmat[i, m], batch[i], group[i], goal)
   }
   n_na <- sum(is.na(lab))
   if (n_na > 0L) {
     i <- which(is.na(lab))
-    for (m in markers) tmat[i, m] <- align_quantiles(tmat[i, m], batch[i])
+    for (m in markers) tmat[i, m] <- align_within_groups(tmat[i, m], batch[i], group[i], goal)
     log_msg("    ", n_na, " cell(s) had no cluster label and were aligned ",
             "whole-file")
   }
@@ -201,10 +274,16 @@ align_quantiles_by_cluster <- function(tmat, batch, markers, k = 10L,
 #' meaningful.
 #'
 #' TWO METHODS. `"quantile"` fits one map per marker over the whole file.
-#' `"cluster"` fits one map per marker per cell type, which is what CytoNorm
-#' does and what a whole-file map cannot do; see
-#' [align_quantiles_by_cluster()]. `"cytonorm"` is accepted as a synonym for
-#' `"cluster"`, because that is the name the method is known by.
+#' `"cluster"` fits one map per marker per cell type, the idea CytoNorm is built
+#' on and what a whole-file map cannot do; see [align_quantiles_by_cluster()].
+#' `"cytonorm"` is still accepted for `"cluster"`, with a note: it is not the
+#' CytoNorm package, which learns its maps from anchor samples, and the name
+#' claimed otherwise.
+#'
+#' THE GOAL. With `group` supplied and `goal = "group"`, the default, each study
+#' group is aligned towards its own pooled distribution; see
+#' [align_within_groups()]. `goal = "pooled"` aligns every batch towards all
+#' samples together, which assumes the batches hold the same biology.
 #'
 #' THE METHOD IS CHOSEN AFTER THE REFUSAL, NEVER BEFORE IT. A better alignment
 #' algorithm does not make a confounded design correctable. Where Cramer's V
@@ -224,8 +303,10 @@ align_quantiles_by_cluster <- function(tmat, batch, markers, k = 10L,
 #' @param batch batch label per cell
 #' @param group biological group per cell, for the confounding check
 #' @param markers markers to correct; defaults to all columns
-#' @param max_cramers_v refusal threshold
+#' @param max_cramers_v refusal threshold, or NULL (default) for Cohen's
+#'   "large" association; see [cramers_v_limit()].
 #' @param force proceed despite confounding
+#' @param goal "group" or "pooled"; see above.
 #' @param method `"quantile"` for one map per marker over the whole file, or
 #'   `"cluster"` (synonym `"cytonorm"`) for one map per marker per cell type
 #' @param cluster_k number of cell-type clusters when `method = "cluster"`
@@ -233,11 +314,18 @@ align_quantiles_by_cluster <- function(tmat, batch, markers, k = 10L,
 #' @return list(tmat, cramers_v, corrected, markers, reason, method)
 #' @export
 correct_batch <- function(tmat, batch, group = NULL, markers = NULL,
-                          max_cramers_v = 0.6, force = FALSE,
+                          max_cramers_v = NULL, force = FALSE,
                           method = c("quantile", "cluster", "cytonorm"),
-                          cluster_k = 10L, seed = 42L) {
+                          cluster_k = 10L, seed = 42L,
+                          goal = c("group", "pooled")) {
   method <- match.arg(method)
-  if (identical(method, "cytonorm")) method <- "cluster"
+  goal <- match.arg(goal)
+  if (identical(method, "cytonorm")) {
+    log_msg("  NOTE --batch-method cytonorm runs cyRAVEN's per-cell-type ",
+            "quantile alignment ('cluster'), not the CytoNorm package: no ",
+            "anchor samples are used")
+    method <- "cluster"
+  }
   tmat <- as.matrix(tmat)
   if (is.null(markers)) markers <- colnames(tmat)
   markers <- intersect(markers, colnames(tmat))
@@ -250,28 +338,36 @@ correct_batch <- function(tmat, batch, group = NULL, markers = NULL,
   # THE REFUSAL COMES FIRST. Nothing about the choice of method is consulted
   # above this point, so both methods are refused on identical evidence.
   v <- if (!is.null(group)) cramers_v(batch, group) else NA_real_
+  if (is.null(max_cramers_v))
+    max_cramers_v <- if (!is.null(group)) cramers_v_limit(batch, group) else 0.5
   if (!is.na(v) && v > max_cramers_v && !isTRUE(force)) {
     log_msg("  batch correction REFUSED: Cramer's V(batch, group) = ",
-            round(v, 3), " > ", max_cramers_v)
+            round(v, 3), " > ", round(max_cramers_v, 3))
     log_msg("    At this overlap, removing the batch and removing the ",
             "biological effect are the same operation. Re-run with ",
             "--force-batch-correction to proceed anyway.")
     log_msg("    This applies to every method: --batch-method changes HOW a ",
             "correction is fitted, never WHETHER one is defensible.")
     return(list(tmat = tmat, cramers_v = v, corrected = FALSE,
-                markers = character(0), method = method,
+                markers = character(0), method = method, max_cramers_v = max_cramers_v,
                 reason = sprintf("refused: batch confounded with group (V = %.3f)", v)))
   }
 
+  gg <- if (identical(goal, "group")) group else NULL
+  qgoal <- if (identical(goal, "group")) "batch_mean" else "cells"
   how <- "whole-file, one map per marker"
   if (identical(method, "cluster")) {
     cres <- align_quantiles_by_cluster(tmat, batch, markers, k = cluster_k,
-                                       seed = seed)
+                                       seed = seed, group = gg, goal = qgoal)
     tmat <- cres$tmat
     how <- cres$method
   } else {
-    for (m in markers) tmat[, m] <- align_quantiles(tmat[, m], batch)
+    for (m in markers) tmat[, m] <- align_within_groups(tmat[, m], batch, gg, qgoal)
   }
+  how <- paste0(how, if (!is.null(gg) && length(unique(gg[!is.na(gg)])) > 1L)
+                       "; each group aligned to the mean of its batches' quantiles"
+                     else if (identical(qgoal, "cells")) "; aligned to every cell pooled"
+                     else "; aligned to the mean of the batches' quantiles")
   reason <- if (!is.na(v) && v > max_cramers_v)
     sprintf("FORCED despite confounding (V = %.3f)", v)
   else sprintf("corrected across %d batches (V = %s)", nb,
@@ -279,5 +375,5 @@ correct_batch <- function(tmat, batch, group = NULL, markers = NULL,
   log_msg("  batch correction [", method, "]: ", reason, ", ",
           length(markers), " marker(s); ", how)
   list(tmat = tmat, cramers_v = v, corrected = TRUE, markers = markers,
-       reason = reason, method = method, how = how)
+       reason = reason, method = method, how = how, max_cramers_v = max_cramers_v)
 }

@@ -162,7 +162,7 @@ som_train <- function(X, xdim = 10L, ydim = 10L, epochs = 10L, seed = 42L) {
 #' @export
 run_unsupervised_clusters <- function(cells, markers, n_clusters = 12L,
                                       grid = 10L, epochs = 10L,
-                                      scale_method = "robust", seed = 42L,
+                                      scale_method = "range", seed = 42L,
                                       max_cells = 200000L) {
   markers <- intersect(markers, names(cells))
   markers <- markers[vapply(cells[markers], is.numeric, logical(1))]
@@ -177,17 +177,9 @@ run_unsupervised_clusters <- function(cells, markers, n_clusters = 12L,
             sum(ok), ")")
     return(NULL)
   }
-  # Same scaling the embedding uses, for the reason given above: robust
-  # (median/MAD) because marker distributions are bimodal and an SD is dominated
-  # by the separation between the two modes rather than by within-mode spread.
-  Xs <- M[ok, , drop = FALSE]
-  if (scale_method == "robust") {
-    med <- apply(Xs, 2, stats::median)
-    mad_ <- apply(Xs, 2, function(x) { m <- stats::mad(x); if (m == 0 || !is.finite(m)) stats::sd(x) else m })
-    Xs <- sweep(sweep(Xs, 2, med, "-"), 2, mad_, "/")
-  } else if (scale_method == "zscore") {
-    Xs <- scale(Xs)
-  }
+  # Same scaling the embedding uses, by the same function, so clusters and
+  # coordinates live in one space. See umap_scale_method().
+  Xs <- scale_features(M[ok, , drop = FALSE], scale_method)$mat
   Xs[!is.finite(Xs)] <- 0
 
   cl <- rep(NA_integer_, nrow(cells))

@@ -16,7 +16,9 @@ resolve_threshold(
   control_threshold = NULL,
   adaptive = FALSE,
   floor = -Inf,
-  prefer = c("deepest", "lowest")
+  prefer = c("deepest", "lowest"),
+  fmo_sets_cut = FALSE,
+  tail = c("upper", "lower")
 )
 }
 \arguments{
@@ -63,6 +65,26 @@ each is a decision someone made, not one the density made.}
 \item{prefer}{Passed to \code{\link[=density_valley]{density_valley()}} and \code{\link[=best_threshold]{best_threshold()}}: \code{"lowest"}
 for a gate that should remove only the negative mode, such as CD45.
 Default \code{"deepest"}.}
+
+\item{fmo_sets_cut}{When \code{TRUE} and the control is a true FMO
+(\code{control_kind = "fmo_q995"}), the FMO's cut is used even where the
+sample's own valley sits higher, and the source reads
+\code{fmo_q995_valley_lowered}. The FMO is the published reference for where
+positivity starts (Maecker & Trotter 2006; Cossarizza et al. 2019), so
+events between its edge and a higher valley are dim positives, not
+negatives. \code{FALSE} by default: an FMO argues a cut down validly only
+where its negative is the sample's own, the same cells stained the same
+day, and one FMO tube serves every sample of its panel or \code{control_group},
+which this package cannot check against each sample; a valley is evidence
+from the sample itself. Raising a valley that sits below the FMO's edge is
+applied by default, since that errs towards fewer false positives. Never
+applied to an unstained or minus-multiple tube: their negatives lack the
+panel's spreading and sit too low to argue a cut down.}
+
+\item{tail}{which side of the dominant mode a tail gate goes, where one is
+needed: \code{"upper"} (default) takes the mode to be the negative population;
+\code{"lower"} is the analyst's declaration that it is the positive one, read
+from \verb{thresholds: <marker>: \{tail: lower\}}. See \code{\link[=tail_gate_cut]{tail_gate_cut()}}.}
 }
 \description{
 Priority (per the agreed contract):
@@ -70,13 +92,30 @@ Priority (per the agreed contract):
 \enumerate{
 \item explicit config value          -- applies to every sample
 \item density valley within parent   -- bimodal markers
-\item unstained-control quantile     -- unimodal markers with a control present
-\item quantile fallback              -- flagged needs_review
+\item control quantile               -- unimodal markers with a control present
+\item tail gate                      -- unimodal markers without a control;
+flagged needs_review
+\item quantile fallback              -- only where the tail gate cannot be
+placed; flagged needs_review
 A valley falling BELOW the control-derived value is rejected: it lies inside
 the background distribution and would call noise positive.
 }
 }
 \details{
+WHY THE TAIL GATE COMES BEFORE THE QUANTILE. A marker with one mode and no
+control used to be cut at its 90th percentile, which reports exactly 10\%
+positive whatever the sample holds: a constant, not a measurement, and no
+source supports it. The tail gate places the cut a fixed number of robust
+standard deviations above the dominant mode, so a sample with no positive
+cells reports almost none and a sample with a bright tail reports the tail.
+It answers the case openCyto's \code{gate_tail} exists for, a single mode with a
+positive tail (Finak et al. 2014), by a different rule: see
+\code{\link[=tail_threshold]{tail_threshold()}}. It assumes the dominant mode is the negative one, which a
+single mode cannot confirm (see \code{\link[=tail_gate_cut]{tail_gate_cut()}} for why the side is not
+guessed), so the cut stays flagged for review. The quantile is kept only for
+the case the tail rule cannot handle, a distribution with no spread to
+measure.
+
 WHY LEVEL 0 EXISTS AND WHY IT IS DISTINCT FROM LEVEL 1. When this package
 flags a threshold for review, the only previous responses were to accept it or
 to pin that marker across the whole run through \verb{thresholds:}. Pinning is the

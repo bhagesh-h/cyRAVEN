@@ -41,6 +41,16 @@
 # CD45+ parent gate, and a second CD45 cut inside it separates CD45-dim cells
 # from CD45-bright ones: in whole blood that drops the granulocytes, which are
 # the dim ones.
+#
+# `parent:` names another population: this population's own markers are then
+# cut on that parent's events rather than across every CD45+ cell, and the
+# parent's conditions are inherited. For a subset that is a minority of its
+# parent, Tregs within CD4 T cells for instance:
+#
+#   Tregs:
+#     parent: CD4 T cells
+#     CD25: above
+#     CD127: below
 populations:
   Granulocytes:
     SSC-A: above
@@ -140,6 +150,24 @@ ratios:
     denominator: Lymphocytes
 
 # -----------------------------------------------------------------------------
+# thresholds: per-marker declarations that apply to every sample.
+# -----------------------------------------------------------------------------
+# `threshold` pins the marker's cut for the whole run (source `config`), which
+# brings back the fixed-coordinate bias per-sample cuts exist to remove; a
+# control is the better reference where one exists. `tail: lower` keeps the cut
+# per sample and says only which side of the dominant mode the tail gate goes
+# where the marker shows no density minimum: below it, because that mode is the
+# positive population, as openCyto's `side` argument declares it. A single mode
+# cannot say which it is, so without this a marker most of the parent carries
+# is cut above its positive mode and reads near 0%.
+#
+# thresholds:
+#   CD127:
+#     tail: lower
+#   CD38:
+#     threshold: 2.1
+
+# -----------------------------------------------------------------------------
 # sample_overrides: one sample's cut, corrected by hand, with attribution.
 # -----------------------------------------------------------------------------
 # Use only where the QC figure shows the derived cut is wrong for that sample.
@@ -161,6 +189,8 @@ ratios:
 # gating:
 #   staining_qc:
 #     min_cd45_pct_of_live: 5     # below this a sample has no usable parent gate
+#     min_live_pct_of_singlets: 80  # the assay's viability minimum; unset, the
+#                                   # live share is reported, not judged
 #   singlet_band:
 #     mad_k: 3                    # width of the FSC-H against FSC-A band
 

@@ -188,34 +188,51 @@ write_miflowcyt <- function(path, reads, opt = NULL, spec = NULL,
 
   ln <- c(ln, "### 4.2 Compensation", "")
   comp <- vapply(names(reads), function(s) {
+    st <- reads[[s]]$compensation
+    if (!is.null(st) && !is.na(st)) return(as.character(st))
     kw <- reads[[s]]$keywords
     k <- intersect(c("$SPILLOVER", "SPILL", "$SPILL", "spillover"), names(kw))
-    if (!length(k)) "absent" else "present, applied"
+    if (!length(k)) "unknown: no $SPILLOVER, used as stored" else "compensated, file $SPILLOVER"
   }, character(1))
-  ln <- c(ln, if (all(comp == "absent"))
-    paste("No `$SPILLOVER` keyword in any file. Either the data were already",
-          "unmixed by the acquisition software, which is what spectral",
-          "instruments write, or compensation was never applied. cyRAVEN does",
-          "not construct a matrix; that belongs in acquisition software where",
-          "the single-stain controls can be inspected.")
-  else if (all(comp == "present, applied"))
-    paste("The acquisition spillover matrix stored in the `$SPILLOVER` keyword",
-          "was applied to every file as read. No matrix was computed here.")
-  else paste0("Mixed: ", sum(comp != "absent"), " of ", length(comp),
-              " files carry a `$SPILLOVER` matrix, which was applied to those",
-              " files only. This is worth resolving before the results are used."),
-  "")
+  tab <- table(comp)
+  n_comp <- sum(grepl("^compensated", comp))
+  ln <- c(ln, paste0("- ", names(tab), ": ", as.integer(tab), " file(s)"), "",
+          if (n_comp > 0L && n_comp < length(comp))
+            paste0("Mixed: ", n_comp, " of ", length(comp), " files were ",
+                   "compensated and the rest analysed as stored. This is worth ",
+                   "resolving before the results are used.")
+          else if (any(grepl("^unknown", comp)))
+            paste("A file without a `$SPILLOVER` keyword was analysed as stored.",
+                  "That is right for data the acquisition software already",
+                  "unmixed or compensated, which is what spectral instruments",
+                  "write, and wrong for conventional data nobody compensated; the",
+                  "keyword cannot tell the two apart, so the status is recorded",
+                  "as unknown. A matrix can be supplied with `--spillover`.")
+          else if (any(grepl("supplied", comp)))
+            paste("A spillover matrix supplied with `--spillover` was applied in",
+                  "place of the files' own `$SPILLOVER`.")
+          else paste("The acquisition spillover matrix stored in the `$SPILLOVER`",
+                     "keyword was applied to every file as read. No matrix was",
+                     "computed here."),
+          "")
 
   ln <- c(ln, "### 4.3 Transformation", "")
   if (!is.null(transforms) && length(transforms)) {
     tr <- do.call(rbind, lapply(names(transforms), function(p) {
       t <- transforms[[p]]
+      pr <- t$params %||% list()
+      pm <- pr$per_marker
       data.frame(panel = p, method = or_absent(t$method %||% t$kind, "unknown"),
                  parameters = or_absent(
-                   if (!is.null(t$cofactor)) paste0("cofactor = ", signif(t$cofactor, 6))
-                   else if (!is.null(t$logicle)) paste0("logicle, m = ",
-                                                        signif(t$m %||% NA, 4),
-                                                        ", pooled across the panel")
+                   if (identical(t$method, "arcsinh") && length(pm))
+                     paste0("per-marker cofactors ", signif(min(pm), 4), " to ",
+                            signif(max(pm), 4), " over ", length(pm),
+                            " markers; ", signif(pr$cofactor, 6), " for the rest")
+                   else if (identical(t$method, "arcsinh"))
+                     paste0("cofactor = ", signif(pr$cofactor, 6))
+                   else if (identical(t$method, "logicle") && length(pr))
+                     paste0("logicle per marker, m = ", signif(pr[[1]]$m, 4),
+                            ", T from the declared range, pooled across the panel")
                    else NA_character_, "see run manifest"),
                  stringsAsFactors = FALSE)
     }))
@@ -235,11 +252,17 @@ write_miflowcyt <- function(path, reads, opt = NULL, spec = NULL,
           "Thresholds are derived independently within each sample from that",
           "sample's own marker density, not transferred between samples. The",
           "hierarchy preceding any marker evaluation is:", "",
-          "1. Scatter, at the deepest minimum of the log10 FSC-A density.",
-          paste0("2. Singlets, within median +/- ",
-                 or_absent(opt$singlet_mad_k %||% 3), " MAD of the FSC-H:FSC-A",
-                 " ratio inside the scatter gate."),
-          "3. Viability, at the density minimum of the viability dye, where the panel carries one.",
+          paste("0. Margin events, at the top of a marker or scatter channel's",
+                "range, removed at reading (`margin_events.csv`)."),
+          paste("1. Scatter, above the lowest qualifying minimum of the log10",
+                "FSC-A density, below its 99.9th percentile, and within the 0.5th",
+                "to 99.5th percentile of SSC-A."),
+          paste0("2. Singlets: FSC-H:FSC-A ratio above its median minus ",
+                 or_absent(opt$singlet_mad_k %||% 3), " MAD. Doublets have a low",
+                 " ratio, so the gate has a lower bound only."),
+          paste("3. Viability, at a density minimum above the live cells' mode",
+                "of the viability dye, or a tail gate above that mode where",
+                "there is none, where the panel carries a dye."),
           "4. CD45, selecting leukocytes. Every population frequency below is a percentage of this parent.",
           "")
   if (!is.null(spec) && length(spec)) {
@@ -268,7 +291,26 @@ write_miflowcyt <- function(path, reads, opt = NULL, spec = NULL,
                   "under resampling of the events it was derived from."), "")
   }
 
-  ln <- c(ln, "### 4.5 Software", "",
+  cs <- attr(spec, "cut_scope")
+  if (length(cs) && any(!is.na(unlist(cs)))) {
+    within <- unlist(lapply(names(cs), function(p) {
+      k <- names(cs[[p]])[!is.na(cs[[p]])]
+      if (length(k)) paste0("- ", p, ": ", paste(k, collapse = ", "), " cut within ",
+                            unique(cs[[p]][k])[1])
+    }))
+    ln <- c(ln, paste("Cuts derived within a parent population rather than",
+                      "across CD45+ (`parent:` in the specification), recorded in",
+                      "`thresholds_within_parents.csv`:"), "", within, "")
+  }
+
+  ln <- c(ln, "### 4.5 Data deposition", "",
+          paste(TBC, "Deposit the FCS files, this report and the sample sheet",
+                "in a public repository that takes list-mode data with MIFlowCyt",
+                "annotation, ImmPort or FlowRepository for example, and cite the",
+                "accession. The data standards exist to be carried into those",
+                "repositories (Spidlen et al. 2011)."), "")
+
+  ln <- c(ln, "### 4.6 Software", "",
           paste0("cyRAVEN ", tryCatch(as.character(utils::packageVersion("cyRAVEN")),
                                       error = function(e) "unknown"),
                  ", ", R.version.string, "."),

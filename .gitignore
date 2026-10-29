@@ -60,6 +60,11 @@ dev/
 # git, so ignoring it here alone would still ship it in the tarball and add a
 # non-standard-top-level-file NOTE to a check that is currently clean.
 ToDo.md
+# The audit of the pipeline against published flow cytometry practice, and the
+# task list of fixes worked from it. Working documents like ToDo.md, local to a
+# working copy.
+comparison.md
+todo.md
 
 # Patient data must never enter this repository. The analyses this package was
 # written for keep their FCS files, sample sheets and results OUTSIDE the

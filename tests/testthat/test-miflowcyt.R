@@ -111,7 +111,7 @@ test_that("compensation is reported as applied, absent or mixed, never assumed",
 
   f2 <- tempfile(fileext = ".md")
   suppressMessages(write_miflowcyt(f2, fake_reads(2L, spillover = FALSE), spec = spec))
-  expect_match(paste(readLines(f2), collapse = " "), "No `\\$SPILLOVER` keyword")
+  expect_match(paste(readLines(f2), collapse = " "), "recorded as unknown")
 
   # A cohort where only some files carry a matrix is a real and dangerous state,
   # and saying "applied" or "absent" would both be false.

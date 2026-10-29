@@ -11,7 +11,8 @@ best_threshold(
   min_quality = 0.05,
   fallback_q = 0.9,
   floor = -Inf,
-  prefer = c("deepest", "lowest")
+  prefer = c("deepest", "lowest"),
+  tail = c("upper", "lower")
 )
 }
 \arguments{
@@ -33,6 +34,13 @@ preferred over the tail rule. Default \code{0.05}.}
 sits in. \code{"lowest"}, for a gate that removes only the negative mode, takes
 the lowest density valley that sits in a real trough, and falls back to the
 scored choice when no valley does; see \code{\link[=density_valley]{density_valley()}}.}
+
+\item{tail}{\code{"upper"} (default, also meaning nothing was declared) offers a
+tail gate on either side of the dominant mode and lets the trough decide;
+\code{"lower"}, the analyst's declaration that the dominant mode is positive
+(\verb{thresholds: <marker>: \{tail: lower\}}), offers only the lower one and
+takes it as the last resort too, as the default path does. Without this
+the declaration was ignored under \code{--adaptive-gates}.}
 }
 \value{
 \code{list(threshold, source, quality)}, where \code{source} names the method

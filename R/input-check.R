@@ -321,23 +321,28 @@ list_channels <- function(fcs) {
                                       character(1))
     n <- get_kw("N")
     s <- get_kw("S")
-    data.frame(idx = seq_len(np), name = n, desc = s,
+    f <- get_kw("FEATURE")
+    data.frame(idx = seq_len(np), name = n, desc = s, feature = f,
                symbol = marker_symbol(s, n),
                stringsAsFactors = FALSE, check.names = FALSE)
   }
 
-  # The role column mirrors the rules in read_fcs_resolved(): area channels
-  # carry the markers, height and width are redundant duplicates of area that
-  # would double-weight a marker in the embedding, and scatter is matched by its
-  # own patterns because it is used for gating rather than as a marker.
-  role_of <- function(nm, ds) {
+  # The role column is what read_fcs_resolved() decides, by calling the same
+  # function: one channel per detector, area where the detector records it,
+  # height where it records only height, and scatter matched by its own patterns
+  # because it is used for gating rather than as a marker.
+  role_of <- function(nm, ds, feat = NULL) {
+    rc <- resolve_channels(nm, ds, features = feat)
+    pf <- pulse_feature(nm, ds, feat)
     scatter <- c("FSC.*A(rea)?$", "FSC.*H(eight)?$", "SSC.*A(rea)?$", "SSC.*H(eight)?$")
     is_sc <- Reduce(`|`, lapply(scatter, function(p) grepl(p, nm) | grepl(p, ds)))
-    is_area <- grepl("(^|[^A-Za-z])A$|\\.A$|-A$|Area$", nm) | grepl("- Area$", ds)
     is_time <- grepl("^Time", nm, ignore.case = TRUE) |
                grepl("^Time", ds, ignore.case = TRUE)
-    out <- rep("ignored, not an area channel", length(nm))
-    out[is_area] <- "marker"
+    out <- rep("ignored, no pulse area or height", length(nm))
+    out[pf %in% "W"] <- "ignored, pulse width"
+    out[pf %in% "H"] <- "ignored, the detector's area channel is used"
+    out[pf %in% "A"] <- "ignored, a duplicate name"
+    out[rc$markers] <- ifelse(pf[rc$markers] %in% "H", "marker, pulse height", "marker")
     out[is_sc]   <- "scatter, used for gating"
     out[is_time] <- "ignored, acquisition time"
     out
@@ -349,7 +354,7 @@ list_channels <- function(fcs) {
     log_msg("no readable FCS header in ", length(fcs), " file(s)")
     return(invisible(NULL))
   }
-  ref$role <- role_of(ref$name, ref$desc)
+  ref$role <- role_of(ref$name, ref$desc, ref$feature)
 
   log_msg(length(fcs), " file(s); parameters listed from ", basename(ref_file))
   log_msg("")
@@ -362,7 +367,7 @@ list_channels <- function(fcs) {
                 substr(ref$symbol[i], 1, 16), ref$role[i]))
   cat("\n")
 
-  usable <- sort(ref$symbol[ref$role == "marker"])
+  usable <- sort(ref$symbol[startsWith(ref$role, "marker")])
   log_msg(length(usable), " marker name(s) to use in a specification:")
   log_msg("  ", paste(usable, collapse = ", "))
   # THE NAME TO WRITE IS NOT ALWAYS THE NAME ABOVE. Channel names are made
@@ -391,7 +396,7 @@ list_channels <- function(fcs) {
     others <- lapply(fcs, function(f) {
       p <- read_params(f)
       if (is.null(p)) return(NULL)
-      sort(p$symbol[role_of(p$name, p$desc) == "marker"])
+      sort(p$symbol[startsWith(role_of(p$name, p$desc, p$feature), "marker")])
     })
     names(others) <- basename(fcs)
     bad <- names(others)[vapply(others, is.null, logical(1))]

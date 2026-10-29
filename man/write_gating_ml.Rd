@@ -12,7 +12,11 @@ write_gating_ml(
   x_col = "x_transformed",
   y_col = "y_transformed",
   n_per_edge = 24L,
-  channel_map = NULL
+  channel_map = NULL,
+  space = c("transformed", "linear"),
+  compensation_ref = c("FCS", "uncompensated", "supplied"),
+  spillover = NULL,
+  M = 4.5
 )
 }
 \arguments{
@@ -27,9 +31,24 @@ write_gating_ml(
 
 \item{x_col, y_col}{columns holding the vertex coordinates}
 
-\item{n_per_edge}{edge subdivision passed to \code{\link[=polygon_to_linear]{polygon_to_linear()}}}
+\item{n_per_edge}{edge subdivision passed to \code{\link[=polygon_to_linear]{polygon_to_linear()}}, for
+\code{space = "linear"}}
 
-\item{channel_map}{optional named character vector, marker symbol to channel}
+\item{channel_map}{optional named character vector, marker symbol to the
+files' \verb{$PnN}; required with \code{compensation_ref = "supplied"}}
+
+\item{space}{"transformed" (default where the transform has a Gating-ML
+form) or "linear"}
+
+\item{compensation_ref}{"FCS" (default), "uncompensated" or "supplied"; see
+above}
+
+\item{spillover}{for \code{compensation_ref = "supplied"}, the spillover matrix
+the files were compensated with, the files' \verb{$PnN} as its column names
+(see \code{\link[=gating_ml_spillover]{gating_ml_spillover()}})}
+
+\item{M}{decades for the Gating-ML asinh parameters. Any positive value
+states the same transform; 4.5 matches the logicle default.}
 }
 \value{
 \code{path}, invisibly, or NULL when there was nothing to write
@@ -41,14 +60,40 @@ than a bag of regions: software reading it applies them in the order they were
 learned, on the cells the previous gate kept.
 }
 \details{
-COORDINATES ARE LINEAR AND UNCOMPENSATED-REFERENCED. The gates are emitted in
-the units the FCS file stores, so no transformation element is needed and
-there is nothing for the reader to get wrong. \code{compensation-ref} is declared
-as \code{uncompensated} because cyRAVEN applies the acquisition spillover matrix
-from the file's own keyword block before gating; a reader that applies its own
-compensation on top would be compensating twice.
+COORDINATES ARE ON THE ANALYSIS SCALE by default: one Gating-ML
+transformation per marker (\code{fasinh} for arcsinh, \code{logicle} for logicle)
+and each vertex divided into its units, which states the fitted region
+exactly. \code{space = "linear"} writes the region in the units the FCS file
+stores instead, edges subdivided before inversion.
 
-DIMENSION NAMES ARE MARKER SYMBOLS. cyRAVEN resolves channels through \verb{$PnS},
-so a gate names CD3 rather than the detector. Software keyed on detector names
-needs \code{channel_map} to translate.
+COMPENSATION. A gate drawn on data compensated with the file's own
+\verb{$SPILLOVER} is declared \code{compensation-ref="FCS"}, which tells the reader to
+apply that same matrix; data with no matrix in the file, already unmixed by
+the acquisition software, are declared \code{uncompensated}. The earlier export
+declared every gate \code{uncompensated}, which told readers to gate the stored,
+uncompensated values for gates cyRAVEN had placed on compensated ones.
+Data compensated with a matrix from \code{--spillover} (\code{"supplied"}) carry that
+matrix in the document as a \code{spectrumMatrix}, and each gate dimension it
+compensated references its identifier, as Gating-ML 2.0 section 7 defines:
+\code{"FCS"} would tell the reader to apply each file's own \verb{$SPILLOVER}, the matrix
+the run replaced. A dimension whose detector the matrix does not hold was
+never compensated and is declared \code{uncompensated}.
+
+READING "FCS" WITH flowCore. A reader applying an \code{"FCS"} gate fetches each
+file's \verb{$SPILLOVER} itself. flowCore 2.18 to 2.22, every release up to
+Bioconductor 3.22, stops there on R 4.2 or later ("the condition has length >
+1": \code{getSpilloverFromFlowFrame()} tests \code{class(mySpill) != "matrix"}, and a
+matrix has two classes since R 4.0); the fix (\code{!is(mySpill, "matrix")},
+upstream commit 903b5b3) is in flowCore 2.25 (Bioconductor devel). Checked
+with flowUtils 1.63.0: on a patched 2.18 the three cases apply and count
+exactly the events computed directly.
+
+DIMENSION NAMES. Gating-ML 2.0 names a dimension of an FCS file by its \verb{$PnN}
+(section 4.1), also under \code{"FCS"} (4.2.2), so \code{channel_map} should map each
+marker symbol to the files' \verb{$PnN} (\code{\link[=gating_ml_markers]{gating_ml_markers()}}); without it the
+marker symbols are written, which no FCS file holds as a column name. Under a
+\code{spectrumMatrix} a compensated dimension is named by its fluorochrome
+instead (7.3), here the marker symbol, prefixed \verb{Comp-} where it would equal
+a detector name, which section 7.2 forbids; a detector carrying no marker of
+the run is \verb{Comp-} and its \verb{$PnN}.
 }

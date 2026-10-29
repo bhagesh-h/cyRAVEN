@@ -172,8 +172,7 @@ stats_marker_state <- function(mfi, group_of, reference = NULL,
       for (g in others) {
         a <- vals[[reference]]; b <- vals[[g]]
         if (is.null(a) || is.null(b) || length(a) < min_n || length(b) < min_n) next
-        wt <- try(stats::wilcox.test(a, b, exact = FALSE), silent = TRUE)
-        p <- if (inherits(wt, "try-error")) NA_real_ else wt$p.value
+        p <- rank_sum_p(a, b)
         # Cliff's delta over SAMPLES (not cells). Bounded \co-1 to 1, rank-based, and
         # at single-digit n far more stable than a ratio of means.
         cliff <- mean(outer(b, a, ">")) - mean(outer(b, a, "<"))

@@ -63,12 +63,20 @@ test_that("resampling exposes a threshold that only noise made bimodal", {
 
 test_that("a shallow valley carries more uncertainty than a deep one", {
   # THE CLAIM THE WHOLE FEATURE RESTS ON. Two populations, one cleanly separated
-  # and one barely, must not be reported with the same precision.
-  deep    <- threshold_uncertainty(planted_bimodal(7), B = 60L, seed = 5)
-  shallow <- threshold_uncertainty(planted_bimodal(2.6), B = 60L, seed = 5)
+  # and one barely, must not be reported with the same precision. Precision is
+  # the cells the cut's uncertainty spans, which is what
+  # population_frequency_uncertainty() moves the cut by: across an EMPTY gap the
+  # cut can move a long way and change no cell's label, so its positional
+  # spread alone is not the measure. (This used to compare positional spread,
+  # and passed only because unsmoothed end bins sent the shallow valley's
+  # bootstrap cuts to the ends of the scale, a spread of 1.0 units.)
+  deep_x <- planted_bimodal(7); shallow_x <- planted_bimodal(2.6)
+  deep    <- threshold_uncertainty(deep_x, B = 60L, seed = 5)
+  shallow <- threshold_uncertainty(shallow_x, B = 60L, seed = 5)
   expect_true(is.finite(deep$u_combined))
   expect_true(is.finite(shallow$u_combined))
-  expect_gt(shallow$u_combined, deep$u_combined)
+  spanned <- function(x, u) mean(abs(x - density_valley(x)) < u$u_combined)
+  expect_gt(spanned(shallow_x, shallow), spanned(deep_x, deep))
   # The deep valley is also the one the bootstrap finds every time.
   expect_gt(deep$valley_rate, shallow$valley_rate - 1e-9)
   expect_gt(deep$rel_depth, shallow$rel_depth)

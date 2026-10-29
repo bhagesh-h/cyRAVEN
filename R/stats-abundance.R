@@ -98,8 +98,8 @@ stats_group_comparison <- function(freq, group_of, reference = NULL, min_n = 3L,
     for (g in others) {
       a <- vals[[reference]]; b <- vals[[g]]
       if (is.null(a) || is.null(b) || length(a) < min_n || length(b) < min_n) next
-      wt <- try(stats::wilcox.test(a, b, exact = FALSE), silent = TRUE)
-      p <- if (inherits(wt, "try-error")) NA_real_ else wt$p.value
+      # Exact, ties included: see R/rank-tests.R for why not exact = FALSE.
+      p <- rank_sum_p(a, b)
       # Report the effect on the scale the reader sees, plus a scale-free version.
       # Cliff's delta (rank-biserial) is bounded \code{[-1, 1]} and is interpretable at
       # small n where a ratio of means is dominated by single outliers.

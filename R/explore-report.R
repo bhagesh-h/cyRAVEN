@@ -99,11 +99,12 @@ write_explore_report <- function(ex_dir, opt = NULL) {
 
   secs <- c(secs, list(report_section(ex_dir, "e2",
     "Quality control, decided from the data",
-    paste("Explore mode embeds every event it is given, and on ungated whole",
-          "blood most events are not leukocytes. The gate works on whole",
-          "clusters rather than events: cluster coarsely, then judge each",
-          "cluster by its marker profile. Read the `call` and `basis` columns",
-          "before anything else -- a run whose gate went wrong produces",
+    paste("Explore mode draws single cells from inside the scatter and",
+          "singlet gates and applies no CD45 or viability gate of its own, so",
+          "dead cells and non-leukocytes are still among them. The gate works",
+          "on whole clusters rather than events: cluster coarsely, then judge",
+          "each cluster by its marker profile. Read the `call` and `basis`",
+          "columns before anything else -- a run whose gate went wrong produces",
           "internally consistent numbers that are unusable."),
     tables = has("explore_qc_clusters.csv"))))
 

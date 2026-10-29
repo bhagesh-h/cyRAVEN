@@ -17,7 +17,8 @@ clr_frequencies(
 \item{value_col}{the compositional column (percentages)}
 
 \item{populations}{optional restriction to a closed set; defaults to every
-population present, the right closure when they partition CD45+}
+population present, the right closure when they partition CD45+, as the
+table from \code{\link[=exclusive_label_frequencies]{exclusive_label_frequencies()}} does}
 
 \item{delta_frac}{Fraction of the smallest non-zero part used to replace zeros. Default \code{0.65}.}
 }

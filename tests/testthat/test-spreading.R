@@ -124,3 +124,68 @@ test_that("the report consumes no randomness", {
   expect_identical(.Random.seed, before)
   expect_identical(stats::runif(5), expected)
 })
+
+test_that("the spreading matrix recovers a planted coefficient from a single stain", {
+  # A PE single stain: positive and negative beads. Detector B receives
+  # spreading whose variance grows with the PE signal, sigma_B^2 = 50^2 +
+  # k^2 * F, so SS = k.
+  withr::local_seed(12)
+  n <- 20000; k <- 3
+  pos <- c(rep(TRUE, n / 2), rep(FALSE, n / 2))
+  pe <- ifelse(pos, rnorm(n, 40000, 2000), rnorm(n, 0, 60))
+  b  <- rnorm(n, 0, sqrt(50^2 + ifelse(pos, k^2 * 40000, 0)))
+  c3 <- rnorm(n, 0, 50)
+  rd <- list(exprs = cbind(pe, b, c3), marker_cols = c(PE = 1L, B = 2L, C = 3L),
+             channel_names = c("PE.A", "B.A", "C.A"))
+  ssm <- spillover_spreading_matrix(list(pe_stain = rd))
+  expect_identical(unique(ssm$source_detector), "PE.A")
+  expect_equal(ssm$ss[ssm$receiver_detector == "B.A"], k, tolerance = 0.05)
+  expect_lt(ssm$ss[ssm$receiver_detector == "C.A"], 0.3)
+})
+
+test_that("a residual trend between source and receiver is reported", {
+  # Under-compensation: the receiver's negatives rise with the source.
+  withr::local_seed(13)
+  n <- 6000
+  src <- c(rnorm(n / 2, 0, 0.3), rnorm(n / 2, 3, 0.5))
+  rec <- rnorm(n, 0, 0.3) + ifelse(src > 1.5, 0.4 * (src - 3), 0)
+  tm <- cbind(S = src, R = rec)
+  sp <- spreading_pairs(tm, c(S = 1.5, R = 1.5))
+  expect_gt(sp$trend_rho[sp$source == "S" & sp$receiver == "R"], 0.3)
+})
+
+test_that("a negative trend on a heavily spread pair is unresolved, not an error", {
+  # Truncation at the receiver's cut pulls the trend negative wherever the
+  # receiver widens with the source, so a negative trend there is ambiguous.
+  # A positive trend shows against that pull, and a negative one on a receiver
+  # no wider at a given source level has no such explanation; both stay
+  # flagged. C's trend widens its MARGINAL spread (substantial) all the same,
+  # which is why the width at a given source level decides.
+  withr::local_seed(14)
+  n <- 6000
+  mk <- function(slope, sd_pos) {
+    src <- c(rnorm(n / 2, 0, 0.3), rnorm(n / 2, 3, 0.5))
+    pos <- src > 1.5
+    rec <- ifelse(pos, rnorm(n, slope * (src - 3), sd_pos(src)), rnorm(n, 0, 0.3))
+    list(tmat = cbind(S = src, R = rec), thresholds = c(S = 1.5, R = 1.5))
+  }
+  flat <- function(s) function(src) s
+  pops <- list(A = mk(-0.8, flat(0.6)), B = mk(0.8, flat(0.6)),
+               C = mk(-0.8, flat(0.3)),
+               # correct compensation, spread growing with the source past the cut
+               D = mk(0, function(src) 0.3 * (1 + 2 * pmax(src - 1.5, 0))))
+  gates <- lapply(pops, function(p) list(masks = list(cd45_pos = rep(TRUE, n))))
+  pr <- run_spreading_report(pops, gates,
+                             panel_of = c(A = "A", B = "B", C = "C", D = "D"))$pairs
+  sr <- pr[pr$source == "S" & pr$receiver == "R", ]
+  rownames(sr) <- sr$panel
+  expect_true(sr["C", "substantial"])
+  expect_lt(sr["C", "median_ratio_given_source"], 1.25)
+  expect_true(sr["A", "trend_unresolved"])
+  expect_false(sr["A", "possible_compensation_error"])
+  expect_true(sr["B", "possible_compensation_error"])
+  expect_true(sr["C", "possible_compensation_error"])
+  expect_false(any(sr[c("B", "C"), "trend_unresolved"]))
+  expect_lt(sr["D", "median_trend_rho"], 0)
+  expect_false(sr["D", "possible_compensation_error"])
+})

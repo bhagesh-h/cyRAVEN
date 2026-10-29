@@ -13,14 +13,22 @@ log₁₀ FSC-A density. Sub-cellular debris forms a distinct low-scatter mode; 
 minimum between it and intact cells is the boundary.
 
 **Singlets.** Coincident events cross the interrogation point over a longer
-interval than single cells, inflating pulse area relative to height. Events are
-kept within median ± *k*·MAD of the FSC-H:FSC-A ratio computed inside the scatter
-gate. `--singlet-mad-k`, default 3.
+interval than single cells, inflating pulse area relative to height, so their
+FSC-H:FSC-A ratio is low. Events are kept above median − *k*·MAD of that ratio,
+computed inside the scatter gate; one-sided, since a high ratio is no sign of a
+doublet. `--singlet-mad-k`, default 3.
 
 **Viability.** Amine-reactive dyes enter only cells that have lost membrane
 integrity, so dead cells are the bright tail and are excluded at the dye's
 density minimum. Panels without a viability marker skip this gate and the
-omission is logged. `--viability-marker` overrides auto-detection.
+omission is logged. `--viability-marker` overrides auto-detection. The live share
+of single cells is in `staining_qc.csv` (`pct_live_of_singlets`), and
+`--min-live-pct` fails samples below the assay's minimum; there is no default
+because no published one exists. A mostly dead sample reads as mostly live,
+since the dye's tallest mode is then the dead cells; `pct_live_if_dominant_dead`
+gives the live share for that case where the dye has a minimum below its
+dominant mode (a second live mode near zero, common on whole blood, produces one
+too: check the dye's plot).
 
 **CD45.** Leukocytes are selected on CD45, expressed across haematopoietic
 lineages and absent from erythrocytes and platelets. Where CD45 is not in the
@@ -47,13 +55,30 @@ evaluated and the threshold placed at the minimum separating negative from
 positive. The resolution order is fixed:
 
 1. **`config`**: an explicit value in the YAML always wins.
-2. **`valley`**: the density minimum. A valley falling *below* the
-   control-derived value is rejected, because it sits inside the background
+2. **`valley`**: the density minimum. It counts only where it is at least 30%
+   as deep as the lower of its two peaks and the density falls significantly
+   into it and rises significantly out of it, each slope judged against
+   counting noise (SiZer-style, Bonferroni-corrected 5%), so the sparse tail of
+   a single mode or a flat shoulder does not produce one. A valley falling *below*
+   the control-derived value is rejected, because it sits inside the background
    distribution and would call noise positive.
 3. **`control_q995`**: the 99.5th percentile of an unstained control tube, where
    one is declared through `is_control` in the sample map. This is the path for
    unimodal markers.
-4. **`quantile_fallback`**: a fixed quantile, flagged `needs_review`.
+4. **`tailgate`**: no minimum and no control. The cut sits 3.5 robust standard
+   deviations above the dominant mode, which it takes to be the negative one.
+   Flagged `needs_review`. A marker most of the parent carries, with no
+   minimum, is cut above its positive mode and reads near 0%: declare its cut
+   under `thresholds:`, give the population a `parent:` in which it separates,
+   or declare the side (`thresholds: CD127: {tail: lower}`, as openCyto's
+   `side` argument does). The side is not guessed from the distance to zero, because
+   autofluorescence and spillover spread lift negative modes there too. The
+   spread is the smaller of the mirrored lower half's MAD and the mode's own
+   half-maximum width on the cut side, so a second negative hump (monocytes
+   and lymphocytes with different background, as on PBMC) does not widen it.
+5. **`quantile_fallback`**: a fixed quantile, only where no tail gate can be
+   placed, flagged `needs_review`. It calls the same share positive in every
+   sample, which is why it is the last resort.
 
 Two further sources exist. **`manual`** is a per-sample override declared in the
 config's `sample_overrides:` block, carrying `reason` and `set_by`; it outranks
@@ -64,7 +89,11 @@ map's `fmo_for` column, which is the better reference because an FMO shows the
 negative population under the spillover the real samples experience.
 **`fmm_q995`** marks a tube that leaves out several reagents at once: the other
 missing fluorochromes are not spreading into the channel either, so its negative
-is narrower than a true FMO's and the cut it anchors is permissive.
+is narrower than a true FMO's and the cut it anchors is permissive. A
+**`control_q995`** cut from an unstained tube is permissive for the same reason,
+on every channel that receives spreading. Under `--fmo-sets-cut` a true FMO also
+lowers a valley that sits above it (`fmo_q995_valley_lowered`), so dim positives
+between the FMO's edge and the valley count as positive.
 
 A control-anchored cut keeps the bare source name where the parent indicated no
 cut at all, and gains `_valley_rejected` where it did and the control put the
@@ -111,7 +140,7 @@ discarding signal and one below is calling spillover positive.
 
 `thresholds_used.csv`, one row per sample per marker.
 
-`source` is a three-valued summary of *how* the cut was obtained. A
+`source` summarises *how* the cut was obtained. A `tailgate` or
 `quantile_fallback` means the marker did not separate positive from negative in
 that sample. Frequencies from a fallback are not invalid, but they carry no
 evidence of separation. **A marker that falls back across most samples is not
@@ -183,6 +212,24 @@ intermediate CD14⁺CD16⁺, non-classical CD14^dim.
       CD56: above
       CD16: above
 ```
+
+`parent:`: a reserved key naming another population. This population's own
+markers are cut on the parent's events rather than across all CD45⁺ cells
+(openCyto's hierarchy), the parent's conditions are inherited, and the cuts go
+to `thresholds_within_parents.csv`. A parent under 200 events in a sample leaves
+its children UNAVAILABLE there.
+
+```yaml
+  Tregs:
+    parent: CD4 T cells
+    CD25: above
+    CD127: below
+```
+
+It is the right tool where the subset is a minority of the parent (Tregs in CD4
+T cells). Where the parent is mostly positive for the marker, check
+`thresholds_within_parents.csv`: monocyte subsets cut within monocytes scored
+worse against manual gating on one whole-blood cohort than the CD45⁺ cuts.
 
 Scatter channels work like any other marker. `SSC-A: above` is how granulocytes
 are declared, since dense cytoplasmic granules scatter light strongly and no
@@ -271,11 +318,24 @@ lands.
 ### arcsinh: the default
 
 The cofactor sets the width of the quasi-linear region near zero and is estimated
-per panel by bisection until the background interquartile range reaches a target.
-The conventional value of 5 comes from mass cytometry and over-expands the
-background band on spectrally unmixed fluorescence data, so it is estimated
-rather than assumed. `derive_cofactor_pooled()` estimates across samples so one
-weakly stained file does not set the scale for the batch.
+per panel by bisection until the background interquartile range reaches a target,
+about 1.6 standard deviations of a negative population (a heuristic, not a
+published criterion). The conventional value of 5 comes from mass cytometry and
+over-expands the background band on spectrally unmixed fluorescence data, so it
+is estimated rather than assumed. `derive_cofactor_pooled()` estimates across
+samples so one weakly stained file does not set the scale for the batch, and on
+scatter-gated single cells so debris does not set it
+(`--cofactor-from-all-events` restores the older estimate).
+
+`--per-marker-cofactor` gives each marker its own cofactor from its negative
+population (values below zero, mirrored), the per-channel scale the literature
+recommends. Opt-in: it changes every cut. Against manual gating on one
+whole-blood cohort it ranked samples no better (mean ρ 0.64 for both), with
+larger worst-sample errors and one more staining-QC failure, and on a PBMC
+cohort it emptied CD4 T cells in 3 of 30 samples and regulatory T cells and NKT
+cells in 6 each. `--transform logicle`, per channel too, scored the same as the
+shared cofactor on the whole-blood cohort and emptied regulatory T cells in 4
+PBMC samples against 1.
 
 `--cofactor` fixes it. `--cofactor-from-first-sample` restores the older
 single-file derivation.
@@ -286,8 +346,10 @@ single-file derivation.
 *w* = (*m* - log₁₀(*t*/|*r*|))/2, where *r* is the fifth percentile of the
 negative population. `--logicle-m` sets the decades, default 4.5.
 
-The quasi-linear region near zero accommodates compensated negative values, which
-arcsinh cannot represent.
+Both transforms are linear near zero and both represent compensated negative
+values; arcsinh is defined for every real number. What logicle adds is a linear
+region whose width is fitted per channel to that channel's negatives. Its top of
+scale *t* is the channel's declared range, not the brightest event sampled.
 
 **Parameters are pooled across the panel, not fitted per file.** Per-file fitting,
 which some tools do, gives each sample an independent scale and invalidates
@@ -327,13 +389,17 @@ the single-stain controls can be inspected.
 
 ## 6. Gates out
 
-`--export-gates` writes learned gate geometry as ISAC Gating-ML 2.0 plus a table
-of vertices, both in the linear units the FCS file stores, so they can be
-executed at the instrument or read by Cytobank, FlowRepository or FlowJo.
+`--export-gates` writes learned gate geometry as ISAC Gating-ML 2.0, on the
+analysis scale through its declared `fasinh` or `logicle` transformation, each
+dimension named by the files' `$PnN` (a `--spillover` matrix is written into the
+file and its compensated dimensions named by their markers), so it can be
+executed at the instrument or read by Cytobank, FlowRepository or FlowJo. A
+table of vertices in the linear units the FCS file stores sits beside it.
 
-Polygon edges are subdivided before inversion. An edge that is straight on the
-analysis scale is a curve in linear units, so inverse-transforming only the
-corners would emit a different region from the one that was fitted and validated.
+In that table polygon edges are subdivided before inversion. An edge that is
+straight on the analysis scale is a curve in linear units, so inverse-transforming
+only the corners would emit a different region from the one that was fitted and
+validated.
 
 The reverse direction is absent: cyRAVEN does not read gates from a FlowJo `.wsp`
 workspace. Writing Gating-ML directly needs no dependency; parsing a proprietary

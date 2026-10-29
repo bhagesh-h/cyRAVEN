@@ -57,16 +57,27 @@
 #' degenerates to a log transform, which is the right answer rather than a
 #' failure.
 #'
+#' WHY T IS THE CHANNEL'S RANGE AND NOT ITS MAXIMUM. T is "the top of scale"
+#' (Moore & Parks 2012): a property of the instrument, the same for every file
+#' acquired on it. The largest event in a sample is a property of that sample,
+#' so a scale topped by it moves whenever one bright cell is or is not sampled,
+#' and with it the width `w` and every cut on the channel. `t_range` is the
+#' channel's `$PnR`, linearised where the channel was log-amplified (see
+#' [linearise_channels()]); the data maximum is used only where no trustworthy
+#' range was declared.
+#'
 #' @param x numeric vector of raw intensities for one marker
 #' @param m decades on the display scale
 #' @param a additional negative decades to display
 #' @param neg_q quantile of the negative values used as `r`
+#' @param t_range top of the channel's declared range, or NA. Default NA.
 #' @return list(w, t, m, a)
 #' @keywords internal
-logicle_params_one <- function(x, m = 4.5, a = 0, neg_q = 0.05) {
+logicle_params_one <- function(x, m = 4.5, a = 0, neg_q = 0.05, t_range = NA_real_) {
   x <- x[is.finite(x)]
   if (!length(x)) return(list(w = 0.5, t = 262144, m = m, a = a))
-  t <- max(x, na.rm = TRUE)
+  t <- if (length(t_range) == 1L && is.finite(t_range) && t_range > 0) t_range
+       else max(x, na.rm = TRUE)
   if (!is.finite(t) || t <= 0) t <- 262144
   neg <- x[x < 0]
   if (!length(neg)) return(list(w = 0, t = t, m = m, a = a))
@@ -135,7 +146,15 @@ derive_logicle_pooled <- function(reads, sids, markers = NULL, m = 4.5, a = 0,
       v
     }), use.names = FALSE)
     if (!length(vals)) next
-    out[[mk]] <- logicle_params_one(vals, m = m, a = a)
+    # The widest declared range among the files pooled, so no file's data sit
+    # above the top of the shared scale.
+    tops <- vapply(from, function(s) {
+      rd <- reads[[s]]
+      if (!has_mk(s, mk) || is.null(rd$channel_range)) return(NA_real_)
+      as.numeric(rd$channel_range[rd$marker_cols[[mk]]])
+    }, numeric(1))
+    t_rng <- if (all(is.finite(tops))) max(tops) else NA_real_
+    out[[mk]] <- logicle_params_one(vals, m = m, a = a, t_range = t_rng)
   }
   if (!length(out)) return(NULL)
   attr(out, "n_samples_pooled") <- length(use)
@@ -154,10 +173,13 @@ derive_logicle_pooled <- function(reads, sids, markers = NULL, m = 4.5, a = 0,
 #' @param cofactor arcsinh cofactor (required for method = "arcsinh")
 #' @param logicle named list of per-marker parameters from
 #'   [derive_logicle_pooled()] (required for method = "logicle")
+#' @param per_marker named numeric vector of arcsinh cofactors by marker, or
+#'   NULL. A marker named here is transformed with its own cofactor; any other,
+#'   and scatter, with `cofactor`. See [derive_cofactor()].
 #' @return list(method, fn, params, label)
 #' @export
 make_transform <- function(method = c("arcsinh", "logicle", "none"),
-                           cofactor = NULL, logicle = NULL) {
+                           cofactor = NULL, logicle = NULL, per_marker = NULL) {
   method <- match.arg(method)
 
   if (method == "arcsinh") {
@@ -165,10 +187,19 @@ make_transform <- function(method = c("arcsinh", "logicle", "none"),
       stop("arcsinh needs a positive cofactor, got: ",
            paste(utils::capture.output(str(cofactor)), collapse = " "),
            call. = FALSE)
-    return(list(method = "arcsinh", params = list(cofactor = cofactor),
+    if (!is.null(per_marker)) {
+      per_marker <- per_marker[is.finite(per_marker) & per_marker > 0]
+      if (!length(per_marker)) per_marker <- NULL
+    }
+    cof <- function(marker)
+      if (!is.null(marker) && !is.null(per_marker) && marker %in% names(per_marker))
+        per_marker[[marker]] else cofactor
+    return(list(method = "arcsinh",
+                params = list(cofactor = cofactor, per_marker = per_marker),
                 label = "asinh intensity",
-                fn = function(x, marker = NULL) asinh(x / cofactor),
-                inv = function(y, marker = NULL) sinh(y) * cofactor))
+                cofactor_of = cof,
+                fn = function(x, marker = NULL) asinh(x / cof(marker)),
+                inv = function(y, marker = NULL) sinh(y) * cof(marker)))
   }
 
   if (method == "none")

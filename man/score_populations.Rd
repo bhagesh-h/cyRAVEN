@@ -10,7 +10,8 @@ score_populations(
   parent,
   spec = default_population_spec(),
   hi_thr = NULL,
-  quiet = FALSE
+  quiet = FALSE,
+  scoped = NULL
 )
 }
 \arguments{
@@ -35,6 +36,11 @@ from there it produced 2,120 of 2,399 log lines on a 20-sample run, 88\% of
 the log saying one of two things, which buries the NOTEs that do differ
 between samples. Callers that score once leave it FALSE and see it once per
 sample; callers that score in a loop pass TRUE.}
+
+\item{scoped}{Cuts derived within parent populations, from
+\code{\link[=derive_scoped_cuts]{derive_scoped_cuts()}}, or NULL. Used for every marker the specification's
+\code{cut_scope} attribute (see \code{\link[=resolve_population_parents]{resolve_population_parents()}}) places within a
+parent; without it those markers fall back to the CD45+ cut.}
 }
 \value{
 list(masks, labels, unavailable)

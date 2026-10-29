@@ -89,13 +89,13 @@ test_that("parametric_group_tests records assumptions and does not hide a failur
   res <- cyRAVEN:::parametric_group_tests(freq, g, reference = "ctrl")
   expect_equal(nrow(res), 1L)
   expect_equal(res$primary_test, "Welch's t-test")
-  expect_equal(res$transform, "arcsine sqrt")
+  expect_equal(res$transform, "logit")
   expect_lt(res$p_value, 0.05)
 
   # Both assumption checks are present on the row, whatever they say.
   expect_true(all(c("shapiro_p", "brown_forsythe_p", "residuals_normal",
                     "equal_variance", "assumptions_met") %in% names(res)))
-  # Means are reported on the percentage scale, not the arcsine scale, because
+  # Means are reported on the percentage scale, not the logit scale, because
   # nobody can interpret the latter.
   expect_gt(res$mean_reference_pct, 10)
   expect_lt(res$mean_reference_pct, 40)
@@ -164,4 +164,26 @@ test_that("ignore_channel_match matches whole names and globs, not substrings", 
   expect_equal(sum(cyRAVEN:::ignore_channel_match(sym, c("CD3", "CD16"))), 2L)
   expect_false(any(cyRAVEN:::ignore_channel_match(sym, NULL)))
   expect_false(any(cyRAVEN:::ignore_channel_match(sym, "")))
+})
+
+test_that("the logit stays finite at 0% and 100%, and is symmetric about 50%", {
+  l <- cyRAVEN:::logit_pct(c(0, 2, 50, 98, 100))
+  expect_true(all(is.finite(l)))
+  expect_equal(l[3], 0)
+  expect_equal(l[2], -l[4])
+  expect_equal(l[1], -l[5])
+})
+
+test_that("a concentration is log-transformed, not treated as a percentage", {
+  # The arcsine path read 250 and 900 cells/uL both as 100%.
+  set.seed(2)
+  freq <- data.frame(sample_id = paste0("s", 1:12), population = "NK cells",
+                     pct_of_cd45_pos = runif(12, 5, 10),
+                     cells_per_ul = c(rlnorm(6, log(250), 0.2), rlnorm(6, log(900), 0.2)),
+                     stringsAsFactors = FALSE)
+  g <- setNames(rep(c("ctrl", "case"), each = 6), freq$sample_id)
+  res <- cyRAVEN:::parametric_group_tests(freq, g, reference = "ctrl")
+  expect_equal(res$measure, "cells_per_ul")
+  expect_equal(res$transform, "log")
+  expect_lt(res$p_value, 0.001)
 })

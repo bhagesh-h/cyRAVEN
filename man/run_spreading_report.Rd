@@ -10,7 +10,8 @@ run_spreading_report(
   thr_all = NULL,
   panel_of = NULL,
   max_samples = 8L,
-  flag_ratio = 1.25
+  flag_ratio = 1.25,
+  trend_flag = 0.3
 )
 }
 \arguments{
@@ -27,6 +28,13 @@ long before every sample is used}
 
 \item{flag_ratio}{spreading ratio at or above which a pair is called
 substantial}
+
+\item{trend_flag}{absolute rank correlation at or above which a pair is
+flagged as a possible compensation or unmixing error. Default 0.3, a
+conventional moderate correlation, not a validated cut. A negative trend
+on a pair whose receiver is \code{flag_ratio} times wider at a given source
+level is reported as \code{trend_unresolved} instead, since truncation at the
+receiver's cut produces one from spreading alone.}
 }
 \value{
 list(pairs, receivers), each a data.frame, or NULL

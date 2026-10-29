@@ -173,3 +173,23 @@ test_that("an assigned table with no marker column is refused with a reason", {
                                     data.frame(p1 = 1, p2 = 2)),
                "marker")
 })
+
+test_that("a bead file without stain names is mapped to the samples by detector", {
+  # The bead file resolves its channels to detector names; the samples resolve
+  # the same detector to the marker it carries. Matching on marker names, as
+  # before, mapped nothing.
+  peaks <- c(500, 5000, 50000, 200000)
+  b <- synth_beads(peaks)
+  assigned <- data.frame(marker = "FITC-A", p1 = 1000, p2 = 10000, p3 = 1e5,
+                         p4 = 4e5, stringsAsFactors = FALSE)
+  cal <- fit_bead_calibration(b, c(FITC.A = 1L, PE.A = 2L), assigned,
+                              channel_names = c("FITC.A", "PE.A"))
+  expect_identical(cal$verdict, "calibrated")
+  expect_identical(cal$channel, "FITC.A")
+  sample_ex <- cbind(c(1, 2), c(500, 5000))
+  out <- apply_bead_calibration(sample_ex, c(CD4 = 1L, CD3 = 2L), cal,
+                                channel_names = c("PE.A", "FITC.A"))
+  expect_identical(out$applied, "FITC-A")
+  expect_equal(out$exprs[, 2], c(1000, 10000), tolerance = 0.05 * 10000)
+  expect_identical(out$exprs[, 1], sample_ex[, 1])
+})

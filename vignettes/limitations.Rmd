@@ -44,7 +44,7 @@ no error raised and no warning printed.
 `thresholds_used.csv`. If `source` reads `control_q995` on most markers, those
 thresholds came from a reference. Find out which sample supplied it before
 reading a single frequency. A cohort that declares no control should show
-`valley` and `quantile_fallback` only.
+`valley`, `tailgate` and `quantile_fallback` only.
 
 Fixed. `--discover-controls` restores the old behaviour for anyone who needs it.
 
@@ -307,8 +307,8 @@ decision too, and this is where it is written down.
 
 | Method | What it adds that cyRAVEN lacks | Licence |
 |---|---|---|
-| [staRgate](https://bioconductor.org/packages/release/bioc/html/staRgate.html) | Gates a marker against a *unimodal background* population rather than a density minimum. That is exactly the case cyRAVEN currently sends to `quantile_fallback`, and on a 29-marker panel across 266 subpopulations it matched manual gating at 0.97 concordance | MIT |
-| [CompensAID](https://www.bioconductor.org/packages/release/bioc/html/CompensAID.html) | Flags a bad single-stain control by segmenting the positive population and testing the Secondary Stain Index per segment. cyRAVEN reports how far spillover spreads and never asks whether the reference was wrong | GPL-3 |
+| [staRgate](https://bioconductor.org/packages/release/bioc/html/staRgate.html) | Gates a marker against a *unimodal background* population rather than a density minimum. That is the case cyRAVEN gives a tail gate, a fixed 3.5 robust standard deviations above the dominant mode and flagged for review, and on a 29-marker panel across 266 subpopulations it matched manual gating at 0.97 concordance | MIT |
+| [CompensAID](https://www.bioconductor.org/packages/release/bioc/html/CompensAID.html) | Flags, in the stained sample, marker pairs whose source-positive population is skewed in the receiver, the mark of a wrong reference control: it segments that population and flags the pair when the last segment's Secondary Stain Index is below -1, a rule validated against specialists. cyRAVEN's `trend_rho` screens the same region with an unvalidated cut | GPL-3 |
 | [CytoScan](https://www.biorxiv.org/content/10.1101/2025.09.24.678276v1) | Between-file anomaly detection, including novelty against a locked reference set. cyRAVEN's acquisition QC is within-file, so a whole tube that is unlike its cohort passes | preprint |
 | [CytoMDS](https://onlinelibrary.wiley.com/doi/10.1002/cyto.a.24921) | Attributes a batch separation back to the channels that caused it. cyRAVEN's EMD says a batch differs; this says which markers made it differ | GPL-3 |
 | [Rajwa & Roederer 2025](https://onlinelibrary.wiley.com/doi/10.1002/cyto.a.24972) | Effective rank, information efficiency and the Cramer-Rao lower bound matrix, all computable from the spillover matrix already parsed. Not software -- three formulas and a vocabulary that makes the existing QC legible to a reviewer | paper |

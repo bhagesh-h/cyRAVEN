@@ -268,8 +268,8 @@ it runs or not.
 instance, and `gate_transferability()` then refits the strategy with one donor
 withheld and scores it on that donor. Held-out events come from the same donors
 and overstate how well a gate travels; the per-donor minimum does not.
-`--export-gates` writes the result as Gating-ML 2.0 in the units the FCS file
-stores.
+`--export-gates` writes the result as Gating-ML 2.0 on the scale it was fitted
+on, and as a vertex table in the units the FCS file stores.
 
 #### 10 Report
 
@@ -281,8 +281,8 @@ expensive stages and rewritten at completion, so an interrupted run records
 
 #### 10a Explore
 
-`--explore` runs a second, independent analysis over every event and every
-eligible channel, writing to `<outdir>/explore/` and leaving stages 1 to 10
+`--explore` runs a second, independent analysis over the single cells of every
+file (scatter and singlet gates only) and every eligible channel, writing to `<outdir>/explore/` and leaving stages 1 to 10
 untouched. It has its own quality gate, its own embedding and clustering, and its
 own self-contained report. `--explore-only` runs it without stages 2 to 10 at
 all. See [Explore mode](advanced.html#explore-mode-unsupervised-discovery).
