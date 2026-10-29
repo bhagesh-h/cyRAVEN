@@ -377,14 +377,21 @@ boundary.
 
 **1.2 Singlets.** Coincident events traverse the interrogation point over a
 longer interval than single cells, producing a pulse whose area is inflated
-relative to its height. Events are retained within median ± *k*·MAD of the
-FSC-H:FSC-A ratio computed inside the scatter gate, with *k* set by
-`--singlet-mad-k` (default 3).
+relative to its height, so they have a low FSC-H:FSC-A ratio. Events are
+retained above median − *k*·MAD of that ratio, computed inside the scatter gate,
+with *k* set by `--singlet-mad-k` (default 3). The gate is one-sided: a high
+ratio is no sign of a doublet.
 
 **1.3 Viability.** Amine-reactive viability dyes penetrate only cells whose
 membrane integrity has been lost. Dead cells are excluded at the density minimum
-of the dye channel. Panels without a viability marker skip this gate, and the
-omission is logged.
+of the dye channel above the live cells' mode, or at a tail gate above that mode
+where there is none. Panels without a viability marker skip this gate, and the
+omission is logged. Each sample's live share of single cells is reported in
+`staining_qc.csv`; `--min-live-pct` fails samples below the assay's minimum.
+Where the dye also has a minimum below its dominant mode, the share below it is
+reported too (`pct_live_if_dominant_dead`): the live share if the dominant mode
+is the dead cells, which the gate cannot tell from a second live mode near
+zero.
 
 **1.4 CD45.** Leukocytes are selected on CD45, which is expressed across
 haematopoietic lineages and absent from erythrocytes and platelets. Where CD45 is
@@ -421,12 +428,26 @@ determine how far a downstream frequency can be trusted.
 
 `threshold` is the value applied.
 
-`source` is `valley` where a density minimum was resolved and
-`quantile_fallback` where none existed. A fallback indicates that the marker did
-not separate positive from negative events in that sample. Frequencies derived
-from a fallback threshold are not invalid, but they carry no evidence of
-separation. A marker falling back across the majority of samples is not
-resolving in that panel, and no gating strategy will recover it.
+`source` is `valley` where a density minimum was resolved and `tailgate` where
+none existed: the cut then sits 3.5 robust standard deviations above the
+sample's dominant mode. The spread is the smaller of the MAD of the mirrored
+half below the mode and the mode's half-width at half maximum on the cut side,
+so neither a positive shoulder nor a second negative hump (monocytes and
+lymphocytes on PBMC) widens it. openCyto's `gate_tail` handles the same
+single-mode case by cutting where the density's slope flattens (Finak et al.
+2014); the two agree on a normal negative. The rule assumes that mode is the
+negative population. A single mode cannot confirm it, since autofluorescence
+and spillover spread lift negative modes well above zero signal too, so a
+marker carried by most of its parent, with no density minimum, needs a cut
+declared under `thresholds:`, a `parent:` in which it separates, or the side
+declared as openCyto's `side` argument does: `thresholds: CD127: {tail: lower}`
+puts the tail gate below the dominant mode, taken to be the positive
+population. `quantile_fallback`, a fixed percentile, remains only where no tail
+gate can be placed. Either indicates that the marker did not separate positive
+from negative events in that sample. Frequencies derived from a fallback
+threshold are not invalid, but they carry no evidence of separation. A marker
+falling back across the majority of samples is not resolving in that panel, and
+no gating strategy will recover it.
 
 `threshold_scale_qc.csv` reports, per panel and marker, the median threshold
 across samples and the robust *z* of each deviation from it. Thresholds flagged
@@ -584,6 +605,25 @@ derived from a second density minimum within the positive fraction. Where no
 second minimum exists the population is reported UNAVAILABLE rather than being
 merged into the bright fraction.
 
+`parent:` names another population, and the population's own markers are then
+cut on that parent's events instead of across every CD45<sup>+</sup> cell, as a
+gating template derives each gate on its parent (Finak et al. 2014). A cut
+across all leukocytes sits wherever the dominant lineages put a valley; the
+consensus regulatory T cell gate is CD25<sup>+</sup>CD127<sup>lo</sup> within
+CD4<sup>+</sup> T cells (Santegoets et al. 2015):
+
+```yaml
+  Tregs:
+    parent: CD4 T cells
+    CD25: above
+    CD127: below
+```
+
+The parent's conditions are inherited, so they are not repeated. The cuts are
+written to `thresholds_within_parents.csv`; a parent holding fewer than 200
+events in a sample gives no cut, and its children are UNAVAILABLE there rather
+than cut on a handful of cells.
+
 #### 3.3 Construction
 
 1. Enumerate the panel. `thresholds_used.csv` from any run lists every resolved
@@ -697,18 +737,42 @@ choice of transform determines where it lands.
 
 The default. The cofactor governs the width of the quasi-linear region near zero
 and is estimated per panel by bisection until the interquartile range of the
-background distribution reaches a target. The conventional value of 5 derives
+background distribution reaches a target, which puts it near 1.6 standard
+deviations of a negative population: just wider than the negatives, the
+condition under which a symmetric negative population stays one mode. This is a
+heuristic rather than a published criterion. The conventional value of 5 derives
 from mass cytometry and over-expands the background band on spectrally unmixed
 fluorescence data, so it is estimated rather than assumed.
 `derive_cofactor_pooled()` estimates across samples so that a single weakly
-stained file does not set the scale for the batch.
+stained file does not set the scale for the batch, and on the scatter-gated
+single cells rather than every event, so debris does not set the background
+(`--cofactor-from-all-events` restores the older estimate).
+
+One cofactor serves every marker by default. Detectors differ many-fold in how
+wide their negatives are, and a cofactor per channel is the published
+recommendation for flow data (den Braanker et al. 2021; Azad et al. 2016).
+`--per-marker-cofactor` gives each marker its own, estimated by the same
+criterion on that marker's negative population, reconstructed from its values
+below zero. It is not the default. On a whole-blood cohort scored against
+manual gating it ranked samples no better (mean Spearman ρ 0.64 for both), its
+worst-sample errors were larger and one more file failed staining QC, and on a
+PBMC cohort it emptied CD4 T cells in 3 of 30 samples and regulatory T cells and
+NKT cells in 6 each. Logicle, which fits its width per channel, scored the same
+as the shared cofactor on the whole-blood cohort and emptied regulatory T cells
+in 4 of the PBMC samples against 1. A small
+per-channel cofactor stretches the background differences between cell types,
+which leaves more markers without a density minimum.
 
 #### 4.3 Logicle
 
 `--transform logicle` implements the automatic logicle rule with linearisation
 width *w* = (*m* - log<sub>10</sub>(*t*/|*r*|))/2, where *r* is the fifth
-percentile of the negative population. The quasi-linear region near zero
-accommodates compensated negative values, which arcsinh cannot represent.
+percentile of the negative values and *t* the top of the channel's declared
+range. Both transforms are linear near zero and both represent compensated
+negative values; arcsinh is defined for every real number and is a Gating-ML
+scale like logicle (Spidlen et al. 2015). What logicle adds is that the width of
+its linear region is fitted per channel to that channel's negatives (Parks et
+al. 2006), which arcsinh does only under `--per-marker-cofactor`.
 
 Parameters are pooled across the panel. Per-file fitting, implemented by some
 tools, assigns each sample an independent scale and invalidates cross-sample
@@ -756,7 +820,7 @@ on average. What the subtraction cannot remove is the photon-counting variance
 that came with the contribution, so a channel receiving spillover from a bright
 neighbour has a negative population that is correctly centred and abnormally
 wide. Two modes that were separable merge, the valley fills in, and section 2.3
-reports `quantile_fallback` with no indication of why.
+reports a tail gate (`tailgate`) with no indication of why.
 
 `spreading_receivers.csv` supplies the cause. For each ordered channel pair, the
 spread of the receiver's negative population is compared between cells negative
@@ -765,14 +829,26 @@ makes this spreading rather than biology, since co-expression moves the positive
 cells and not the width of the negatives. `spreading_pairs.csv` holds the full
 pairwise ranking.
 
-The finding to act on is the join between the two: a marker that both falls back
-to a quantile in most samples and receives substantial spreading is reported as a
-panel design problem. No gating strategy recovers a cut that spreading has
+The finding to act on is the join between the two: a marker that both shows no
+density minimum in most samples and receives substantial spreading is reported as
+a panel design problem. No gating strategy recovers a cut that spreading has
 erased.
 
 This is a ranking computed from the samples in hand, not a spillover spreading
-matrix. The published SSM is derived from single-stain controls, which this
-package is not given, and the values here are not comparable with it.
+matrix. The published SSM is derived from single-stain controls, and the values
+here are not comparable with it; given those controls with `--single-stains`,
+the package computes it (`spillover_spreading_matrix.csv`).
+
+`spreading_pairs.csv` also screens for compensation errors. Correct compensation
+leaves the receiver's median where it is as the source brightens, so
+`trend_rho`, the rank correlation between the two among source-positive cells
+negative for the receiver, is flagged `possible_compensation_error` at 0.3 or
+more in size, a conventional cut rather than a validated one. A negative trend on
+a pair whose receiver is also wider at a given source level is reported as
+`trend_unresolved` instead: the screen reads only cells below the receiver's
+cut, and brighter source cells, with the wider receiver distribution, lose more
+of it to that cut, which pulls the trend negative with compensation correct.
+Single-stain controls decide such a pair.
 
 ## Commands and every option
 
@@ -1056,11 +1132,11 @@ D="-v $PWD/data:/data:ro \
 
 or write the two `-v` flags out in full, as in Part 1.
 
-##### Most thresholds fell back to a quantile
+##### Most thresholds found no density minimum
 
-`thresholds_used.csv` shows `source = quantile_fallback` on most rows. The marker
-did not separate positive from negative, so the cut carries no evidence of
-separation. Try the transform first, because for dim markers it decides whether a
+`thresholds_used.csv` shows `source = tailgate` (or `quantile_fallback`) on most
+rows. The marker did not separate positive from negative, so the cut carries no
+evidence of separation. Try the transform first, because for dim markers it decides whether a
 stable threshold exists at all.
 
 ```bash
@@ -1318,8 +1394,14 @@ docker run --rm $D \
   --outdir /results
 ```
 
-`--export-gates` writes ISAC Gating-ML 2.0 plus a vertex table, in the linear
-units the FCS file stores, so the polygon describes the same region the fit did.
+`--export-gates` writes ISAC Gating-ML 2.0 on the scale the gates were fitted
+on, through its `fasinh` or `logicle` transformation, with each dimension named
+by the files' `$PnN`; and a vertex table in the linear units the FCS file
+stores, edges subdivided so the polygon describes the same region the fit did.
+To apply a file whose gates reference the files' own compensation
+(`compensation-ref="FCS"`) with flowCore and flowUtils, use flowCore 2.25 or
+later: releases 2.18 to 2.22 stop on R 4.2 or later when they read a
+`$SPILLOVER` keyword ("the condition has length > 1").
 `--flowjo-export` writes UMAP-annotated FCS: open `_ALL_SAMPLES.fcs`, plot UMAP-1
 against UMAP-2, and the populations are there as channels.
 
@@ -1562,27 +1644,35 @@ the panel split.
 | `--transform` | `arcsinh` | `arcsinh`, `logicle` or `none`. **Consequential**: it moves every threshold. For dim markers it decides whether a stable threshold exists at all |
 | `--cofactor` | derived per panel | Fixed arcsinh cofactor. The conventional value of 5 comes from mass cytometry and over-expands the background band on unmixed fluorescence, which is why it is estimated rather than assumed |
 | `--cofactor-from-first-sample` | off | Derive the cofactor from the first file only, as before pooling was introduced |
+| `--per-marker-cofactor` | off | One arcsinh cofactor per marker, from the spread of that marker's negative population, instead of one for the panel. **Consequential**: it moves every cut. See section 4.2 |
+| `--cofactor-from-all-events` | off | Estimate the cofactor over every event, debris included, instead of the scatter-gated single cells |
+| `--keep-margin-events` | off | Keep events at the top of a marker or scatter channel's range, capping their values, instead of removing them. Counts are in `margin_events.csv` either way |
+| `--spillover` | none | CSV spillover matrix applied to every file in place of its own `$SPILLOVER` |
+| `--fmo-sets-cut` | off | Let a true FMO set the cut even where the sample's valley is higher, so dim positives between them count as positive (`fmo_q995_valley_lowered`). Off by default because an FMO argues a cut down validly only where its negative is the sample's own, and one tube serves every sample of its panel or `control_group`; a valley below the FMO's edge is raised to it either way. Never applied to unstained or minus-multiple tubes |
 | `--logicle-m` | 4.5 | Decades on the logicle display scale |
-| `--singlet-mad-k` | 3 | Singlet band half-width in MADs of the FSC-H:FSC-A ratio. The gate is skipped, with a log line, when the two are not distinct channels |
+| `--singlet-mad-k` | 3 | How far below the FSC-H:FSC-A ridge, in MADs, the singlet gate cuts. One-sided, because doublets have a low ratio. The gate is skipped, with a log line, when the two are not distinct channels |
 | `--viability-marker` | auto-detect | Name the dye where the pattern is ambiguous |
 | `--min-cd45-pct` | 5 | Staining QC floor, percent CD45<sup>+</sup> of live |
+| `--min-live-pct` | unset | The assay's minimum live share of single cells, in percent; a sample below it fails staining QC. Unset, the share is reported in `staining_qc.csv` and not judged, because no published minimum exists. A sample whose dead cells outnumber its live ones reads as mostly live: the viability cut is placed above the dye's tallest mode, which is then the dead cells. `pct_live_if_dominant_dead` beside it gives the live share for that case, from a dye minimum below the dominant mode |
 | `--include-qc-failed` | off | Keep declared samples that failed staining QC. Admits them to every stage, not only the embedding. Their percentages carry no evidence; under this flag `qc_status` reads `pass` and only the `verdict` column in `staining_qc.csv` records which were forced in |
 | `--discover-controls` | off | Let a sample that fails staining QC become the unstained reference for its panel even though the sheet declares no control. See below for why this is off |
-| `--adaptive-gates` | off | Choose each threshold by sweeping the kernel bandwidth and trying the tail and Otsu rules, instead of one fixed smoothing with a quantile fallback. **Consequential**: it moves thresholds. See [Placing a threshold when no valley exists](#placing-a-threshold-when-no-valley-exists) |
+| `--adaptive-gates` | off | Choose each threshold by sweeping the kernel bandwidth and trying the tail and Otsu rules, instead of one fixed smoothing with a tail-gate fallback. **Consequential**: it moves thresholds. See [Placing a threshold when no valley exists](#placing-a-threshold-when-no-valley-exists) |
 | `--peer-cuts` | off | Where a population marker shows a density minimum in most samples of a panel but not in this one, take this sample's cut from the median of those minima; where most samples show none, replace only a quantile fallback or a tail cut far from the others. Each change is a row of `gate_adjustments.csv`, and the original cut stays in `derived_threshold`. **Consequential**: it moves thresholds. Implied by `--auto-fix-gates` |
 | `--panel-optional-markers` | none | Comma-separated markers that do not define the panel. A reagent stained in only some files otherwise splits the cohort into separate panels with separate embeddings. Named here, the files stay one panel; a population needing the marker scores where it exists and is UNAVAILABLE where it does not |
 
 ### Placing a threshold when no valley exists
 
 `density_valley()` answers one question: where is the deepest separation between
-two modes. Where a marker is unimodal it answers `NA`, and the threshold then
-comes from a fixed quantile of the parent.
+two modes that counting noise cannot explain. Where a marker shows none it
+answers `NA`, and the threshold then comes from the tail gate, 3.5 robust
+standard deviations above the dominant mode and flagged for review; a fixed
+quantile of the parent remains only where no tail gate can be placed.
 
-On a spectral panel that is not a rare outcome. On the sepsis cohort this was
-written against, **65% of every sample-by-marker cut** came back
-`quantile_fallback`, which means two thirds of the gates were placed by the
-constant rather than by the data, and the viability gate was skipped in all 20
-samples because L/D never resolved.
+Before the tail gate that quantile was the default, and on a spectral panel it
+was not a rare outcome. On the sepsis cohort this was written against, **65% of
+every sample-by-marker cut** came back `quantile_fallback`, which means two
+thirds of the gates were placed by the constant rather than by the data, and the
+viability gate was skipped in all 20 samples because L/D never resolved.
 
 The markers were not unimodal. The histogram being smoothed (220 bins, a
 9-bin moving average) is under-smoothed for these data: L/D showed 32 peaks in
@@ -1619,15 +1709,20 @@ textbook leukocyte gate and is a trap.
 
 The hierarchy has already applied CD45: the parent every population is scored
 inside is `cd45_pos`. Repeating the requirement asks for a second CD45 threshold
-derived from the cells that passed the first. That distribution is all
-positive and therefore unimodal. No minimum exists in it, the cut falls back to
-the 90th percentile, and an `above` comparison on that fallback keeps exactly
-10%.
+derived from the cells that passed the first. In PBMC that distribution is all
+positive and unimodal; in whole blood its one minimum separates the CD45-dim
+granulocytes from the CD45-bright lymphocytes, and `above` then removes the
+granulocytes from every population that names it. Either way the second cut
+describes nothing the specification meant.
 
-On the cohort above, CD45 fell back to the quantile in 17 of 20 samples and the
-share of parent cells carrying any label came out at 10.0, 9.4, 9.3, 9.8 and
-9.5% for the first five. Removing the redundant requirement took classified
-cells from **21% to 88%**. Nothing else about the specification changed.
+When single-mode cuts fell back to the 90th percentile, an `above` comparison
+kept exactly 10%. On the cohort above, CD45 fell back to the quantile in 17 of
+20 samples and the share of parent cells carrying any label came out at 10.0,
+9.4, 9.3, 9.8 and 9.5% for the first five. Removing the redundant requirement
+took classified cells from **21% to 88%**. Nothing else about the specification
+changed. The tail gate that now replaces the quantile goes above the dominant
+mode unless the marker is declared `tail: lower`, so on PBMC, where every parent
+cell is CD45-positive, the repeated requirement now keeps almost nothing.
 
 The rule generalises: do not name a marker in a population if a gate above it
 has already applied that marker.
@@ -1660,7 +1755,7 @@ has already applied that marker.
 | `--cells-per-sample` | 20000 | Cells drawn per sample for the embedding |
 | `--max-cells` | 200000 | Overall ceiling per embedding. The per-sample allowance is reduced proportionally if the total would exceed it |
 | `--no-equalise` | off | Embed every gated cell up to `--cells-per-sample`. By default no sample contributes more than the lower quartile of the per-sample counts, so no sample dominates the map; a sample with fewer cells contributes all it has |
-| `--umap-scale` | `auto` | How each marker is scaled before the UMAP and the clustering: `none`, `robust` (median/MAD) or `zscore`. `auto` uses `none` under `--transform logicle`, whose scale every channel already shares, and `robust` otherwise |
+| `--umap-scale` | `auto` | How each marker is scaled before the UMAP and the clustering: `none`, `range` (0.5th to 99.5th percentile), `robust` (median/MAD) or `zscore`. `auto` uses `none` under `--transform logicle` or `--per-marker-cofactor`, whose scale every channel already shares, and `range` otherwise: median/MAD divides a mostly negative marker by the width of its negatives and inflates its background |
 | `--subsample` | `uniform` | `uniform` reproduces the sample's composition; `rare` weights by inverse local density so a population too small to form a cluster can be recovered. **Consequential**: it changes which cells are embedded and adds `sampling_weight` to `cells_umap.csv` |
 | `--umap-markers` | built-in lineage list | Comma-separated features. Override this where the default list matches fewer than two markers, rather than relying on the all-eligible fallback |
 | `--umap-markers-all` | off | Use every eligible marker instead of preferring lineage markers |
@@ -1690,7 +1785,7 @@ has already applied that marker.
 | `--external-max-labels` | 6 | Ceiling on labels gated; the largest are taken and the number skipped is logged |
 | `--transfer-max-donors` | 8 | Leave-one-donor-out folds. Every fold refits, so cost is one fit per donor per label. The subset is drawn at random rather than taken as the largest donors, because a worst-donor score computed on the best-represented donors is optimistic |
 | `--transfer-max-cells` | 20000 | Training cells per fold, stratified by label. The held-out donor is always scored in full |
-| `--export-gates` | off | Write learned gates as ISAC Gating-ML 2.0 and as a vertex table, in the linear units the FCS file stores |
+| `--export-gates` | off | Write learned gates as ISAC Gating-ML 2.0, on the analysis scale through its `fasinh` or `logicle` transformation and named by the files' `$PnN`, and as a vertex table in the linear units the FCS file stores |
 | `--flowjo-export` | off | Also write UMAP-annotated FCS for interactive inspection |
 | `--flowjo-outdir` | `<outdir>/flowjo` | Directory for that export |
 | `--flowjo-no-concat` | off | Skip the concatenated `_ALL_SAMPLES.fcs` |
@@ -1738,9 +1833,10 @@ front of the list.
 |---|---|---|
 | `--batch-column` | `$DATE` where it varies | Column identifying the acquisition batch. Enables iLISI, Cramér's *V*, per-marker distributional drift and the threshold test grouped by batch |
 | `--correct-batch` | off | **Consequential**: align each marker across batches by monotone quantile mapping. Applied to the embedding and clustering, not to per-sample thresholds, which are batch-local by construction |
-| `--batch-max-cramers-v` | 0.6 | Refuse correction above this association between batch and group. Above it, removing the batch and removing the finding are the same operation |
+| `--batch-max-cramers-v` | Cohen's large | Refuse correction above this association between batch and group. The default is Cohen's large association, w = 0.5: *V* = 0.5 for two batches or groups, 0.35 for three. Above it, removing the batch and removing the finding are the same operation |
+| `--batch-pooled-goal` | off | Align every batch towards all cells pooled, as before. By default each study group is aligned towards the mean of its batches' quantiles, so a batch holding mostly one group does not pull it towards the other |
 | `--force-batch-correction` | off | Correct anyway. Recorded in the manifest, and the finding cannot then be attributed to biology |
-| `--batch-method` | `quantile` | How a correction is fitted, never whether one is defensible. `quantile` fits one map per marker over the whole file. `cluster` fits one per marker **per cell type**, which a whole-file map cannot do when a detector shift moves bright and dim populations by different amounts. `cytonorm` is a synonym for `cluster` |
+| `--batch-method` | `quantile` | How a correction is fitted, never whether one is defensible. `quantile` fits one map per marker over the whole file. `cluster` fits one per marker **per cell type**, which a whole-file map cannot do when a detector shift moves bright and dim populations by different amounts. `cytonorm` is accepted for `cluster`, with a note: it is not the CytoNorm package and uses no anchor samples |
 | `--batch-cluster-k` | 10 | Cell-type clusters to fit for `--batch-method cluster` |
 
 The refusal is evaluated before `--batch-method` is read, so both methods are

@@ -4,7 +4,7 @@
 \alias{apply_bead_calibration}
 \title{Apply a fitted calibration to a sample's linear channel values}
 \usage{
-apply_bead_calibration(exprs, channel_cols, calib)
+apply_bead_calibration(exprs, channel_cols, calib, channel_names = NULL)
 }
 \arguments{
 \item{exprs}{a sample's expression matrix, linear units}
@@ -12,6 +12,10 @@ apply_bead_calibration(exprs, channel_cols, calib)
 \item{channel_cols}{named integer vector, marker to column}
 
 \item{calib}{the table from \code{\link[=fit_bead_calibration]{fit_bead_calibration()}}}
+
+\item{channel_names}{the sample's \verb{$PnN} values, as read, or NULL. Where
+given and \code{calib} records the detector each fit came from, the fit is
+applied to the sample's channel of that detector.}
 }
 \value{
 list(exprs = converted matrix, applied = character vector of markers)

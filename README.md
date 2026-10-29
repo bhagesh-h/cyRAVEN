@@ -113,9 +113,12 @@ FCS files · sample sheet · config
    tested against clinical variables and followed across visits.
    → `group_comparison_stats.csv`, `clinical_association.csv`
 
-If a marker shows no gap between negative and positive cells, step 2 uses a
-fixed percentile instead and labels the cut `quantile_fallback`. The
-population is still reported; check it before you use the number.
+If a marker shows no gap between negative and positive cells, step 2 places
+the cut a fixed number of robust standard deviations from the sample's main
+peak instead (a tail gate, labelled `tailgate`), and uses a fixed percentile
+(`quantile_fallback`) only where even that cannot be placed. Either is flagged
+for review. The population is still reported; check it before you use the
+number.
 
 ## What it can do
 
@@ -165,8 +168,8 @@ option.
 - **Open `gating_qc.png` first.** It draws each cut on the data it came
   from. A cut on the side of a peak, instead of in the gap, is visible there
   and in no table.
-- **A `quantile_fallback` cut found no gap.** Look at that population before
-  you report it.
+- **A `tailgate` or `quantile_fallback` cut found no gap.** Look at that
+  population before you report it.
 - **Frequencies are shares of CD45+ cells.** One population's share can rise
   because another fell, with no change in its cell number. Only
   `--total-counts` shows a change in size.

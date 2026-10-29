@@ -14,10 +14,13 @@
 # fluorochrome) or ERF (equivalent reference fluorophores), traceable to primary
 # standards. Acquiring one on the instrument that ran the samples gives a map
 # from channel units to those units, and thresholds and medians expressed through
-# it are portable (Wang et al., NIST; Cytometry A 91:540).
+# it are portable (Wang et al. 2008, Cytometry A 73:279; Wang & Hoffman 2017,
+# Curr Protoc Cytom 79:1.3.1).
 #
 # WHAT IS FITTED. Detector response is linear in fluorophore count plus a
-# background offset, so the map is a straight line in LINEAR units:
+# background offset, and the calibration's object is "a linear relation between
+# the fluorescence signal ... and the value of ERF" (Wang et al. 2008), so the
+# map is a straight line in LINEAR units:
 #
 #     assigned_value = slope * channel_value + intercept
 #
@@ -87,15 +90,25 @@ bead_peaks <- function(x, n_expected, bins = 256L, smooth = 5, min_frac = 0.005,
 
 #' Fit a channel-units to assigned-units calibration from a bead acquisition
 #'
+#' A BEAD FILE IS NAMED BY DETECTOR. Beads carry no antibody, so a bead file
+#' usually has no `$PnS` and its channels resolve to detector names (`FITC-A`)
+#' where the samples resolve to markers (`CD3`). The assigned-value table may
+#' therefore name either: a marker symbol, or a detector as `$PnN` writes it.
+#' With `channel_names` supplied, a detector name is looked up there, and the
+#' detector each row was fitted on is returned in `channel`, so the fit is
+#' applied to the samples by detector (`$PnN` names the detector, Spidlen et al.
+#' 2010) rather than by a stain name the bead file does not have.
+#'
 #' @param bead_exprs the bead file's expression matrix, linear units
 #' @param channel_cols named integer vector, marker or channel name to column
 #' @param assigned data.frame with a `marker` column and one column per bead
 #'   population, or a long form carrying `marker`, `peak` and `value`
 #' @param min_r2 fit quality below which a channel is reported as not calibrated
+#' @param channel_names the bead file's `$PnN` values, as read, or NULL.
 #' @return a data.frame, one row per channel
 #' @export
 fit_bead_calibration <- function(bead_exprs, channel_cols, assigned,
-                                 min_r2 = 0.98) {
+                                 min_r2 = 0.98, channel_names = NULL) {
   if (is.null(bead_exprs) || is.null(assigned) || !nrow(assigned)) return(NULL)
   names(assigned) <- tolower(names(assigned))
   if (!"marker" %in% names(assigned))
@@ -120,8 +133,14 @@ fit_bead_calibration <- function(bead_exprs, channel_cols, assigned,
     # `[[` on a named vector errors rather than returning NULL for an absent
     # name, and a marker the bead file does not carry is an ordinary state, not
     # a fault: the assigned-value table describes the bead lot, not this panel.
-    j <- if (mk %in% names(channel_cols)) channel_cols[[mk]] else NA_integer_
-    row <- data.frame(marker = mk, n_assigned = length(av), n_peaks = 0L,
+    j <- if (mk %in% names(channel_cols)) channel_cols[[mk]]
+         else if (!is.null(channel_names) && any(channel_names %in% c(mk, make.names(mk))))
+           which(channel_names %in% c(mk, make.names(mk)))[1]
+         else NA_integer_
+    row <- data.frame(marker = mk,
+                      channel = if (!is.null(channel_names) && !is.na(j))
+                        channel_names[j] else NA_character_,
+                      n_assigned = length(av), n_peaks = 0L,
                       slope = NA_real_, intercept = NA_real_, r_squared = NA_real_,
                       max_residual_pct = NA_real_,
                       verdict = "channel absent from the bead file",
@@ -168,15 +187,22 @@ fit_bead_calibration <- function(bead_exprs, channel_cols, assigned,
 #' @param exprs a sample's expression matrix, linear units
 #' @param channel_cols named integer vector, marker to column
 #' @param calib the table from [fit_bead_calibration()]
+#' @param channel_names the sample's `$PnN` values, as read, or NULL. Where
+#'   given and `calib` records the detector each fit came from, the fit is
+#'   applied to the sample's channel of that detector.
 #' @return list(exprs = converted matrix, applied = character vector of markers)
 #' @export
-apply_bead_calibration <- function(exprs, channel_cols, calib) {
+apply_bead_calibration <- function(exprs, channel_cols, calib, channel_names = NULL) {
   applied <- character(0)
   if (is.null(calib) || !nrow(calib)) return(list(exprs = exprs, applied = applied))
   ok <- calib[grepl("^calibrated", calib$verdict) & is.finite(calib$slope), ,
               drop = FALSE]
   for (i in seq_len(nrow(ok))) {
-    j <- channel_cols[[ok$marker[i]]]
+    det <- if ("channel" %in% names(ok)) ok$channel[i] else NA_character_
+    j <- if (!is.null(channel_names) && !is.na(det) && det %in% channel_names)
+           match(det, channel_names)
+         else if (ok$marker[i] %in% names(channel_cols)) channel_cols[[ok$marker[i]]]
+         else NULL
     if (is.null(j) || is.na(j) || j > ncol(exprs)) next
     exprs[, j] <- ok$intercept[i] + ok$slope[i] * exprs[, j]
     applied <- c(applied, ok$marker[i])

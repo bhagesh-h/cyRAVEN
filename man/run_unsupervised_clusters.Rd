@@ -10,7 +10,7 @@ run_unsupervised_clusters(
   n_clusters = 12L,
   grid = 10L,
   epochs = 10L,
-  scale_method = "robust",
+  scale_method = "range",
   seed = 42L,
   max_cells = 200000L
 )

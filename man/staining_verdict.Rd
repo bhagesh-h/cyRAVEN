@@ -8,7 +8,8 @@ staining_verdict(
   gate,
   declared_control = NA,
   min_cd45_pct = 5,
-  force_include = FALSE
+  force_include = FALSE,
+  min_live_pct = NA_real_
 )
 }
 \arguments{
@@ -26,6 +27,12 @@ and embedding it puts a cloud of background-only events in the shared
 space regardless of this flag. Only meant for the "too few samples to
 afford losing any" situation; the verdict text still records the forcing
 so it stays auditable in staining_qc.csv.}
+
+\item{min_live_pct}{the assay's minimum live share of single cells, in
+percent, or NA (default) to report the share without judging it. A
+sample below it fails QC: "in case of low viability ... samples should be
+excluded from analysis" (den Braanker et al. 2021), which leaves the minimum
+to the assay. Judged only where a viability gate was applied.}
 }
 \value{
 list(..., qc_status, is_control, is_reference). The three differ and

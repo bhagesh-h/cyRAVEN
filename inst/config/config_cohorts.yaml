@@ -95,11 +95,15 @@ populations:
     CD56: below
     SSC-A: below
 
+  # CD56 below: HLA-DR+ NK cells, a subset that expands with IL-2 (Evans et al.
+  # 2011), are CD3- CD14- CD16- CD19- HLA-DR+ too, and are otherwise counted
+  # here.
   Dendritic cells:
     CD3: below
     CD14: below
     CD16: below
     CD19: below
+    CD56: below
     HLA-DR: above
 
   # ---- T cells -------------------------------------------------------------
@@ -131,10 +135,13 @@ populations:
     Vd1: below
     Vd2: above
 
-  NKT cells:
+  # T cells carrying CD56. These are NKT-LIKE cells, not invariant NKT cells,
+  # which are defined by a CD1d-restricted Valpha24-Jalpha18 receptor this panel
+  # cannot see (Peralbo et al. 2007). Most are CD8+ or CD4-CD8-, so requiring
+  # both CD4- and CD8- excluded most of them. Each cell keeps the deeper CD4 or
+  # CD8 T cell label in the embedding; this row counts them all.
+  NKT-like cells:
     CD3: above
-    CD4: below
-    CD8: below
     Vd1: below
     Vd2: below
     CD56: above

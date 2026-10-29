@@ -3,26 +3,74 @@
 
 #' The marker scaling the embedding and the clustering use
 #'
-#' WHAT: `--umap-scale` when it names a method; under `auto`, the default, no
-#' scaling on logicle data and median/MAD scaling otherwise.
+#' WHAT: `--umap-scale` when it names a method. Under `auto`, the default: no
+#' scaling where the transform already puts every marker on one scale (logicle,
+#' or arcsinh with per-marker cofactors), and the percentile range otherwise.
 #'
-#' WHY NO SCALING ON LOGICLE. Logicle puts every channel on the same 4.5-decade
-#' display scale by construction, so the markers are already comparable.
-#' Dividing each by its spread (MAD) then only reweights them by how narrow their
-#' negative population is: a mostly negative marker such as Vd1 has a small MAD
-#' and gets its noise multiplied. Measured on 40,000 cells of one cohort,
-#' embedding unscaled logicle values kept 97.0% of each cell's 15 nearest
-#' neighbours in its own cluster; median/MAD scaling kept 94.8%, and merged
-#' islands that unscaled data keeps apart. An arcsinh run keeps median/MAD,
-#' because the shared cofactor does not put markers on a common scale.
+#' WHY NO SCALING ON A SHARED SCALE. Logicle puts every channel on the same
+#' 4.5-decade display scale by construction, and per-marker cofactors give every
+#' marker's negative population the same width, so the markers are already
+#' comparable. Dividing each by its spread (MAD) then only reweights them by how
+#' narrow their negative population is: a mostly negative marker such as Vd1 has
+#' a small MAD and gets its noise multiplied. Measured on 40,000 cells of one
+#' cohort, embedding unscaled logicle values kept 97.0% of each cell's 15
+#' nearest neighbours in its own cluster; median/MAD scaling kept 94.8%, and
+#' merged islands that unscaled data keeps apart. FlowSOM itself defaults to no
+#' scaling.
+#'
+#' WHY THE PERCENTILE RANGE, NOT MEDIAN/MAD, UNDER ONE PANEL COFACTOR. One
+#' cofactor does not put markers on a common scale, so some scaling is needed;
+#' but the MAD of a mostly negative marker is the width of its negative
+#' population, so median/MAD scaling inflates exactly the background and
+#' spreading noise that distort embeddings (Mazza et al. 2018), and does so
+#' more the rarer the positive cells are. Dividing by the 0.5th-99.5th
+#' percentile range instead gives every marker the same span from its negatives
+#' to its brightest cells, whatever share is positive. `robust` remains
+#' available by name.
 #'
 #' @param opt The run's option list.
-#' @return "none", "robust" or "zscore".
+#' @return "none", "range", "robust" or "zscore".
 #' @keywords internal
 umap_scale_method <- function(opt) {
   s <- opt$umap_scale %||% "auto"
-  if (!identical(s, "auto")) return(match.arg(s, c("none", "robust", "zscore")))
-  if (identical(opt$transform %||% "arcsinh", "logicle")) "none" else "robust"
+  if (!identical(s, "auto")) return(match.arg(s, c("none", "range", "robust", "zscore")))
+  if (identical(opt$transform %||% "arcsinh", "logicle") ||
+      isTRUE(opt$per_marker_cofactor)) "none" else "range"
+}
+
+#' Scale each feature before embedding or clustering
+#'
+#' One implementation for [run_umap()] and [run_unsupervised_clusters()], so
+#' clusters and coordinates are computed in the same space.
+#'
+#' @param mat numeric matrix, cells x features.
+#' @param method "none", "range" (0.5th-99.5th percentile range), "robust"
+#'   (median/MAD) or "zscore".
+#' @return list(mat, params); `params` carries `center` and `scale` so a saved
+#'   model can be applied to later data in the same space, or NULL for "none".
+#' @keywords internal
+scale_features <- function(mat, method = "range") {
+  spread <- function(x, f) { m <- f(x); if (!is.finite(m) || m == 0) stats::sd(x) else m }
+  if (identical(method, "range")) {
+    lo <- apply(mat, 2, stats::quantile, 0.005, names = FALSE)
+    rg <- apply(mat, 2, function(x) spread(x, function(v)
+      diff(stats::quantile(v, c(0.005, 0.995), names = FALSE))))
+    return(list(mat = sweep(sweep(mat, 2, lo, "-"), 2, rg, "/"),
+                params = list(center = lo, scale = rg, method = "range")))
+  }
+  if (identical(method, "robust")) {
+    med <- apply(mat, 2, stats::median)
+    mad_ <- apply(mat, 2, spread, stats::mad)
+    return(list(mat = sweep(sweep(mat, 2, med, "-"), 2, mad_, "/"),
+                params = list(center = med, scale = mad_, method = "robust")))
+  }
+  if (identical(method, "zscore")) {
+    z <- scale(mat)
+    return(list(mat = z, params = list(center = attr(z, "scaled:center"),
+                                       scale = attr(z, "scaled:scale"),
+                                       method = "zscore")))
+  }
+  list(mat = mat, params = NULL)
 }
 
 #' Build the UMAP input matrix and run the embedding
@@ -36,7 +84,8 @@ umap_scale_method <- function(opt) {
 #'       an outlier-sensitive mean/SD compresses the informative separation.
 #'
 #' @param mat numeric matrix, cells x features, already asinh-transformed.
-#' @param scale_method "robust" (median/MAD), "zscore", or "none".
+#' @param scale_method "range" (percentile range), "robust" (median/MAD),
+#'   "zscore", or "none". See [scale_features()].
 #' @param n_neighbors,min_dist,metric,n_epochs uwot parameters.
 #' @param seed RNG seed for reproducible coordinates.
 #' @param n_threads threads for uwot.
@@ -62,7 +111,7 @@ umap_scale_method <- function(opt) {
 #'   re-draws the UMAP. Decide to persist the model at the START of a study, not
 #'   after the figures have been circulated.
 #' @export
-run_umap <- function(mat, scale_method = "robust", n_neighbors = 30L,
+run_umap <- function(mat, scale_method = "range", n_neighbors = 30L,
                      min_dist = 0.3, metric = "euclidean", n_epochs = 200L,
                      seed = 42L, n_threads = max(1L, parallel::detectCores() - 1L),
                      ret_model = FALSE) {
@@ -78,17 +127,9 @@ run_umap <- function(mat, scale_method = "robust", n_neighbors = 30L,
   # median/MAD afresh from a later batch would scale that batch against itself
   # and land it in a subtly different space, which shows up as a batch effect
   # that is really an arithmetic error.
-  scale_params <- NULL
-  if (scale_method == "robust") {
-    med <- apply(mat, 2, median)
-    mad_ <- apply(mat, 2, function(x) { m <- mad(x); if (m == 0 || !is.finite(m)) sd(x) else m })
-    mat <- sweep(sweep(mat, 2, med, "-"), 2, mad_, "/")
-    scale_params <- list(center = med, scale = mad_, method = "robust")
-  } else if (scale_method == "zscore") {
-    mat <- scale(mat)
-    scale_params <- list(center = attr(mat, "scaled:center"),
-                         scale = attr(mat, "scaled:scale"), method = "zscore")
-  }
+  sf <- scale_features(mat, scale_method)
+  mat <- sf$mat
+  scale_params <- sf$params
   mat[!is.finite(mat)] <- 0
   n_neighbors <- min(n_neighbors, max(2L, nrow(mat) - 1L))
   set.seed(seed)

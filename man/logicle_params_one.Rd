@@ -4,7 +4,7 @@
 \alias{logicle_params_one}
 \title{Estimate logicle parameters for one marker}
 \usage{
-logicle_params_one(x, m = 4.5, a = 0, neg_q = 0.05)
+logicle_params_one(x, m = 4.5, a = 0, neg_q = 0.05, t_range = NA_real_)
 }
 \arguments{
 \item{x}{numeric vector of raw intensities for one marker}
@@ -14,6 +14,8 @@ logicle_params_one(x, m = 4.5, a = 0, neg_q = 0.05)
 \item{a}{additional negative decades to display}
 
 \item{neg_q}{quantile of the negative values used as \code{r}}
+
+\item{t_range}{top of the channel's declared range, or NA. Default NA.}
 }
 \value{
 list(w, t, m, a)
@@ -40,5 +42,14 @@ Returns \code{w = 0} when a channel has no negative values at all -- with nothin
 below zero there is nothing for a linear region to rescue, and logicle
 degenerates to a log transform, which is the right answer rather than a
 failure.
+
+WHY T IS THE CHANNEL'S RANGE AND NOT ITS MAXIMUM. T is "the top of scale"
+(Moore & Parks 2012): a property of the instrument, the same for every file
+acquired on it. The largest event in a sample is a property of that sample,
+so a scale topped by it moves whenever one bright cell is or is not sampled,
+and with it the width \code{w} and every cut on the channel. \code{t_range} is the
+channel's \verb{$PnR}, linearised where the channel was log-amplified (see
+\code{\link[=linearise_channels]{linearise_channels()}}); the data maximum is used only where no trustworthy
+range was declared.
 }
 \keyword{internal}

@@ -6,7 +6,7 @@
 \usage{
 run_umap(
   mat,
-  scale_method = "robust",
+  scale_method = "range",
   n_neighbors = 30L,
   min_dist = 0.3,
   metric = "euclidean",
@@ -19,7 +19,8 @@ run_umap(
 \arguments{
 \item{mat}{numeric matrix, cells x features, already asinh-transformed.}
 
-\item{scale_method}{"robust" (median/MAD), "zscore", or "none".}
+\item{scale_method}{"range" (percentile range), "robust" (median/MAD),
+"zscore", or "none". See \code{\link[=scale_features]{scale_features()}}.}
 
 \item{n_neighbors, min_dist, metric, n_epochs}{uwot parameters.}
 

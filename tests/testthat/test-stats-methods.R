@@ -73,3 +73,17 @@ test_that("the catalogue adapts to the design", {
   three <- cyRAVEN:::statistical_methods_table(n_groups = 3L)
   expect_equal(three$role[grepl("^Kruskal-Wallis", three$method)], "used")
 })
+
+test_that("the CLR composition is the exclusive labels, which partition CD45+", {
+  # Nested declared populations: "T" contains "CD4 T". Their gate counts sum
+  # past 100%; the labels sum to exactly 100% with the remainder included.
+  tm <- cbind(CD3 = c(rep(3, 60), rep(0, 40)), CD4 = c(rep(3, 40), rep(0, 60)))
+  spec <- list(T = list(CD3 = "above"), `CD4 T` = list(CD3 = "above", CD4 = "above"))
+  sp <- suppressMessages(score_populations(tm, c(CD3 = 1, CD4 = 1), rep(TRUE, 100), spec))
+  pops <- list(s1 = list(scored = sp))
+  gates <- list(s1 = list(masks = list(cd45_pos = rep(TRUE, 100))))
+  fx <- exclusive_label_frequencies(pops, gates)
+  expect_equal(sum(fx$pct_of_cd45_pos), 100)
+  expect_equal(setNames(fx$count, fx$population),
+               c(`CD4 T` = 40L, `Other CD45+` = 40L, T = 20L))
+})

@@ -7,8 +7,9 @@
 # cannot find a population nobody declared, and it cannot look outside the parent
 # gate, because both are consequences of the declaration.
 #
-# Explore mode is the complement. It takes every event in the file, every
-# eligible channel, embeds and clusters without reference to any specification,
+# Explore mode is the complement. It takes the single cells of the file (the
+# scatter and singlet gates, which need no specification), every eligible
+# channel, embeds and clusters without reference to any specification,
 # and reports what it found. It is what cyCONDOR, FlowSOM and the rest of the
 # unsupervised family do.
 #

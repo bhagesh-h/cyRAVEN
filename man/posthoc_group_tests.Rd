@@ -9,13 +9,13 @@ posthoc_group_tests(
   group_of,
   value_col = NULL,
   min_n = 3L,
-  transform = "asin_sqrt"
+  transform = "logit"
 )
 }
 \arguments{
 \item{freq, group_of, value_col, min_n}{As in \code{\link[=parametric_group_tests]{parametric_group_tests()}}.}
 
-\item{transform}{"asin_sqrt" or "none".}
+\item{transform}{"logit" (default), "asin_sqrt" or "none".}
 }
 \value{
 data.frame, or NULL.

@@ -13,7 +13,8 @@ threshold_uncertainty(
   fallback_q = 0.9,
   grid = valley_setting_grid(),
   floor = -Inf,
-  prefer = "deepest"
+  prefer = "deepest",
+  tail = "upper"
 )
 }
 \arguments{
@@ -38,6 +39,9 @@ resampled cut obeys the same rule. Default \code{-Inf}.}
 
 \item{prefer}{the valley preference the cut was placed with; see
 \code{\link[=density_valley]{density_valley()}}. Default \code{"deepest"}.}
+
+\item{tail}{the side a \code{tailgate} cut was placed on, as \code{\link[=resolve_threshold]{resolve_threshold()}}
+recorded it. Default \code{"upper"}.}
 }
 \value{
 list(u_sampling, u_method, u_combined, rel_depth, valley_rate,
@@ -67,6 +71,9 @@ this is the number that says so.
 separate control tube not passed here, so neither component can be
 computed from \code{x}. Both are NA with a reason, rather than a small number
 that would read as confidence.
+\item \code{tailgate}: no valley, so the tail rule placed the cut. Sampling
+uncertainty is the bootstrap spread of the tail cut; the method component
+sweeps the multiple of the robust SD it is placed at.
 \item \code{peer_median}: \code{--auto-fix-gates} took the cut from the density minima
 of the other samples (see \code{peer_cut_replacements()}), so it was not
 placed on \code{x} and there is nothing in \code{x} to resample. NA with a reason.

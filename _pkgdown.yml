@@ -66,6 +66,7 @@ reference:
   - read_fcs_resolved
   - fingerprint_panels
   - maybe_compensate
+  - read_spillover_file
   - make_transform
   - derive_cofactor
   - derive_cofactor_pooled
@@ -101,6 +102,7 @@ reference:
   - fig_acquisition_qc
   - spreading_pairs
   - run_spreading_report
+  - spillover_spreading_matrix
 
 - title: Calibration
   desc: >
@@ -132,6 +134,8 @@ reference:
   desc: Scoring a declarative population specification.
   contents:
   - score_populations
+  - resolve_population_parents
+  - derive_scoped_cuts
   - default_population_spec
   - default_functional_blocks
   - expected_positive_markers
@@ -220,6 +224,7 @@ reference:
   - stats_marker_state
   - stats_subcluster_shifts
   - clr_frequencies
+  - exclusive_label_frequencies
   - compositional_concordance
   - stats_confounding
   - stats_rank_ancova

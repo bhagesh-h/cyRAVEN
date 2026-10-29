@@ -15,7 +15,8 @@ population_frequency_uncertainty(
   cd45_threshold = NA_real_,
   cd45_u = NA_real_,
   lod_events = 20L,
-  loq_events = 50L
+  loq_events = 50L,
+  scoped = NULL
 )
 }
 \arguments{
@@ -41,6 +42,10 @@ population_frequency_uncertainty(
 
 \item{loq_events}{events below which a population is detected but not
 quantified}
+
+\item{scoped}{cuts derived within parent populations, from
+\code{\link[=derive_scoped_cuts]{derive_scoped_cuts()}}, or NULL. Held fixed while the CD45+ cuts are
+perturbed, so the budget covers the CD45+ cuts only.}
 }
 \value{
 list(per_population = data.frame, budget = data.frame)

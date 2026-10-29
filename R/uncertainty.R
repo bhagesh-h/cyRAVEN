@@ -82,6 +82,9 @@ valley_setting_grid <- function() {
 #'     separate control tube not passed here, so neither component can be
 #'     computed from `x`. Both are NA with a reason, rather than a small number
 #'     that would read as confidence.
+#'   - `tailgate`: no valley, so the tail rule placed the cut. Sampling
+#'     uncertainty is the bootstrap spread of the tail cut; the method component
+#'     sweeps the multiple of the robust SD it is placed at.
 #'   - `peer_median`: `--auto-fix-gates` took the cut from the density minima
 #'     of the other samples (see `peer_cut_replacements()`), so it was not
 #'     placed on `x` and there is nothing in `x` to resample. NA with a reason.
@@ -97,6 +100,8 @@ valley_setting_grid <- function() {
 #' @param grid setting combinations for the method component
 #' @param floor the floor [resolve_threshold()] placed the cut under, so every
 #'   resampled cut obeys the same rule. Default `-Inf`.
+#' @param tail the side a `tailgate` cut was placed on, as [resolve_threshold()]
+#'   recorded it. Default `"upper"`.
 #' @param prefer the valley preference the cut was placed with; see
 #'   [density_valley()]. Default `"deepest"`.
 #' @return list(u_sampling, u_method, u_combined, rel_depth, valley_rate,
@@ -105,7 +110,7 @@ valley_setting_grid <- function() {
 threshold_uncertainty <- function(x, source = "valley", B = 100L, seed = 42L,
                                   max_events = 20000L, fallback_q = 0.90,
                                   grid = valley_setting_grid(), floor = -Inf,
-                                  prefer = "deepest") {
+                                  prefer = "deepest", tail = "upper") {
   out <- list(u_sampling = NA_real_, u_method = NA_real_, u_combined = NA_real_,
               rel_depth = NA_real_, valley_rate = NA_real_,
               n_events = 0L, basis = NA_character_)
@@ -151,10 +156,16 @@ threshold_uncertainty <- function(x, source = "valley", B = 100L, seed = 42L,
 
   n_draw <- min(length(x), as.integer(max_events))
   is_fb  <- identical(source, "quantile_fallback")
+  is_tail <- startsWith(source %||% "", "tailgate")
+  # The side the cut was placed on: named by the adaptive candidates, and
+  # always above the mode for the default path's tail gate (tail_gate_cut()).
+  tail_sd <- if (identical(source, "tailgate_lower")) "lower"
+             else if (identical(source, "tailgate_upper")) "upper" else tail
 
   boot <- vapply(seq_len(as.integer(B)), function(i) {
     xb <- x[sample.int(length(x), n_draw, replace = TRUE)]
     if (is_fb) as.numeric(quantile(xb, fallback_q, na.rm = TRUE))
+    else if (is_tail) tail_threshold(xb, side = tail_sd)
     else density_valley(xb, floor = floor, prefer = prefer)
   }, numeric(1))
   ok <- is.finite(boot)
@@ -170,6 +181,12 @@ threshold_uncertainty <- function(x, source = "valley", B = 100L, seed = 42L,
     meth <- vapply(qs, function(q) as.numeric(quantile(xs, q, na.rm = TRUE)),
                    numeric(1))
     out$basis <- "quantile bootstrap; sweep over the fallback quantile"
+  } else if (is_tail) {
+    # The tail rule's one setting is how many robust SDs above the mode it
+    # cuts; 3.5 is the default, and the sweep says how much rides on it.
+    meth <- vapply(c(3, 3.5, 4), function(k) tail_threshold(xs, k = k, side = tail_sd),
+                   numeric(1))
+    out$basis <- "tail-rule bootstrap; sweep over the robust-SD multiple"
   } else {
     meth <- vapply(seq_len(nrow(grid)), function(i)
       density_valley(xs, bins = grid$bins[i], smooth = grid$smooth[i],
@@ -202,13 +219,14 @@ threshold_uncertainty <- function(x, source = "valley", B = 100L, seed = 42L,
 # distinguished them.
 #
 # This is the oldest quantified source of imprecision in cytometry and the reason
-# rare-event protocols specify event targets at all: about 4,000 events of a
-# population gives a 2% coefficient of variation on its frequency, and 25 events
-# gives 20%. Clinical practice fixes the two limits that follow. Roughly 20
-# events is the fewest that can be called a detection and roughly 50 the fewest
-# that can be called a measurement, against a stated denominator (Sommer et al.
-# 2021, Cytometry B 100:42; the GIMEMA AML1310 post-hoc analysis, Haematologica
-# 2022, 107:2823).
+# rare-event protocols specify event targets at all: counts are Poisson, so the
+# coefficient of variation of a population's frequency is 1/sqrt(n) for n events
+# of it (Hedley & Keeney 2013). 2,500 events gives 2%, and 25 events gives 20%.
+# Clinical practice fixes the two limits that follow. Roughly 20 events is the
+# fewest that can be called a detection and roughly 50 the fewest that can be
+# called a measurement, against a stated denominator (Sommer et al. 2021,
+# Cytometry B 100:42; the GIMEMA AML1310 post-hoc analysis, Haematologica 2022,
+# 107:2823).
 #
 # WHY WILSON RATHER THAN THE TEXTBOOK FORMULA. The binomial standard error
 # sqrt(p(1-p)/n) tends to zero as p does. At k = 0 it reports perfect certainty
@@ -311,6 +329,9 @@ counting_uncertainty <- function(k, n, z = 1, lod_events = 20L,
 #' @param lod_events events below which a population is not called detected
 #' @param loq_events events below which a population is detected but not
 #'   quantified
+#' @param scoped cuts derived within parent populations, from
+#'   [derive_scoped_cuts()], or NULL. Held fixed while the CD45+ cuts are
+#'   perturbed, so the budget covers the CD45+ cuts only.
 #' @return list(per_population = data.frame, budget = data.frame)
 #' @export
 population_frequency_uncertainty <- function(tmat, thr, parent, spec, u,
@@ -318,10 +339,11 @@ population_frequency_uncertainty <- function(tmat, thr, parent, spec, u,
                                              cd45_threshold = NA_real_,
                                              cd45_u = NA_real_,
                                              lod_events = 20L,
-                                             loq_events = 50L) {
+                                             loq_events = 50L, scoped = NULL) {
   pct_at <- function(thr2, parent2) {
     hi <- derive_intermediate_bounds(tmat, thr2, parent2, spec)
-    sp <- score_populations(tmat, thr2, parent2, spec, hi_thr = hi, quiet = TRUE)
+    sp <- score_populations(tmat, thr2, parent2, spec, hi_thr = hi, quiet = TRUE,
+                            scoped = scoped)
     den <- max(1L, sum(parent2))
     vapply(sp$masks, function(m) 100 * sum(m) / den, numeric(1))
   }
@@ -331,7 +353,8 @@ population_frequency_uncertainty <- function(tmat, thr, parent, spec, u,
   # pct_at(thr, parent), so `base` is unchanged; the counts come out of it free.
   n_parent <- sum(parent)
   hi0  <- derive_intermediate_bounds(tmat, thr, parent, spec)
-  sp0  <- score_populations(tmat, thr, parent, spec, hi_thr = hi0, quiet = TRUE)
+  sp0  <- score_populations(tmat, thr, parent, spec, hi_thr = hi0, quiet = TRUE,
+                            scoped = scoped)
   k0   <- vapply(sp0$masks, sum, integer(1))
   base <- 100 * k0 / max(1L, n_parent)
   if (!length(base)) return(NULL)
@@ -453,7 +476,8 @@ run_gate_uncertainty <- function(pops, gates, verdicts, panel_of, spec,
       tu <- threshold_uncertainty(P$tmat[parent, m], source = src, B = B,
                                   seed = seed_for(paste0(s, "\r", m)),
                                   max_events = max_events, grid = grid,
-                                  floor = P$details[[m]]$floor %||% -Inf)
+                                  floor = P$details[[m]]$floor %||% -Inf,
+                                  tail = P$details[[m]]$tail %||% "upper")
       u[[m]] <- tu$u_combined
       trows[[length(trows) + 1L]] <- data.frame(
         sample_id = s, panel = panel_of[[s]] %||% NA_character_, marker = m,
@@ -489,7 +513,8 @@ run_gate_uncertainty <- function(pops, gates, verdicts, panel_of, spec,
     fu <- tryCatch(population_frequency_uncertainty(
       P$tmat, thr, parent, spec, u, cd45_x = g$cd45_x,
       cd45_live = g$masks$live_cells, cd45_threshold = g$cd45_threshold,
-      cd45_u = cd45_u, lod_events = lod_events, loq_events = loq_events),
+      cd45_u = cd45_u, lod_events = lod_events, loq_events = loq_events,
+      scoped = P$scoped),
       error = function(e) NULL)
     if (is.null(fu)) next
 

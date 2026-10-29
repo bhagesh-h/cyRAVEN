@@ -51,6 +51,10 @@
 # R CMD build reads the working directory rather than git, and any unrecognised
 # top-level file is reported by R CMD check as non-standard.
 ^ToDo\.md$
+# The audit against published practice and its task list. Untracked, for the
+# same reason as the backlog above.
+^comparison\.md$
+^todo\.md$
 # The image prompt sheet is a working file for generating the documentation
 # figures, not documentation itself. The images beside it are a separate
 # question: they ship only if the vignettes that reference them ship, and that

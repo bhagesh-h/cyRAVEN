@@ -1,5 +1,244 @@
 # cyRAVEN (development)
 
+## Checked against published practice
+
+Every step of the pipeline was compared with published flow cytometry protocols,
+from the FCS file to the statistics, and every departure that changed results
+was fixed or, where the fix did not hold up, left with the reason recorded.
+Where a change moves results it was scored against the KMT2 cohort's manual
+gating (24 whole-blood files, 25,000 events each, 11 populations, the 20
+samples that pass staining QC in every version compared) and run beside the
+previous release on a sepsis cohort of 30 PBMC files, which has no manual
+gating. On KMT2, against the previous release:
+
+| | previous release | this version |
+|---|---|---|
+| files passing staining QC | 21 of 24 | 23 of 24 |
+| cuts at a fixed quantile (passing files) | 69 | 0 |
+| mean Spearman ρ against manual gating | 0.44 | 0.64 |
+| median absolute error, median over populations | 0.44 points | 0.45 points |
+| worst single-sample error, median over populations | 6.1 points | 2.1 points |
+
+The previous release's largest errors, NK cells 67 points and granulocytes 68
+points off the manual count in one sample, are now at most 2.9 and 6.7 points in
+any sample, and CD4 and CD8 T cells rank the samples as the manual gating does
+(ρ 0.98 and 0.96, from 0.44 and 0.37). The median of the typical error over
+populations is about the same (0.45 against 0.44 points): it fell in 9 of the 11
+populations and rose most for NK cells, 0.41 to 0.52 points. CD56 shows no
+density minimum on CD45+ cells in any sample, the tail gate misses CD56-dim cells
+(NK cells a median 0.4 points under the manual count), and the fixed 10% it
+replaces happened to sit near the typical NK share. On the sepsis
+cohort the previous release placed 410 of 760 cuts at the 90th percentile and
+this version none; two CD19 valleys it placed below the negative mode, which
+called 82% and 48% of CD45+ cells B cells, are gone. A population can now read
+0%, which the fixed 10% never allowed. In 4 samples whose CD45+ cells are 30–85%
+low-density granulocytes, CD16's dominant mode is the granulocytes' positive one
+and shows no minimum, so the tail gate goes above it (flagged for review) and
+the CD16+ monocyte subsets read 0%; cutting those subsets within monocytes
+(`parent:`), where CD16's negative is the majority, avoids it. `--peer-cuts`
+restored them too but emptied CD4 T cells in 5 samples whose T cells were under
+1% of CD45+.
+
+### Reading the files
+
+**Log-amplified data are linearised.** An analog instrument with log amplifiers
+stores integer channel numbers on a log scale and declares it in `$PnE`. They
+were analysed as stored, an arcsinh laid over a log. Integer channels with
+`$PnE f1,f2` are now converted to f2·10^(f1·x/`$PnR`), f2 = 0 read as 1, as
+flowCore's own reader does. Floating-point data with a log `$PnE`, which FCS 3.1
+does not allow, is used as stored with a warning, and its `$PnR` is not taken as
+its range: flowCore's GvHD frames, written back out, carry `$PnR 1024` on values
+up to 10,000.
+
+**Margin events are removed.** An event at or beyond the top of a marker or
+scatter channel's range has no true value there; flowAI and PeacoQC remove such
+events, and they are now removed at reading. They used to be capped at `$PnR`
+and kept, which piled identical values at the top of the scale and, where
+`$PnR` described another scale entirely (the demo cohort), in the middle of the
+data. `margin_events.csv` counts them per file and channel; on 30 spectral files
+they were 0.01% to 0.7% of events. `--keep-margin-events` caps instead.
+Events below a channel's lower limit by flowAI's rule are counted in the same
+table and kept: in compensated data they are mostly cells bright in a channel
+that spills into this one, and removing them took such a population from 10.0%
+to 8.1% of cells in simulation. On KMT2 they were a median 5.6% of each file's
+events (1.1% to 15%).
+
+**One channel per detector.** Area was chosen per file: a file with area for one
+detector and height for the others kept the one area channel and dropped every
+height-only marker (flowCore's FACSCalibur example resolved one marker of four).
+Each detector now contributes its area channel, or its height where it records
+no area, FCS 3.2 `$PnFEATURE` is read where present, and markers taken from
+height are named in the log.
+
+**Compensation status is recorded, not assumed.** A file without `$SPILLOVER`
+was logged as "already compensated". The keyword's absence says nothing either
+way, so the status is now "unknown" unless FCS 3.2 `$PnTYPE` declares the data
+unmixed, per file in `margin_events.csv` and in the MIFlowCyt report.
+`--spillover` applies a matrix from a CSV in place of the files' own.
+
+**Mass cytometry is refused clearly.** CyTOF files resolved no markers and failed
+at the scatter gate with an unrelated message. They are recognised now and the
+run stops saying the data are mass cytometry, which this package does not
+process.
+
+### Transform and gates
+
+**The cofactor is estimated on cells.** It was estimated over every event, and
+debris, two thirds of the events in many files, set the background. It is now
+estimated on the scatter-gated single cells; `--cofactor-from-all-events`
+restores the old estimate.
+
+**Per-marker cofactors, opt-in.** Detectors differ many-fold in how wide their
+negatives are (the 5th percentile of the values below zero ran from 147 to 2,330
+on one panel), and a cofactor per channel is the published recommendation.
+`--per-marker-cofactor` estimates one per marker from that marker's negative
+population, mirrored about zero, so a marker nearly every cell carries is not
+scaled by its positive cells. It is not the default. On KMT2 it ranked samples
+no better than the shared cofactor (mean ρ 0.64 for both) with a similar typical
+error (0.44 against 0.45 points), but its worst-sample error was larger (3.9
+against 2.1 points) and one more file failed staining QC; on the sepsis cohort
+it emptied CD4 T cells in 3 of 30 samples and regulatory T cells and NKT cells
+in 6 each. Logicle, whose width is fitted per channel (`--transform logicle`),
+scored the same as the shared cofactor on KMT2 (mean ρ 0.65, typical error 0.44
+and worst error 2.2 points) with the same extra failure, a file that passes at
+5.0% CD45+ against the 5% floor, and emptied regulatory T cells in 4 sepsis
+samples against 1. Neither earned the default.
+
+**Logicle's top of scale is the channel's range**, not the brightest event that
+happened to be sampled.
+
+**Each sample's live share is reported.** `staining_qc.csv` gains
+`pct_live_of_singlets`, and `--min-live-pct` fails samples below an assay's
+minimum. There is no default: published guidance excludes low-viability samples
+but leaves the number to the assay. A mostly dead sample reads as mostly live,
+because the viability cut goes above the dye's tallest mode, which is then the
+dead cells; `pct_live_if_dominant_dead` gives the live share for that case where
+the dye has a minimum below its dominant mode.
+
+**The singlet gate is one-sided.** Doublets have a low height-to-area ratio, so
+the band's upper bound removed singlets for nothing. Two further gating changes
+were tried and scored against manual gating, and not kept: dropping the scatter
+gate's percentile trims let the extreme SSC tail form a mode of its own and, in
+one sample, put the granulocyte cut above every granulocyte; an SSC-H:SSC-A step
+removed low-scatter lymphocytes faster than granulocytes, where the SSC ratio is
+noisy.
+
+**A marker with no density minimum gets a tail gate, not its 90th percentile.**
+The 90th percentile reported exactly 10% positive whatever the sample held. The
+cut now sits 3.5 robust standard deviations above the sample's dominant mode
+(`tailgate`, flagged for review); a sample with nothing in the tail reports
+nothing. A control still takes precedence, and the quantile remains only where
+no tail gate can be placed. The rule is the mode plus 3.5 robust standard
+deviations, not openCyto's `gate_tail` (which cuts where the density's slope
+flattens); the two agree on a normal negative. The spread is the smaller of the
+mirrored lower half's MAD and the mode's half-width at half maximum on the cut
+side (the half-peak width cytometry uses for a population's spread, with the
+kernel's variance removed). The MAD alone took in a second negative hump on
+PBMC, where monocytes and lymphocytes carry different background, and on the
+sepsis cohort put the CD19 cut beyond every cell in 3 of 30 samples. The cut
+always goes above the mode, as openCyto's does unless the analyst names the
+other side: a version that cut below any mode lying well above zero signal was
+wrong every time it did so on the KMT2 cohort, because granulocyte
+autofluorescence and spillover spread put negative modes there too (Vd1 called
+positive on 93% of one sample's CD45+ cells, which emptied its CD4 T cells). A
+marker most of the parent carries, with no density minimum, therefore needs a
+declared cut, a `parent:` in which it separates, or its side declared as
+openCyto's `side` argument does: `thresholds: CD127: {tail: lower}`, honoured
+under `--adaptive-gates` as well, where it had been ignored. No derived cut sits
+below zero signal: a tail gate there is placed at zero signal, and the quantile
+fallback is floored too, on the adaptive path as on the default one. On KMT2 one sample's CD14 cut had been its
+90th percentile at −1.27 on the transformed scale, counting cells with no CD14
+signal as positive; the previous release shares this. The
+viability gate takes its valley only above the live cells' mode: a ripple below
+it, exposed once the capped pile was gone, had kept 3% of one sample's singlets
+as live.
+
+**A valley must be more than counting noise.** The smoothing left the four bins
+at each end of the histogram raw, and a raw end bin of a few events beside an
+empty one passed as a separation of relative depth 1, outscoring every real
+valley. On one KMT2 sample of 2,956 cells it cut Vd2 below every cell, so CD4
+and CD8 T cells, both defined as Vd2-negative, read 0% where the manual gating
+has 11% and 9.6%; on the sepsis cohort it called 82% and 48% of two samples'
+CD45+ cells B cells. The previous release did both. The smoothing window is now
+truncated at the ends. Separately, relative depth alone does not see sample
+size, and a dip between noisy bins of a few events passed it: on simulated
+single modes of 3,000 events it found a valley in 81 of 150. A valley now also
+needs the density to fall significantly from the first peak and rise
+significantly to the second, each slope judged against Poisson counting noise at
+four scales with a Bonferroni-corrected 5% threshold, as SiZer (Chaudhuri and
+Marron 1999) judges a smoothed density's slopes (`noise_alpha`). Testing the
+peak and valley heights themselves would not do: they are the largest and
+smallest of many noisy bins. On the same simulations false valleys fell to 0 of
+150, a flat shoulder of a few events per bin rising into a mode was split in 6
+of 150 samples rather than 115, and a population of 5% to 30%, or of 2% when
+well separated, was still found. The same end-bin artefact had sent bootstrap
+cuts of shallow valleys to the ends of the scale, so `threshold_uncertainty.csv`
+overstated their uncertainty.
+
+**Cuts within a parent population.** A population may name a `parent:`, and its
+own markers are then cut on the parent's events rather than across every CD45+
+cell, recorded in `thresholds_within_parents.csv`. The built-in regulatory T
+cell gate uses it: CD25 and CD127 are cut within CD4 T cells.
+
+**`--fmo-sets-cut`** lets a true FMO set positivity even where the sample's
+valley sits higher (`fmo_q995_valley_lowered`). Unstained and minus-multiple
+tubes never do; their cuts are now described as permissive.
+
+**Ties.** A cut equal to a block of identical values selected nothing under a
+strict `>`; it is moved off the block.
+
+### Statistics
+
+- Rank tests are exact, ties included, as coin computes them, instead of the
+  normal approximation, which gave p = 0.081 for two separated groups of three
+  whose smallest attainable p is 0.100.
+- The centred log-ratio is taken over each sample's exclusive labels, which
+  partition CD45+, instead of over nested and overlapping populations.
+- The parametric tests use the logit instead of the arcsine square root; a
+  concentration in cells/uL, which the arcsine clipped above 100, is
+  log-transformed.
+- Batch alignment maps each study group towards the mean of its batches'
+  quantiles, CytoNorm's goal, instead of every cell pooled, which pulled the
+  groups together; correction is refused above Cohen's large association
+  rather than V = 0.6; `--batch-method cytonorm` says it is not the CytoNorm
+  package.
+- Bead calibration is matched to the samples by detector, so a bead file
+  without stain names calibrates something.
+- A sample whose `sample_type` is not whole blood gets no dual-platform
+  concentration.
+
+### Embedding, export, reporting
+
+- UMAP and clustering scale each marker by its percentile range rather than
+  median/MAD, which inflated mostly-negative markers' backgrounds; no scaling
+  under logicle or per-marker cofactors.
+- Explore mode draws its cells from the scatter and singlet gates, so debris and
+  doublets are gone before clustering.
+- Gating-ML gates are written on the scale they were fitted on, through
+  `fasinh` and `logicle` transformations, and declare the compensation that was
+  applied; they had been declared uncompensated. Each dimension is named by the
+  files' `$PnN`, as Gating-ML requires; it had been the marker symbol, which no
+  FCS file holds as a column name, so a conformant reader could not apply the
+  file. A run compensated with `--spillover` writes that matrix into the file as
+  a Gating-ML `spectrumMatrix` and references it, its compensated dimensions
+  named by their markers as fluorochromes; it had declared `FCS`, which tells a
+  reader to apply each file's own matrix instead. The logicle coordinates are
+  divided by M, not M + A, which differ once A > 0. Checked with flowUtils:
+  each file validates against the ISAC Gating-ML 2.0 schemas and, applied to a
+  simulated flowFrame, counts exactly the events computed directly. Applying an
+  `FCS` file needs flowCore 2.25 (Bioconductor devel) or its one-line fix;
+  flowCore 2.18 to 2.22 stop on a `$SPILLOVER` keyword held as a matrix under R
+  4.2 or later.
+- `--single-stains` computes the published spillover spreading matrix from
+  single-stain controls, and `spreading_pairs.csv` gains `trend_rho`, a screen
+  for compensation and unmixing errors. A negative trend on a pair whose
+  receiver is wider at a given source level is reported as `trend_unresolved`,
+  since truncation at the receiver's cut produces one from spreading alone.
+- The MIFlowCyt report fills its transform table, describes the current gates
+  and asks for the data deposition.
+- The demo files declare a linear scale and a range that matches their values,
+  and the demo specification no longer repeats `CD45: above`.
+
 ## Control tubes are kept out of every cohort-wide estimate
 
 A declared control is gated like a sample, but it is not one of the cohort.

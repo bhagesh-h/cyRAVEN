@@ -99,9 +99,13 @@ real population in half. cyRAVEN finds the dip separately in every sample, so th
 cut moves with the data. `above` means "bright for this tube", never "above
 1500". The values actually used are written to `thresholds_used.csv`.
 
-When no dip can be found, cyRAVEN does not invent one. It falls back to a
-percentile, records that in `thresholds_used.csv` as `quantile_fallback`, and
-draws the line in red in `gating_qc.png` so you can see which cuts to distrust.
+When no dip can be found, cyRAVEN does not invent one. It places the cut just
+beyond the spread of the sample's main peak (a tail gate: above a negative
+peak, below a positive one), records that in `thresholds_used.csv` as
+`tailgate`, and draws the line in red in `gating_qc.png` so you can see which
+cuts to distrust. A fixed percentile, `quantile_fallback`, is the last resort
+where even a tail gate cannot be placed, because it calls the same share of
+cells positive whatever the sample holds.
 
 ## 4. The three directions
 

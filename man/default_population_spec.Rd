@@ -21,4 +21,12 @@ document specifies as double-positive are kept double-positive.
 \details{
 \code{lineage} marks the three monocyte subsets, because the document scopes the
 functional marker blocks by monocyte vs non-monocyte membership.
+
+ONE DEPARTURE IN HOW, NOT WHAT. The regulatory T cell population keeps the
+document's name and markers, but its CD25 and CD127 cuts are derived within
+the CD3+ CD4+ T cells (\verb{parent:}) rather than across every CD45+ cell. A
+CD25 cut across all leukocytes falls wherever the CD25+ cells of every
+lineage put it, and above it sit activated conventional T cells as well as
+regulatory ones; the consensus gate is CD25+ CD127lo within CD4+ T cells
+(Santegoets et al. 2015; Liu et al. 2006; Seddiki et al. 2006).
 }

@@ -23,7 +23,8 @@ polygons_linear_table(
 
 \item{x_col, y_col}{columns holding the vertex coordinates}
 
-\item{n_per_edge}{edge subdivision passed to \code{\link[=polygon_to_linear]{polygon_to_linear()}}}
+\item{n_per_edge}{edge subdivision passed to \code{\link[=polygon_to_linear]{polygon_to_linear()}}, for
+\code{space = "linear"}}
 }
 \value{
 a data.frame, or NULL

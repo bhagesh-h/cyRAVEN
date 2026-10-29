@@ -8,7 +8,8 @@ read_fcs_resolved(
   path,
   sample_id = NULL,
   max_events = 0L,
-  ignore_channels = NULL
+  ignore_channels = NULL,
+  margins = c("remove", "cap")
 )
 }
 \arguments{
@@ -21,9 +22,15 @@ read_fcs_resolved(
 \item{ignore_channels}{Character vector of marker names to drop before the
 panel fingerprint is taken, or NULL. Names match whole and
 case-insensitively; a name containing \code{*} is treated as a glob.}
+
+\item{margins}{\code{"remove"} (default) drops every event at the top of the range
+of a marker or scatter channel; \code{"cap"} keeps the event and sets the value
+to the top of the range instead, which is what earlier versions did.}
 }
 \value{
-list(exprs, marker_cols, all_cols, keywords, n_events, file, sample_id)
+list(exprs, marker_cols, scatter_cols, channel_names, descs,
+keywords, channel_range, margin, n_events, n_events_file, subsampled,
+file, sample_id)
 }
 \description{
 WHY marker symbols, not channel names: detector/channel names are
@@ -37,4 +44,15 @@ means no marker identity ever reaches the analysis.
 Note: FCS files larger than 99,999,999 bytes cannot express their data offset
 in the 8-character HEADER field and write 0 there; the true offsets live in
 the $BEGINDATA/$ENDDATA keywords. flowCore handles this fallback internally.
+
+LOG-AMPLIFIED DATA ARE LINEARISED. An analog instrument with log amplifiers
+writes integer channel numbers on a log scale and says so in \verb{$PnE}. Every
+transform this package applies assumes linear intensities, so those channels
+are converted first, exactly as flowCore's own default does: see
+\code{\link[=linearise_channels]{linearise_channels()}}.
+
+MARGIN EVENTS ARE REMOVED. An event at or beyond the top of a channel's
+range has no true value in that channel, so it is dropped, as flowAI and
+PeacoQC's \code{RemoveMargins()} do. See \code{\link[=margin_events]{margin_events()}} for which channels are
+judged, and \code{margins = "cap"} for the earlier behaviour.
 }

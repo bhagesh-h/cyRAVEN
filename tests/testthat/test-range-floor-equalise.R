@@ -1,19 +1,21 @@
 # =============================================================================
 # Three fixes found by running cyRAVEN against cyCONDOR on a 24-sample cohort
 #
-# 1. Values above a channel's declared range ($PnR) are capped on reading, so a
-#    stray float cannot set the top of the logicle scale.
+# 1. Values above a channel's declared range ($PnR) are capped on reading under
+#    --keep-margin-events (removed by default), so a stray float cannot set the
+#    top of the logicle scale.
 # 2. No density-derived cut may sit at or below zero signal, so the bump that
 #    compensated events form below zero cannot be mistaken for a negative mode.
 # 3. Equalised embedding draws stop at the lower quartile of the per-sample
 #    counts, so one small sample cannot shrink every other sample to its size.
 # =============================================================================
 
-test_that("values above $PnR are capped at it", {
+test_that("values above $PnR are capped at it under --keep-margin-events", {
   ex <- cbind(a = c(1, 50, 200, 9e7), b = c(1, 2, 3, 4))
   colnames(ex) <- c("FL1-A", "FL2-A")
-  kw <- list(`$P1R` = "262144", `$P2R` = "1024")
-  out <- clamp_to_declared_range(ex, kw)
+  kw <- list(`$P1R` = "262144", `$P2R` = "1024", `$DATATYPE` = "F")
+  sc <- linearise_channels(ex, kw)$scale
+  out <- clamp_to_declared_range(ex, sc)
   expect_equal(out[, 1], c(1, 50, 200, 262144))
   expect_equal(out[, 2], ex[, 2])
 })
@@ -23,14 +25,16 @@ test_that("a channel with many values above $PnR is still capped", {
   # logicle scale for a whole panel. It is capped now, and named in a warning.
   ex <- cbind(c(rep(100, 90), rep(5e7, 10)))
   colnames(ex) <- "FL1-A"
-  out <- clamp_to_declared_range(ex, list(`$P1R` = "262144"))
+  sc <- linearise_channels(ex, list(`$P1R` = "262144", `$DATATYPE` = "F"))$scale
+  out <- clamp_to_declared_range(ex, sc)
   expect_equal(max(out), 262144)
 })
 
 test_that("a channel without a declared range is left alone", {
   ex <- cbind(c(1, 9e9))
   colnames(ex) <- "Time"
-  expect_equal(clamp_to_declared_range(ex, list()), ex)
+  sc <- linearise_channels(ex, list())$scale
+  expect_equal(clamp_to_declared_range(ex, sc), ex)
 })
 
 # A mostly negative marker on a logicle-like scale: a small bump of compensated
@@ -90,11 +94,27 @@ test_that("--no-equalise takes every cell up to the cap", {
                c(393L, 2000L, 25000L))
 })
 
-test_that("auto scaling is none under logicle and robust otherwise", {
+test_that("auto scaling is none on a shared scale and the percentile range otherwise", {
   expect_identical(umap_scale_method(list(transform = "logicle")), "none")
-  expect_identical(umap_scale_method(list(transform = "arcsinh")), "robust")
-  expect_identical(umap_scale_method(list()), "robust")
+  expect_identical(umap_scale_method(list(per_marker_cofactor = TRUE)), "none")
+  expect_identical(umap_scale_method(list(transform = "arcsinh")), "range")
+  expect_identical(umap_scale_method(list()), "range")
   expect_identical(umap_scale_method(list(transform = "logicle", umap_scale = "zscore")), "zscore")
+  expect_identical(umap_scale_method(list(umap_scale = "robust")), "robust")
+})
+
+test_that("range scaling does not inflate a mostly negative marker's background", {
+  # Median/MAD divides a 98%-negative marker by the width of its negatives, so
+  # its background ends up as wide as a balanced marker's whole range.
+  set.seed(3)
+  rare <- c(rnorm(9800, 0, 0.1), rnorm(200, 4, 0.3))
+  half <- c(rnorm(5000, 0, 0.1), rnorm(5000, 4, 0.3))
+  m <- cbind(rare = rare, half = half)
+  neg_sd <- function(z) c(sd(z[1:9800, 1]), sd(z[1:5000, 2]))
+  r <- neg_sd(scale_features(m, "robust")$mat)
+  g <- neg_sd(scale_features(m, "range")$mat)
+  expect_gt(r[1] / r[2], 10)
+  expect_lt(g[1] / g[2], 1.5)
 })
 
 # Whole blood inside the leukocyte gate: a small, wide CD45-negative mode

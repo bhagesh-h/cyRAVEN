@@ -238,3 +238,39 @@ load_absolute_counts <- function(path, smap, outdir) {
 }
 
 # =============================================================================
+
+#' Each sample's specimen type, where the sheet records one
+#'
+#' Read from a `sample_type`, `specimen`, `material` or `sample_material`
+#' column of the sample map, or of the patient table through `patient_id`.
+#'
+#' @param smap sample map, or NULL.
+#' @param patients patient table, or NULL.
+#' @return named character vector, sample id -> type, or NULL when no such
+#'   column exists.
+#' @keywords internal
+sample_types <- function(smap, patients = NULL) {
+  cols <- c("sample_type", "specimen", "material", "sample_material")
+  if (is.null(smap) || !"sample_id" %in% names(smap)) return(NULL)
+  hit <- intersect(cols, tolower(names(smap)))
+  if (length(hit)) {
+    v <- smap[[names(smap)[tolower(names(smap)) == hit[1]][1]]]
+    return(stats::setNames(as.character(v), as.character(smap$sample_id)))
+  }
+  if (is.null(patients) || !"patient_id" %in% names(smap) ||
+      !"patient_id" %in% names(patients)) return(NULL)
+  hit <- intersect(cols, tolower(names(patients)))
+  if (!length(hit)) return(NULL)
+  v <- patients[[names(patients)[tolower(names(patients)) == hit[1]][1]]]
+  m <- match(norm_id(smap$patient_id), norm_id(patients$patient_id))
+  stats::setNames(as.character(v[m]), as.character(smap$sample_id))
+}
+
+#' Sample types that are not whole blood
+#'
+#' Peripheral blood mononuclear cells and other density-separated, enriched or
+#' sorted preparations: their composition is not the blood's.
+#' @return a regular expression.
+#' @keywords internal
+non_whole_blood_pattern <- function()
+  "pbmc|mononuclear|ficoll|density|isolated|enriched|sorted|purified|cultured"

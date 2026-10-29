@@ -28,6 +28,9 @@
 #'   deep separation, and the cut lands under the negative peak, so every cell
 #'   is called positive. On one cohort that put 87% of CD45+ cells "Vd1+" and
 #'   emptied every population defined as Vd1-. Default `-Inf`, no floor.
+#' @param ceiling no cut is accepted at or above this value. Default `Inf`; the
+#'   viability step passes the dye's dominant mode to look for a minimum below
+#'   it (see [apply_gate_hierarchy()]).
 #' @param prefer which qualifying valley to return. `"deepest"`, the default,
 #'   takes the best-separated pair of modes. `"lowest"` takes the qualifying
 #'   valley nearest the bottom of the scale, which is what a gate meant to remove
@@ -38,6 +41,16 @@
 #'   `"lowest"` a valley also needs `min_lower_frac` of the events below it, so a
 #'   ripple in the tail of the negative mode does not count as a separation.
 #' @param min_lower_frac see `prefer`. Default `0.01`.
+#' @param noise_alpha the family-wise rate at which counting noise alone may
+#'   pass for a slope. A valley counts only where the density falls
+#'   significantly from the first peak to it and rises significantly from it to
+#'   the second, each judged against Poisson noise with a two-sided Bonferroni
+#'   quantile over the non-overlapping smoothing windows (a SiZer-style test,
+#'   Chaudhuri and Marron 1999). Relative depth alone does not see sample size:
+#'   on single modes of 3,000 simulated events it found a valley in 81 of 150
+#'   samples, most of them below 95% of the events, and on a flat shoulder of a
+#'   few events per bin it split the shoulder. Default `0.05`; `NA` turns the
+#'   test off.
 #' @param details when TRUE return a list carrying the cut plus the relative
 #'   depth of the valley and why no cut was found, instead of the bare cut.
 #'   The default returns exactly what it always has: one number or `NA_real_`.
@@ -49,7 +62,8 @@ density_valley <- function(x, bins = 220L, smooth = 4, peak_frac = 0.02,
                            min_gap_frac = 0.06, range_q = c(0.001, 0.999),
                            min_rel_depth = 0.30, min_upper_frac = 0.002,
                            floor = -Inf, prefer = c("deepest", "lowest"),
-                           min_lower_frac = 0.01, details = FALSE) {
+                           min_lower_frac = 0.01, details = FALSE, noise_alpha = 0.05,
+                           ceiling = Inf) {
   prefer <- match.arg(prefer)
   none <- function(reason)
     if (details) list(cut = NA_real_, rel_depth = NA_real_, n_peaks = NA_integer_,
@@ -61,10 +75,16 @@ density_valley <- function(x, bins = 220L, smooth = 4, peak_frac = 0.02,
   h <- graphics::hist(x[x >= rg[1] & x <= rg[2]], breaks = seq(rg[1], rg[2], length.out = bins + 1L),
             plot = FALSE)
   y <- h$counts
-  # moving-average smoothing
+  # Moving-average smoothing, the window truncated at the two ends rather than
+  # the end bins left raw. A raw end bin holding a few events beside an empty
+  # one is a "peak" and a "valley" of relative depth 1, which outscores every
+  # real separation: on one sample of 2,956 cells it cut Vd2 below every cell
+  # and emptied every population defined as Vd2-negative.
   k <- max(1L, as.integer(smooth))
-  ys <- stats::filter(y, rep(1 / (2 * k + 1), 2 * k + 1), sides = 2)
-  ys[is.na(ys)] <- y[is.na(ys)]
+  nb <- length(y); cs <- c(0, cumsum(y))
+  lo_b <- pmax(1L, seq_len(nb) - k); hi_b <- pmin(nb, seq_len(nb) + k)
+  wb <- hi_b - lo_b + 1L
+  ys <- (cs[hi_b + 1L] - cs[lo_b]) / wb
   ctr <- h$mids
   mx <- max(ys)
   pk <- which(c(FALSE, ys[-1] >= ys[-length(ys)]) &
@@ -72,12 +92,38 @@ density_valley <- function(x, bins = 220L, smooth = 4, peak_frac = 0.02,
   if (length(pk) < 2L) return(none("unimodal: fewer than two peaks"))
   min_gap <- min_gap_frac * diff(range(ctr))
   tot <- sum(ys[is.finite(ys)])
-  best <- NULL
+  # SIGNIFICANT SLOPE, SiZer-style (Chaudhuri and Marron 1999). At each bin the
+  # events in the w bins to its right minus those in the w bins to its left
+  # estimate the slope; the counts are Poisson, so that difference has variance
+  # equal to their sum. A slope counts as real only beyond a two-sided
+  # Bonferroni quantile over the nb / w windows that do not overlap. A dip is
+  # then real only where the density falls significantly between the first peak
+  # and the valley and rises significantly between the valley and the second:
+  # judging the peak and valley heights themselves would not do, since they are
+  # the largest and smallest of many noisy bins and differ by several standard
+  # errors on a flat stretch with no dip at all.
+  # As SiZer does, the slope is judged at several scales, the smoothing window
+  # and 2, 4 and 8 times it, since a few thousand events leave too few per
+  # window at the finest scale to show even a clear second population; the
+  # Bonferroni count covers every window at every scale.
+  sig_dn <- sig_up <- rep(FALSE, nb)
+  if (is.finite(noise_alpha)) {
+    ws <- (2L * k + 1L) * c(1L, 2L, 4L, 8L)
+    ws <- ws[nb > 2L * ws]
+    zc <- stats::qnorm(1 - noise_alpha / (2 * max(1, sum(nb %/% ws))))
+    for (w in ws) {
+      js <- w:(nb - w)
+      rs <- cs[js + w + 1L] - cs[js + 1L]; ls <- cs[js + 1L] - cs[js - w + 1L]
+      zs <- (rs - ls) / sqrt(pmax(rs + ls, 1))
+      sig_dn[js] <- sig_dn[js] | zs < -zc; sig_up[js] <- sig_up[js] | zs > zc
+    }
+  }
+  best <- NULL; cands <- list()
   for (i in seq_len(length(pk) - 1L)) for (j in (i + 1L):length(pk)) {
     a <- pk[i]; b <- pk[j]
     if (ctr[b] - ctr[a] < min_gap) next
     vi <- a + which.min(ys[a:b]) - 1L
-    if (ctr[vi] <= floor) next
+    if (ctr[vi] <= floor || ctr[vi] >= ceiling) next
     lo <- min(ys[a], ys[b])
     depth <- lo - ys[vi]
     if (depth <= 0) next
@@ -97,13 +143,19 @@ density_valley <- function(x, bins = 220L, smooth = 4, peak_frac = 0.02,
     if (sum(ys[vi:length(ys)], na.rm = TRUE) < min_upper_frac * tot) next
     # And, when the lowest valley is wanted, so must the lower one.
     if (prefer == "lowest" && sum(ys[seq_len(vi)], na.rm = TRUE) < min_lower_frac * tot) next
+    # A dip counting noise could have made; see noise_alpha.
+    if (is.finite(noise_alpha) && !(any(sig_dn[a:vi]) && any(sig_up[vi:b]))) next
     # Among candidates that genuinely separate, prefer the deepest separation and
     # break ties toward the wider peak spacing (a better-resolved pair).
-    score <- rel + 0.05 * (ctr[b] - ctr[a]) / diff(range(ctr))
+    cands[[length(cands) + 1L]] <- list(
+      score = rel + 0.05 * (ctr[b] - ctr[a]) / diff(range(ctr)),
+      cut = ctr[vi], rel_depth = rel)
+  }
+  for (cd in cands) {
     better <- if (prefer == "lowest")
-      is.null(best) || ctr[vi] < best$cut || (ctr[vi] == best$cut && score > best$score)
-    else is.null(best) || score > best$score
-    if (better) best <- list(score = score, cut = ctr[vi], rel_depth = rel)
+      is.null(best) || cd$cut < best$cut || (cd$cut == best$cut && cd$score > best$score)
+    else is.null(best) || cd$score > best$score
+    if (better) best <- cd
   }
   if (is.null(best)) return(none("no peak pair separates enough"))
   if (details) list(cut = best$cut, rel_depth = best$rel_depth,
@@ -116,10 +168,27 @@ density_valley <- function(x, bins = 220L, smooth = 4, peak_frac = 0.02,
 #'   0. per-sample manual override     -- wins over everything, and is recorded
 #'   1. explicit config value          -- applies to every sample
 #'   2. density valley within parent   -- bimodal markers
-#'   3. unstained-control quantile     -- unimodal markers with a control present
-#'   4. quantile fallback              -- flagged needs_review
+#'   3. control quantile               -- unimodal markers with a control present
+#'   4. tail gate                      -- unimodal markers without a control;
+#'                                        flagged needs_review
+#'   5. quantile fallback              -- only where the tail gate cannot be
+#'                                        placed; flagged needs_review
 #' A valley falling BELOW the control-derived value is rejected: it lies inside
 #' the background distribution and would call noise positive.
+#'
+#' WHY THE TAIL GATE COMES BEFORE THE QUANTILE. A marker with one mode and no
+#' control used to be cut at its 90th percentile, which reports exactly 10%
+#' positive whatever the sample holds: a constant, not a measurement, and no
+#' source supports it. The tail gate places the cut a fixed number of robust
+#' standard deviations above the dominant mode, so a sample with no positive
+#' cells reports almost none and a sample with a bright tail reports the tail.
+#' It answers the case openCyto's `gate_tail` exists for, a single mode with a
+#' positive tail (Finak et al. 2014), by a different rule: see
+#' [tail_threshold()]. It assumes the dominant mode is the negative one, which a
+#' single mode cannot confirm (see [tail_gate_cut()] for why the side is not
+#' guessed), so the cut stays flagged for review. The quantile is kept only for
+#' the case the tail rule cannot handle, a distribution with no spread to
+#' measure.
 #'
 #' WHY LEVEL 0 EXISTS AND WHY IT IS DISTINCT FROM LEVEL 1. When this package
 #' flags a threshold for review, the only previous responses were to accept it or
@@ -167,6 +236,24 @@ density_valley <- function(x, bins = 220L, smooth = 4, peak_frac = 0.02,
 #'   and refuses a control that is brighter than the sample, which a minus
 #'   control cannot be. `NULL` by default, in which case the quantile is taken
 #'   here as before.
+#' @param fmo_sets_cut When `TRUE` and the control is a true FMO
+#'   (`control_kind = "fmo_q995"`), the FMO's cut is used even where the
+#'   sample's own valley sits higher, and the source reads
+#'   `fmo_q995_valley_lowered`. The FMO is the published reference for where
+#'   positivity starts (Maecker & Trotter 2006; Cossarizza et al. 2019), so
+#'   events between its edge and a higher valley are dim positives, not
+#'   negatives. `FALSE` by default: an FMO argues a cut down validly only
+#'   where its negative is the sample's own, the same cells stained the same
+#'   day, and one FMO tube serves every sample of its panel or `control_group`,
+#'   which this package cannot check against each sample; a valley is evidence
+#'   from the sample itself. Raising a valley that sits below the FMO's edge is
+#'   applied by default, since that errs towards fewer false positives. Never
+#'   applied to an unstained or minus-multiple tube: their negatives lack the
+#'   panel's spreading and sit too low to argue a cut down.
+#' @param tail which side of the dominant mode a tail gate goes, where one is
+#'   needed: `"upper"` (default) takes the mode to be the negative population;
+#'   `"lower"` is the analyst's declaration that it is the positive one, read
+#'   from `thresholds: <marker>: {tail: lower}`. See [tail_gate_cut()].
 #' @export
 resolve_threshold <- function(marker, x_parent, cfg_value = NULL,
                               control_x = NULL, control_q = 0.995,
@@ -175,20 +262,26 @@ resolve_threshold <- function(marker, x_parent, cfg_value = NULL,
                                                "fmm_q995"),
                               control_threshold = NULL,
                               adaptive = FALSE, floor = -Inf,
-                              prefer = c("deepest", "lowest")) {
+                              prefer = c("deepest", "lowest"),
+                              fmo_sets_cut = FALSE, tail = c("upper", "lower")) {
   prefer <- match.arg(prefer)
+  tail <- match.arg(tail)
   control_kind <- match.arg(control_kind)
   out <- function(threshold, source, needs_review,
                   reason = NA_character_, by = NA_character_,
                   derived = NA_real_, derived_source = NA_character_)
-    list(threshold = threshold, source = source, needs_review = needs_review,
+    list(threshold = if (source %in% c("manual", "config")) threshold
+                     else untie_cut(x_parent, threshold,
+                                    if (identical(source, "quantile_fallback"))
+                                      1 - fallback_q else NA_real_),
+         source = source, needs_review = needs_review,
          override_reason = reason, override_by = by,
          # Carried so a control-anchored cut can still be compared against the
          # cut the sample's own density implied. Without this the agreement
          # diagnostic compares the control against itself and reports zero.
          derived_threshold = derived, derived_source = derived_source,
          # Kept so threshold_uncertainty() re-derives the cut under the same rule.
-         floor = floor, prefer = prefer)
+         floor = floor, prefer = prefer, tail = tail)
 
   ov <- suppressWarnings(as.numeric(override$threshold %||% NA_real_))
   if (is.finite(ov))
@@ -203,7 +296,8 @@ resolve_threshold <- function(marker, x_parent, cfg_value = NULL,
   ctrl <- suppressWarnings(as.numeric(control_threshold %||% NA_real_))[1]
   if (!is.finite(ctrl))
     ctrl <- if (!is.null(control_x) && length(control_x) > 100L)
-      as.numeric(quantile(control_x, control_q, na.rm = TRUE)) else NA_real_
+      untie_cut(control_x, as.numeric(quantile(control_x, control_q, na.rm = TRUE)),
+                1 - control_q) else NA_real_
   # ADAPTIVE. One fixed smoothing is one hypothesis about how wide the kernel
   # should be, and on a spectral panel it is usually the wrong one: two thirds of
   # the cuts on the cohort this was written for came back as quantile fallbacks
@@ -232,16 +326,26 @@ resolve_threshold <- function(marker, x_parent, cfg_value = NULL,
   # A derived cut ABOVE the control is left alone. The control cannot argue a cut
   # downwards: its negative is at most as wide as the sample's, so a sample whose
   # own density puts the boundary higher has seen something the control cannot.
+  # That holds for an unstained or minus-multiple tube, whose negative lacks the
+  # panel's spreading. A true FMO's negative does not, and under fmo_sets_cut
+  # it is taken as the definition of positivity in both directions.
   take_control <- function(b) {
     if (!is.finite(ctrl)) return(NULL)
-    blind <- identical(b$source, "quantile_fallback")
-    if (!blind && !(b$threshold < ctrl)) return(NULL)
-    out(ctrl, if (blind) control_kind else paste0(control_kind, "_valley_rejected"),
+    # No density minimum: the quantile and the tail gate both stand in for a
+    # cut the data did not show, and an independent control beats either.
+    blind <- b$source %in% c("quantile_fallback", "tailgate")
+    lower <- isTRUE(fmo_sets_cut) && identical(control_kind, "fmo_q995") &&
+      b$threshold > ctrl
+    if (!blind && !(b$threshold < ctrl) && !lower) return(NULL)
+    out(ctrl, if (blind) control_kind
+              else if (lower) paste0(control_kind, "_valley_lowered")
+              else paste0(control_kind, "_valley_rejected"),
         FALSE, derived = b$threshold, derived_source = b$source)
   }
 
   if (isTRUE(adaptive)) {
-    b <- best_threshold(x_parent, fallback_q = fallback_q, floor = floor, prefer = prefer)
+    b <- best_threshold(x_parent, fallback_q = fallback_q, floor = floor, prefer = prefer,
+                        tail = tail)
     if (is.finite(b$threshold)) {
       tc <- take_control(b)
       if (!is.null(tc)) return(tc)
@@ -256,10 +360,85 @@ resolve_threshold <- function(marker, x_parent, cfg_value = NULL,
     if (!is.null(tc)) return(tc)
     return(out(v, "valley", FALSE))
   }
-  qf <- as.numeric(quantile(x_parent, fallback_q, na.rm = TRUE))
+  # No minimum. The tail gate above the dominant mode, where it can be placed
+  # sensibly; see tail_gate_cut(). The quantile it used to fall through to
+  # reported 10% positive whatever the sample held.
+  tg <- if (identical(prefer, "lowest")) NA_real_ else tail_gate_cut(x_parent, floor, tail)
+  if (is.finite(tg)) {
+    tc <- take_control(list(threshold = tg, source = "tailgate"))
+    if (!is.null(tc)) return(tc)
+    return(out(tg, "tailgate", TRUE))
+  }
+  # Floored like every derived cut: a quantile below zero signal would call
+  # events positive that no stain put there.
+  qf <- untie_cut(x_parent, max(as.numeric(quantile(x_parent, fallback_q, na.rm = TRUE)),
+                                floor), 1 - fallback_q)
   tc <- take_control(list(threshold = qf, source = "quantile_fallback"))
   if (!is.null(tc)) return(tc)
   out(qf, "quantile_fallback", TRUE)
+}
+
+#' The fixed cut a `thresholds:` configuration entry declares, if any
+#'
+#' An entry is a bare number, or a list as `write_config()` emits it
+#' (`threshold`, `source`, `needs_review`, and optionally `tail`).
+#' @param v the entry, or NULL.
+#' @return a number, or NULL.
+#' @keywords internal
+cfg_threshold <- function(v) if (is.list(v)) v$threshold else v
+
+#' The tail-gate side a `thresholds:` configuration entry declares
+#'
+#' `{tail: lower}` declares that the marker's dominant mode in its parent is
+#' the positive population; see [tail_gate_cut()].
+#' @param v the entry, or NULL.
+#' @return `"lower"` where declared, `"upper"` otherwise.
+#' @keywords internal
+cfg_tail <- function(v)
+  if (is.list(v) && identical(tolower(as.character(v$tail %||% "")), "lower")) "lower" else "upper"
+
+#' Whether a cut was placed without a density minimum
+#'
+#' `quantile_fallback` and the default path's `tailgate` both mean the sample's
+#' density showed no minimum for this marker. Counted together wherever the
+#' run reports how often that happened, so the count does not fall just
+#' because the tail gate now stands in for the quantile.
+#' @param source `source` strings from [resolve_threshold()].
+#' @return logical vector.
+#' @keywords internal
+no_minimum <- function(source) as.character(source) %in% c("quantile_fallback", "tailgate")
+
+#' Move a cut off a block of identical values
+#'
+#' Populations are scored with strict inequalities, `>` for above and `<` for
+#' below, so an event whose value EQUALS the cut is in neither. On continuous
+#' data that never happens; on a pile of identical values it decides the
+#' result. A quantile of data whose top 15% sit on one value IS that value, and
+#' `> cut` then selects nothing: on the demo cohort that emptied every
+#' population of 11 samples. Integer channel data, and the capped values of
+#' `--keep-margin-events`, are piles of exactly this kind.
+#'
+#' The cut is moved to the midpoint between the tied value and its nearest
+#' neighbour on one side, so the block falls wholly on the other. With a
+#' `target_above` (a quantile's intended positive fraction) the side giving the
+#' fraction nearer the target is taken; without one the block is kept below the
+#' cut, which leaves a density-derived cut where it was to within one step.
+#'
+#' @param x the values the cut is applied to.
+#' @param cut the proposed cut.
+#' @param target_above intended fraction of `x` above the cut, or NA.
+#' @return the cut, unchanged unless some value of `x` equals it.
+#' @keywords internal
+untie_cut <- function(x, cut, target_above = NA_real_) {
+  if (length(cut) != 1L || !is.finite(cut)) return(cut)
+  x <- x[is.finite(x)]
+  if (!any(x == cut)) return(cut)
+  below <- x[x < cut]; above <- x[x > cut]
+  step <- max(abs(cut), 1) * 1e-9
+  lo <- if (length(below)) (max(below) + cut) / 2 else cut - step   # block counted above
+  hi <- if (length(above)) (cut + min(above)) / 2 else cut + step   # block counted below
+  if (!is.finite(target_above)) return(hi)
+  if (abs(mean(x > lo) - target_above) <= abs(mean(x > hi) - target_above)) lo else hi
 }
 
 #' Look up a per-sample, per-marker threshold override

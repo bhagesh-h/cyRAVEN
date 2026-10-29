@@ -31,9 +31,13 @@ one structural limit. **It cannot find a population nobody declared**, and it
 cannot look outside the parent gate, because both are consequences of the
 declaration itself.
 
-Explore mode is the complement. It takes every event in the file and every
-eligible channel, embeds and clusters without reference to any specification, and
-reports what it found. It is what FlowSOM, Phenograph and cyCONDOR do.
+Explore mode is the complement. It takes the single cells of every file and
+every eligible channel, embeds and clusters without reference to any
+specification, and reports what it found. It is what FlowSOM, Phenograph and
+cyCONDOR do. The cells are drawn from inside the scatter and singlet gates,
+which need neither the specification nor CD45, because debris and doublets
+would otherwise form clusters of their own; dead cells and non-leukocytes are
+judged afterwards by the cluster-level QC gate.
 
 ```bash
 --explore
@@ -354,7 +358,7 @@ p-values. At these group sizes that is p-hacking with extra steps.
 | `--explore-max-cells` | 150000 | Ceiling across all samples |
 | `--explore-markers` | every channel | Cluster on these only |
 | `--explore-exclude` | none | Drop these channels |
-| `--no-explore-qc` | off | Embed every event, debris included |
+| `--no-explore-qc` | off | Embed every single cell, dead and CD45-negative cells included |
 | `--explore-keep-dead` | off | Keep the dead cluster |
 | `--no-explore-equalise` | off | Keep every gated cell instead of equalising per sample |
 | `--explore-min-retained` | 0.05 | Ignore the gate below this retention and flag the run |
@@ -454,8 +458,9 @@ A file carrying no Time channel is reported as such rather than as stable.
 
 ### 1b. Why a threshold did not resolve
 
-Section 1 shows *that* a cut fell back to a quantile. `spreading_receivers.csv`
-and `spreading_pairs.csv` are what distinguish the two reasons it can have.
+Section 1 shows *that* a marker had no density minimum and got a tail gate.
+`spreading_receivers.csv` and `spreading_pairs.csv` are what distinguish the two
+reasons it can have.
 
 Compensation removes the mean contribution of one fluorochrome to another
 detector. It cannot remove the photon-counting variance that came with it, so a
@@ -466,7 +471,8 @@ no gating strategy recovers a minimum that the optics erased.
 `spreading_pairs.csv` reports, for every ordered source and receiver pair, the
 ratio of the receiver's negative spread when the source is bright to its spread
 when the source is dim. `spreading_receivers.csv` ranks receivers by their worst
-source and pairs that against how often the marker actually fell back.
+source and pairs that against how often the marker had no density minimum
+(`fallback_rate`, tail gates and quantiles together).
 
 Read the two columns together. A marker with a high fallback rate and substantial
 spreading is failing for a panel design reason, and the fix is a different
@@ -603,9 +609,9 @@ if (file.exists("images/cluster-gate-agreement.png")) knitr::include_graphics("i
 ```
 
 This check clusters WITHIN the parent gate, on the cells the specification
-already selected. `--explore` is the wider version: it clusters every event in
-the file over every eligible channel, so it can also find a population the
-parent gate excluded. Under `--maybe-learn` it writes `spec_gaps.csv`, which
+already selected. `--explore` is the wider version: it clusters the single cells
+of the file over every eligible channel, so it can also find a population the
+CD45 or viability gate excluded. Under `--maybe-learn` it writes `spec_gaps.csv`, which
 names declared populations that turn out to span several clusters. See
 [Explore mode](advanced.html#explore-mode-unsupervised-discovery).
 
@@ -789,7 +795,9 @@ each marker across batches by monotone quantile mapping; monotonicity guarantees
 that within-batch cell ordering is preserved, so location and scale are adjusted
 without introducing structure. Above `--batch-max-cramers-v` correction is
 refused, since at that level of confounding removing the batch effect and
-removing the biological effect are the same operation.
+removing the biological effect are the same operation. The default threshold is
+Cohen's large association, w = 0.5, which is *V* = 0.5 for a two-level table and
+smaller for larger ones (0.35 for three levels).
 `--force-batch-correction` overrides, and the override is recorded in the run
 manifest.
 
@@ -813,7 +821,20 @@ and the per-cluster maps on the original values. Measured on a synthetic
 three-batch shift, the naive form left a mean between-batch gap of 1.296 against
 whole-file alignment's 0.003; fitted correctly it reaches 0.014 while leaving the
 true between-cell-type separation at 3.996 against a true 3.994, where whole-file
-alignment inflates it to 4.078. `cytonorm` is accepted as a synonym.
+alignment inflates it to 4.078. `cytonorm` is accepted for `cluster`, with a
+note in the log: it is not the CytoNorm package, which learns its maps from
+anchor samples.
+
+**The goal each batch is aligned towards.** Quantile alignment maps each batch
+onto a goal distribution. A goal pooled over every cell weights the batches by
+their cell counts and blends the study groups, so where one batch holds mostly
+patients and another mostly controls, aligning both to it pulls the groups
+together. Each study group is therefore aligned on its own, towards the mean of
+its batches' quantiles, which is CytoNorm's goal (Van Gassen et al. 2020) tailored
+to the design as CytoNorm 2.0 recommends (Quintelier et al. 2025). On a planted
+two-batch, two-group example the pooled goal shrank a 2-unit group difference to
+1.2; the per-group goal kept 2.0 and removed the batch shift.
+`--batch-pooled-goal` restores the pooled form.
 
 The clustering reuses the same seeded, stream-safe routine the unsupervised
 cross-check uses, so no dependency is added and a run reproduces.
@@ -893,15 +914,18 @@ exhaustive list rather than a second copy of them.
 |---|---|
 | `recon_diagnostics.png` | Gate boundaries per sample |
 | `gating_qc.png` | Thresholds superimposed on the densities they derive from |
-| `staining_qc.csv` | Per-sample verdict and exclusion reason |
+| `staining_qc.csv` | Per-sample verdict and exclusion reason, the CD45<sup>+</sup> share of live cells and the live share of single cells (`pct_live_of_singlets`, empty where no viability gate was applied); `pct_live_if_dominant_dead` is the share below a dye minimum lying under the dominant mode, the live share if that mode is the dead cells (or empty), for a mostly dead sample the gate reads as mostly live; a second live mode near zero, common on whole blood, also produces one, so read it with the dye's plot |
+| `margin_events.csv` | Per file: margin events removed (or capped), events below a channel's lower limit by flowAI's rule (counted, not removed: in compensated data they are mostly cells bright in a spilling channel, and removing them would bias those cells' frequency), channels linearised from `$PnE`, and the compensation applied |
 | `thresholds_used.csv` | Threshold, derivation, cofactor and outlier status per sample and marker |
+| `thresholds_within_parents.csv` | Cuts a population with `parent:` derives on its parent's events, beside the CD45<sup>+</sup> cut |
 | `threshold_scale_qc.csv` | Panel median and robust *z* per marker |
 | `acquisition_qc.csv`, `.png` | Per-sample acquisition stability, and the flagged intervals |
 | `acquisition_qc_bins.csv` | Per-interval rate and channel departure |
 | `acquisition_qc_impact.csv` | How far each population would move if the flagged intervals were excluded |
 | `fmo_agreement.csv` | Derived cut against its FMO-anchored equivalent, in units of the cut's own uncertainty |
 | `controls_refused.csv` | Channels where a declared control could not anchor a cut, and why |
-| `spreading_pairs.csv` | Per channel pair, how much wider the receiver's negatives become |
+| `spreading_pairs.csv` | Per channel pair, how much wider the receiver's negatives become, overall and at a given source level, and `trend_rho`, a screen for compensation or unmixing error (`trend_unresolved` where spreading alone could produce the trend) |
+| `spillover_spreading_matrix.csv` | The published spillover spreading matrix, written by `--single-stains` |
 | `spreading_receivers.csv` | Per marker, total spreading received and whether it explains a fallback |
 | `calibration.csv` | Bead fit per channel, written by `--calibration-beads` |
 
@@ -910,11 +934,20 @@ config declares a `sample_overrides:` block, so a run that overrides nothing
 writes the table it always wrote. `source` is `manual` for an overridden cut,
 `fmo_q995` for one anchored to a fluorescence-minus-one control, `fmm_q995` for
 a tube that leaves out several reagents at once, and `control_q995` for an
-unstained tube. Those three bare names mean the data indicated no cut and the
-control supplied one; the `_valley_rejected` suffix means the data did indicate
-a cut and the control put the boundary higher. Either way the row carries
-`derived_threshold` and `derived_source`, the cut that would have been used
-without the control, so the two stay comparable.
+unstained tube. Those three bare names mean the data indicated no cut (no
+density minimum: the tail gate or quantile it would otherwise have used is in
+`derived_source`) and the control supplied one; the `_valley_rejected` suffix
+means the data did indicate a cut and the control put the boundary higher, and
+`fmo_q995_valley_lowered`, under `--fmo-sets-cut` only, that a true FMO put it
+lower. Either way the row carries `derived_threshold` and `derived_source`, the
+cut that would have been used without the control, so the two stay comparable.
+
+Only the FMO is a full reference. An unstained tube and a minus-multiple tube
+both lack the spreading the stained panel puts into a channel, so their
+negatives are narrower than the sample's and the cuts they anchor are
+permissive on any channel that receives spreading (Roederer 2001; Maecker &
+Trotter 2006). `spreading_receivers.csv` names those channels; they are the ones
+worth an FMO.
 
 #### What a control has to be before it is used
 
@@ -1022,7 +1055,7 @@ version-controlled beside the config it describes.
 | File | Content |
 |---|---|
 | `population_frequencies.csv` | Percentage of parent per population per sample |
-| `population_marker_mfi.csv` | Per sample, population and marker: the median intensity on the analysis scale (`median_asinh`), the same median in instrument units (`mfi`), and the percent positive |
+| `population_marker_mfi.csv` | Per sample, population and marker: the median intensity on the analysis scale (`median_asinh`, which keeps its name under `--transform logicle` and holds the logicle value there), the same median in instrument units (`mfi`), and the percent positive |
 | `population_mfi_summary.csv` | Median fluorescence intensity per population and marker: the median over donors of each sample's median, in instrument units with its interquartile range, overall and per study group, with the median percent positive |
 | `population_composition.csv` | Each population's share of the embedded cells, its defining markers, its spread across donors, its share within each study group, and the percent of it positive for each marker (`pct_pos_<marker>`) |
 | `population_composition_by_timepoint.csv` | The same table for each timepoint, in the pooled table's row order |

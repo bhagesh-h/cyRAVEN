@@ -10,7 +10,7 @@ parametric_group_tests(
   reference = NULL,
   value_col = NULL,
   min_n = 3L,
-  transform = "asin_sqrt"
+  transform = "logit"
 )
 }
 \arguments{
@@ -25,15 +25,16 @@ column.}
 
 \item{min_n}{Minimum samples per group.}
 
-\item{transform}{"asin_sqrt" (default) or "none".}
+\item{transform}{"logit" (default), "asin_sqrt" or "none". A concentration
+is log-transformed whatever this says, unless it is "none".}
 }
 \value{
 data.frame, or NULL when nothing is testable.
 }
 \description{
-Runs the test an immunology paper usually reports, on arcsine square root
-transformed percentages, and states beside each result whether the two
-assumptions behind it held.
+Runs the test an immunology paper usually reports, on logit-transformed
+percentages (log concentrations when the measure is cells/uL), and states
+beside each result whether the two assumptions behind it held.
 }
 \details{
 Two groups give Welch's t-test, which does not assume equal variances, plus

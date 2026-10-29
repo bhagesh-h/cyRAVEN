@@ -4,7 +4,12 @@
 \alias{align_quantiles}
 \title{Align one marker's distribution across batches}
 \usage{
-align_quantiles(x, batch, probs = seq(0, 1, length.out = 101))
+align_quantiles(
+  x,
+  batch,
+  probs = seq(0, 1, length.out = 101),
+  goal = c("batch_mean", "cells")
+)
 }
 \arguments{
 \item{x}{numeric vector for one marker, across all cells}
@@ -12,6 +17,8 @@ align_quantiles(x, batch, probs = seq(0, 1, length.out = 101))
 \item{batch}{batch label per cell}
 
 \item{probs}{quantile grid used to build the map}
+
+\item{goal}{"batch_mean" (default) or "cells"; see above.}
 }
 \value{
 numeric vector, corrected
@@ -29,5 +36,12 @@ false for a bimodal marker where the two modes have different variances.
 Matching quantiles corrects the shape too, and because the map is monotone it
 preserves the ORDER of cells within a batch -- the property that stops a
 correction from inventing structure.
+
+THE GOAL IS THE MEAN OF THE BATCHES' QUANTILES, as CytoNorm's is (Van Gassen
+et al. 2020), not the quantiles of every cell pooled. A pooled goal weights
+each batch by its cell count, so the batch holding most cells sets the
+scale everything is mapped onto, and when the batches differ in which
+samples they hold the goal carries that imbalance into every batch.
+\code{goal = "cells"} keeps the pooled form.
 }
 \keyword{internal}

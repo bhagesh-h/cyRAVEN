@@ -43,16 +43,34 @@ ignore_channel_match <- function(sym, patterns) {
 #' in the 8-character HEADER field and write 0 there; the true offsets live in
 #' the $BEGINDATA/$ENDDATA keywords. flowCore handles this fallback internally.
 #'
+#' LOG-AMPLIFIED DATA ARE LINEARISED. An analog instrument with log amplifiers
+#' writes integer channel numbers on a log scale and says so in `$PnE`. Every
+#' transform this package applies assumes linear intensities, so those channels
+#' are converted first, exactly as flowCore's own default does: see
+#' [linearise_channels()].
+#'
+#' MARGIN EVENTS ARE REMOVED. An event at or beyond the top of a channel's
+#' range has no true value in that channel, so it is dropped, as flowAI and
+#' PeacoQC's `RemoveMargins()` do. See [margin_events()] for which channels are
+#' judged, and `margins = "cap"` for the earlier behaviour.
+#'
 #' @param path File path.
 #' @param sample_id The sample id.
 #' @param max_events The max events. Default `0L`.
 #' @param ignore_channels Character vector of marker names to drop before the
 #'   panel fingerprint is taken, or NULL. Names match whole and
 #'   case-insensitively; a name containing `*` is treated as a glob.
-#' @return list(exprs, marker_cols, all_cols, keywords, n_events, file, sample_id)
+#' @param margins `"remove"` (default) drops every event at the top of the range
+#'   of a marker or scatter channel; `"cap"` keeps the event and sets the value
+#'   to the top of the range instead, which is what earlier versions did.
+#' @return list(exprs, marker_cols, scatter_cols, channel_names, descs,
+#'   keywords, channel_range, margin, n_events, n_events_file, subsampled,
+#'   file, sample_id)
 #' @export
 read_fcs_resolved <- function(path, sample_id = NULL, max_events = 0L,
-                              ignore_channels = NULL) {
+                              ignore_channels = NULL,
+                              margins = c("remove", "cap")) {
+  margins <- match.arg(margins)
   # Bound the events read per file when asked.
   #
   # WHY EVENLY SPACED rather than the first N: acquisition order is time order,
@@ -82,59 +100,22 @@ read_fcs_resolved <- function(path, sample_id = NULL, max_events = 0L,
   pd <- flowCore::pData(flowCore::parameters(ff))
   desc <- as.character(pd$desc)
   nm   <- as.character(pd$name)
-  # marker symbol = text before " : "; fall back to the channel name
-  sym <- marker_symbol(desc, nm)
-
-  # AREA channels only. Height/width are redundant duplicates of area and would
-  # double-weight every marker in the embedding.
-  is_area <- grepl("(^|[^A-Za-z])A$|\\.A$|-A$|Area$", nm) |
-             grepl("- Area$", desc)
-  # scatter channels are kept separately for gating, keyed by a canonical name
-  scatter <- c(`FSC-A` = "FSC.*A(rea)?$", `FSC-H` = "FSC.*H(eight)?$",
-               `SSC-A` = "SSC.*A(rea)?$", `SSC-H` = "SSC.*H(eight)?$")
-  sc_cols <- integer(0)
-  for (k in names(scatter)) {
-    hit <- which(grepl(scatter[[k]], nm) | grepl(scatter[[k]], desc))
-    if (length(hit)) sc_cols[k] <- hit[1]
-  }
-
-  # HEIGHT-ONLY ACQUISITIONS. The area rule above assumes the instrument recorded
-  # both, which older cytometers and some clinical archives did not: they write
-  # FSC-H, SSC-H and FL1-H with no area channel anywhere. Applying the rule
-  # unchanged to such a file resolves ZERO markers, and the run then fails several
-  # stages later with an empty population table that blames the specification.
-  #
-  # The rule exists to avoid double-weighting a marker that appears twice. Where
-  # nothing appears twice there is nothing to avoid, so height is used and the
-  # substitution is announced. It is announced rather than silent because pulse
-  # height and pulse area are not the same measurement: height understates a
-  # bright wide event, so thresholds derived here are not interchangeable with
-  # those from an area acquisition of the same panel.
-  fluor <- !grepl("^FSC|^SSC|^Time|Time.Stamp", nm, ignore.case = TRUE) &
-           !grepl("^FSC|^SSC|^Time", sym, ignore.case = TRUE)
-  height_only <- !any(is_area & fluor) && any(fluor)
-  if (height_only) {
-    is_h <- grepl("(^|[^A-Za-z])H$|\\.H$|-H$|Height$", nm) |
-            grepl("- Height$", desc)
-    if (any(is_h & fluor)) {
-      is_area <- is_area | is_h
-      log_msg("  no area channel in this file; using pulse HEIGHT for ",
-              sum(is_h & fluor), " marker(s). Height and area are different ",
-              "measurements, so thresholds from this file are not comparable ",
-              "with an area acquisition of the same panel")
-    }
-  }
-  # The scatter gate is defined on area. Where the file has only height, the
-  # height channel stands in for it, under the same caveat.
-  for (k in c("FSC", "SSC"))
-    if (!paste0(k, "-A") %in% names(sc_cols) && paste0(k, "-H") %in% names(sc_cols))
-      sc_cols[paste0(k, "-A")] <- sc_cols[[paste0(k, "-H")]]
-
-  # fluorescence markers = area channels that are not scatter/time
-  keep <- which(is_area & fluor)
-  marker_cols <- setNames(keep, sym[keep])
-  # collapse duplicate symbols to the first occurrence
-  marker_cols <- marker_cols[!duplicated(names(marker_cols))]
+  kw   <- flowCore::keyword(ff)
+  feat_kw <- vapply(seq_along(nm), function(i)
+    as.character(kw[[paste0("$P", i, "FEATURE")]] %||% NA_character_)[1], "")
+  rc <- resolve_channels(nm, desc, features = feat_kw)
+  marker_cols <- rc$markers; sc_cols <- rc$scatter
+  # Pulse height and pulse area are not the same measurement: height
+  # understates a bright wide event, so a cut on one is not interchangeable
+  # with a cut on the other. Said whenever a marker had to come from height.
+  if (length(rc$height_markers))
+    log_msg("  pulse HEIGHT used for ", length(rc$height_markers), " marker(s) ",
+            "whose detector records no area: ",
+            paste(utils::head(rc$height_markers, 8L), collapse = ", "),
+            if (length(rc$height_markers) > 8L) ", ..." else "",
+            ". Their cuts are not comparable with an area acquisition of the ",
+            "same panel")
+  stop_if_mass_cytometry(nm, desc, kw, basename(path))
 
   # WHY DROPPING A CHANNEL HERE MATTERS MORE THAN IT LOOKS. The panel
   # fingerprint is the sorted set of marker names, so a channel present in some
@@ -149,52 +130,373 @@ read_fcs_resolved <- function(path, sample_id = NULL, max_events = 0L,
     if (any(drop)) marker_cols <- marker_cols[!drop]
   }
 
-  ex <- clamp_to_declared_range(flowCore::exprs(ff), flowCore::keyword(ff),
-                                label = basename(path))
-  # n_events is what was READ (the denominator of every downstream percentage);
-  # n_events_file is what the file claims. They differ only under --max-events-per-file.
-  n_file <- suppressWarnings(as.integer(flowCore::keyword(ff)$`$TOT`))
+  lin <- linearise_channels(flowCore::exprs(ff), kw, label = basename(path))
+  ex <- lin$exprs
+  # Judged on the channels the analysis reads, and nowhere else: an event
+  # saturating a width or autofluorescence channel nobody uses is a cell.
+  used <- unique(c(unname(marker_cols), unname(sc_cols)))
+  mg <- margin_events(ex, lin$scale, used, label = basename(path))
+  if (identical(margins, "remove")) {
+    if (mg$n) ex <- ex[!mg$event, , drop = FALSE]
+  } else {
+    ex <- clamp_to_declared_range(ex, lin$scale, used, label = basename(path))
+  }
+  # n_events is what was READ and kept (the denominator of every downstream
+  # percentage); n_events_file is what the file claims. They differ under
+  # --max-events-per-file and by the margin events removed.
+  n_file <- suppressWarnings(as.integer(kw$`$TOT`))
   list(exprs = ex, marker_cols = marker_cols, scatter_cols = sc_cols,
-       channel_names = nm, descs = desc, keywords = flowCore::keyword(ff),
+       channel_names = nm, descs = desc, keywords = kw,
+       # The top of each channel's range in the units `exprs` now holds: the
+       # declared $PnR for a linear channel, f2 * 10^f1 for a linearised log
+       # channel, NA where the file's keywords cannot be trusted for it. The
+       # logicle transform takes its top of scale from here.
+       channel_range = setNames(lin$scale$range, nm),
+       channel_scale = lin$scale,
+       margin = list(n = if (identical(margins, "remove")) mg$n else 0L,
+                     n_at_margin = mg$n, by_channel = mg$by_channel,
+                     handling = margins),
        n_events = nrow(ex),
        n_events_file = if (is.finite(n_file)) n_file else n_read_full,
        subsampled = subsampled, file = basename(path),
-       sample_id = sample_id %||% derive_sample_id(basename(path), flowCore::keyword(ff)))
+       sample_id = sample_id %||% derive_sample_id(basename(path), kw))
 }
 
-#' Cap every channel at the maximum the file declares for it
+#' Which pulse feature each channel records
 #'
-#' WHAT: each value above the channel's `$PnR` is set to `$PnR`, the same
-#' clamping flowCore's `read.FCS()` does by default and FlowJo does on import.
+#' FCS 3.2 states it in `$PnFEATURE` (Area, Height or Width). Older files say
+#' it only through the channel name, by the `-A`/`-H`/`-W` suffix every
+#' acquisition package writes, or through a `$PnS` ending in "- Area" as some
+#' spectral instruments write it. The keyword wins where it is present.
 #'
-#' WHY: a file stored as floats (`$DATATYPE F`) can hold values far above the
-#' range it declares, and acquisition software writes them. One cohort declared
-#' 262,144 on every channel and stored values up to 6.8e8 in 0.3% of events of
-#' most fluorescence channels. They are not measurements, and one of them is
-#' enough to wreck any scale fitted to the data: the logicle transform takes its
-#' top from the channel maximum, so a single 2e8 put every real event within a
-#' few hundredths of zero and every gate on the file became noise.
+#' @param nm `$PnN` values, as read (`alter.names` applied).
+#' @param desc `$PnS` values.
+#' @param features `$PnFEATURE` values, `NA` where absent. Default none.
+#' @return character vector of `"A"`, `"H"`, `"W"` or `NA`.
+#' @keywords internal
+pulse_feature <- function(nm, desc, features = NULL) {
+  desc <- as.character(desc); desc[is.na(desc)] <- ""
+  f <- rep(NA_character_, length(nm))
+  f[grepl("(^|[^A-Za-z])W$|Width$", nm) | grepl("- Width$", desc)] <- "W"
+  f[grepl("(^|[^A-Za-z])H$|Height$", nm) | grepl("- Height$", desc)] <- "H"
+  f[grepl("(^|[^A-Za-z])A$|Area$", nm) | grepl("- Area$", desc)] <- "A"
+  if (!is.null(features)) {
+    k <- toupper(substr(trimws(as.character(features)), 1L, 1L))
+    use <- !is.na(k) & k %in% c("A", "H", "W")
+    f[use] <- k[use]
+  }
+  f
+}
+
+#' The detector a channel belongs to, with its pulse-feature suffix removed
 #'
-#' ALWAYS, NOT ONLY WHEN FEW VALUES ARE OVER. An earlier version left a channel
-#' alone when more than 1% of its events were above `$PnR`, on the theory that
-#' the declared range was then the error. On that same cohort one file had more
-#' than 1% of its CD45 events above range, reaching 2e8, so its CD45 stayed
-#' uncapped and set the scale for the whole panel again. A channel with that many
-#' values over is named in a warning instead, so a genuinely wrong `$PnR` is
-#' still seen; it is capped either way, as every other tool would cap it.
+#' `FL1.A` and `FL1.H` are two measurements of one detector, and so is the pair
+#' `X..RB613...A` / `X..RB613...H` that `alter.names` makes of a spectral
+#' channel. Stripping the suffix gives the key the two share.
+#'
+#' @param nm `$PnN` values, as read.
+#' @return character vector.
+#' @keywords internal
+detector_of <- function(nm)
+  sub("([^A-Za-z])?(A|H|W|Area|Height|Width)$", "", as.character(nm))
+
+#' Decide which channels are markers and which are scatter
+#'
+#' ONE CHANNEL PER DETECTOR: area where the detector records it, height where
+#' it records only height, width never. Area is preferred because it is the
+#' integrated signal, and one channel per detector because a marker recorded as
+#' both area and height would otherwise be counted twice in the embedding.
+#'
+#' The choice is made per detector, not per file. A file with area for one
+#' detector and height for the others, which is how flowCore's FACSCalibur
+#' example and many clinical archives look, used to keep the one area channel
+#' and silently drop every height-only marker. FCS 3.2 records the feature per
+#' parameter in `$PnFEATURE` for this reason (Spidlen et al. 2021).
+#'
+#' @param nm `$PnN` values, as read.
+#' @param desc `$PnS` values.
+#' @param features `$PnFEATURE` values, or NULL.
+#' @return list(markers = named integer, marker symbol -> column; scatter =
+#'   named integer keyed `FSC-A`, `FSC-H`, `SSC-A`, `SSC-H`; height_markers =
+#'   markers taken from pulse height; height_only = TRUE when every marker was)
+#' @keywords internal
+resolve_channels <- function(nm, desc, features = NULL) {
+  nm <- as.character(nm); desc <- as.character(desc)
+  sym <- marker_symbol(desc, nm)
+  feat <- pulse_feature(nm, desc, features)
+  # scatter channels are kept separately for gating, keyed by a canonical name
+  scatter <- c(`FSC-A` = "FSC.*A(rea)?$", `FSC-H` = "FSC.*H(eight)?$",
+               `SSC-A` = "SSC.*A(rea)?$", `SSC-H` = "SSC.*H(eight)?$")
+  sc_cols <- integer(0)
+  for (k in names(scatter)) {
+    hit <- which(grepl(scatter[[k]], nm) | grepl(scatter[[k]], desc))
+    if (length(hit)) sc_cols[k] <- hit[1]
+  }
+  # The scatter gate is defined on area. Where the file has only height, the
+  # height channel stands in for it, under the same caveat as a height marker.
+  for (k in c("FSC", "SSC"))
+    if (!paste0(k, "-A") %in% names(sc_cols) && paste0(k, "-H") %in% names(sc_cols))
+      sc_cols[paste0(k, "-A")] <- sc_cols[[paste0(k, "-H")]]
+
+  fluor <- !grepl("^FSC|^SSC|^Time|Time.Stamp", nm, ignore.case = TRUE) &
+           !grepl("^FSC|^SSC|^Time", sym, ignore.case = TRUE) &
+           feat %in% c("A", "H")
+  det <- detector_of(nm)
+  named <- !is.na(desc) & nzchar(trimws(sub(" : .*$", "", desc)))
+  keep <- integer(0)
+  for (d in unique(det[fluor])) {
+    i <- which(fluor & det == d)
+    pick <- i[feat[i] == "A"]
+    if (!length(pick)) pick <- i[feat[i] == "H"]
+    pick <- pick[1L]
+    # Both channels of a detector measure the same stain. Where only one of
+    # them carries it in $PnS, the chosen channel takes that name rather than
+    # falling back to its detector name.
+    if (!named[pick] && any(named[i])) sym[pick] <- sym[i[named[i]][1L]]
+    keep <- c(keep, pick)
+  }
+  keep <- sort(keep)
+  marker_cols <- setNames(keep, sym[keep])
+  # collapse duplicate symbols to the first occurrence
+  dup <- duplicated(names(marker_cols))
+  marker_cols <- marker_cols[!dup]
+  hm <- names(marker_cols)[feat[marker_cols] == "H"]
+  list(markers = marker_cols, scatter = sc_cols, height_markers = hm,
+       height_only = length(marker_cols) > 0L && length(hm) == length(marker_cols))
+}
+
+#' Stop on mass cytometry data, which this package does not process
+#'
+#' A CyTOF file has no scatter, carries ion counts rather than fluorescence, and
+#' needs bead normalisation, a DNA-intercalator singlet gate and an arcsinh
+#' cofactor of 5 before analysis (Finck et al. 2013; Nowicka et al. 2017). None
+#' of that is implemented here, and the fluorescence path would run on it far
+#' enough to produce numbers before failing at the scatter gate. Recognised by
+#' FCS 3.2 `$PnTYPE` "Mass", by `$CYT`, or by channel names written as a metal
+#' isotope with the `Di`/`Dd` suffix the acquisition software uses.
+#'
+#' @param nm,desc `$PnN` and `$PnS` values.
+#' @param kw keyword list.
+#' @param label file name for the message.
+#' @return `invisible(FALSE)`, or an error.
+#' @keywords internal
+stop_if_mass_cytometry <- function(nm, desc, kw, label = "") {
+  types <- vapply(seq_along(nm), function(i)
+    as.character(kw[[paste0("$P", i, "TYPE")]] %||% "")[1], "")
+  cyt <- as.character(kw[["$CYT"]] %||% "")[1]
+  # "Yb176Di", and "(Yb176)Dd", which alter.names turns into ".Yb176.Dd"
+  iso <- grepl("[A-Z][a-z]?[0-9]{2,3}[^A-Za-z0-9]?(Di|Dd)$", nm)
+  if (any(tolower(types) == "mass") ||
+      grepl("cytof|helios|hyperion|fluidigm|standard biotools", cyt, ignore.case = TRUE) ||
+      sum(iso) >= 3L)
+    stop(label, ": this looks like MASS CYTOMETRY data (",
+         if (nzchar(cyt)) paste0("$CYT '", cyt, "', ") else "",
+         sum(iso), " isotope channel(s)). cyRAVEN analyses fluorescence ",
+         "cytometry only: mass cytometry has no scatter and needs bead ",
+         "normalisation, a DNA-based singlet gate and an arcsinh cofactor of 5, ",
+         "none of which this package applies. See vignette('limitations').",
+         call. = FALSE)
+  invisible(FALSE)
+}
+
+#' Put every channel on a linear scale and find the top of its range
+#'
+#' WHY. An analog instrument with log amplifiers (a FACSCalibur, for one) stores
+#' integer channel numbers 0 to `$PnR` - 1 on a log scale, and `$PnE f1,f2`
+#' declares it: f1 decades, offset f2. Every transform this package fits assumes
+#' linear intensity, so an arcsinh or logicle laid over channel numbers puts a
+#' log on top of a log and moves every valley. FCS 3.1 allows log storage only
+#' for integer data (Spidlen et al. 2010).
+#'
+#' WHAT. Integer channels with f1 > 0 are converted to f2 * 10^(f1 * x / `$PnR`),
+#' with f2 = 0 read as 1, which is exactly what flowCore's
+#' `read.FCS(transformation = "linearize")` computes. Their range becomes
+#' f2 * 10^f1.
+#'
+#' FLOATING-POINT DATA WITH A NON-ZERO `$PnE` breaks the standard, and the values
+#' are not converted, because flowCore does not convert them either and nothing
+#' says what scale they are on. flowCore's own GvHD example, written back out
+#' with `write.FCS()`, is like this: linear floats up to 10,000 under the
+#' FACSCalibur keywords `$PnE 4,0` and `$PnR 1024`. The `$PnR` of such a channel
+#' describes the original channel numbers rather than the stored values, so it
+#' is not used as the channel's range. Capping those values at 1024 is what put
+#' a pile of identical values in the middle of the demo cohort's CD45 data.
 #'
 #' @param ex Expression matrix, events x channels, in file order.
-#' @param keywords FCS keywords, carrying `$P<n>R` for each channel.
+#' @param kw FCS keywords.
+#' @param label File name for the log line.
+#' @return list(exprs, scale), `scale` a data.frame with one row per channel:
+#'   `f1`, `f2`, `stored` ("linear", "log, linearised" or "log declared on
+#'   floats, used as stored"), `range` (top of scale in the units now held, or
+#'   NA) and `margin_at` (the value at and above which an event is at the
+#'   margin, or NA).
+#' @keywords internal
+linearise_channels <- function(ex, kw, label = "") {
+  n <- ncol(ex)
+  dt <- toupper(trimws(as.character(kw[["$DATATYPE"]] %||% "")[1]))
+  sc <- data.frame(channel = colnames(ex), f1 = 0, f2 = 0, stored = "linear",
+                   range = NA_real_, margin_at = NA_real_,
+                   stringsAsFactors = FALSE)
+  for (i in seq_len(n)) {
+    pnr <- suppressWarnings(as.numeric(kw[[paste0("$P", i, "R")]] %||% NA)[1])
+    pne <- suppressWarnings(as.numeric(strsplit(
+      as.character(kw[[paste0("$P", i, "E")]] %||% "0,0")[1], ",", fixed = TRUE)[[1]]))
+    f1 <- if (length(pne) >= 1L && is.finite(pne[1])) pne[1] else 0
+    f2 <- if (length(pne) >= 2L && is.finite(pne[2])) pne[2] else 0
+    sc$f1[i] <- f1; sc$f2[i] <- f2
+    ok_r <- is.finite(pnr) && pnr > 0
+    if (f1 > 0) {
+      if (identical(dt, "I") && ok_r) {
+        g <- if (f2 == 0) 1 else f2
+        ex[, i] <- g * 10^(f1 * ex[, i] / pnr)
+        sc$stored[i] <- "log, linearised"
+        sc$range[i] <- g * 10^f1
+        # The highest channel number, pnr - 1, is the saturated one.
+        sc$margin_at[i] <- g * 10^(f1 * (pnr - 1) / pnr)
+      } else {
+        sc$stored[i] <- "log declared on floats, used as stored"
+      }
+    } else if (ok_r) {
+      sc$range[i] <- pnr
+      # Integer data top out at the highest channel number, pnr - 1, and a
+      # digitising instrument writing floats saturates at the same value
+      # (262,143 under a declared 262,144).
+      sc$margin_at[i] <- pnr - 1
+    }
+  }
+  bad <- sc$stored == "log declared on floats, used as stored"
+  if (any(bad))
+    log_msg("  ", label, ": $PnE declares log amplification on ", sum(bad),
+            " floating-point channel(s) (", paste(utils::head(sc$channel[bad], 6L),
+                                                  collapse = ", "),
+            "), which FCS 3.1 does not allow. The values are used as stored, ",
+            "as linear, and their $PnR is not taken as their range. If they are ",
+            "log-scaled channel numbers, convert the files before analysis")
+  lc <- sc$stored == "log, linearised"
+  if (any(lc))
+    log_msg("  ", label, ": ", sum(lc), " log-amplified channel(s) linearised ",
+            "from $PnE (", paste(utils::head(sc$channel[lc], 6L), collapse = ", "), ")")
+  list(exprs = ex, scale = sc)
+}
+
+#' Find the events sitting at the top of a channel's range
+#'
+#' WHAT: an event is at the margin when, in any of the channels `used`, it is at
+#' or above that channel's highest value (`margin_at` from
+#' [linearise_channels()]).
+#'
+#' WHY THEY ARE REMOVED RATHER THAN KEPT. A saturated event has no true value in
+#' the saturated channel: it is somewhere above the top, by an unknown amount.
+#' flowAI removes "margin events in the upper limit of the dynamic range"
+#' (Monaco et al. 2016) and PeacoQC's `RemoveMargins()` does the same (Emmaneel
+#' et al. 2022). Capping them instead, which flowCore's `read.FCS()` and earlier
+#' versions of this package did, keeps the event and invents a value for it: a
+#' pile of identical values at the top of the scale. Floating-point files can
+#' also carry values far above the declared range, up to 6.8e8 under a declared
+#' 262,144 on one cohort, which are not measurements at all.
+#'
+#' On the 30 spectral files of one sepsis cohort the margin events were 0.01% to
+#' 0.7% of each file. A file losing more than 1% is named in a warning, because
+#' at that rate the voltage was set too high or the declared range is wrong.
+#'
+#' @param ex Expression matrix, linear units.
+#' @param scale The `scale` table from [linearise_channels()].
+#' @param used Column indices judged: the marker and scatter channels.
+#' @param warn_frac Warn when more than this fraction of events is at a margin.
+#'   Default `0.01`.
+#' @param label File name for the log line.
+#' @return list(event = logical per event, n = count, by_channel = named
+#'   integer count per judged channel with any)
+#' @keywords internal
+margin_events <- function(ex, scale, used, warn_frac = 0.01, label = "") {
+  hit <- rep(FALSE, nrow(ex)); by <- integer(0)
+  for (i in intersect(used, seq_len(ncol(ex)))) {
+    top <- scale$margin_at[i]
+    if (!is.finite(top)) next
+    h <- ex[, i] >= top
+    h[is.na(h)] <- FALSE
+    if (any(h)) {
+      by[colnames(ex)[i]] <- sum(h)
+      hit <- hit | h
+    }
+  }
+  n <- sum(hit)
+  if (n && nrow(ex)) {
+    frac <- n / nrow(ex)
+    log_msg("  ", label, ": ", n, " margin event(s) (", signif(100 * frac, 2),
+            "%) at the top of the range of ", length(by), " channel(s)")
+    if (frac > warn_frac)
+      log_msg("  WARNING ", label, ": more than ", 100 * warn_frac, "% of events ",
+              "are at a channel's margin (", paste(sprintf("%s %d", names(by), by),
+                                                    collapse = ", "),
+              "). Check the detector voltages and the declared ranges ($PnR)")
+  }
+  list(event = hit, n = n, by_channel = by)
+}
+
+#' Count the events below a channel's lower limit, by flowAI's rule
+#'
+#' flowAI removes "outliers in the lower limit" of the dynamic range (Monaco et
+#' al. 2016): among a channel's negative values, those at or below their median
+#' minus 3.5 * `mad()` / 0.6745, which with R's `mad()`, already scaled by
+#' 1.4826, is 5.2 robust SDs. PeacoQC's `RemoveMargins()` removes events at the
+#' channel's minimum instead (Emmaneel et al. 2022).
+#'
+#' COUNTED, NOT REMOVED. In compensated data a channel's most negative values
+#' are mostly spreading: cells bright in a channel that spills into this one,
+#' correctly centred and widely spread. Simulated with 10% of cells bright in a
+#' source that widens the receiver five-fold, the rule removed 2% of events, every
+#' one of them bright in the source, and took that population from 10.0% to
+#' 8.1%. Removing them would bias the frequencies this package reports; the
+#' count shows a lower tail the analyst should look at, an electronic baseline
+#' fault for instance, without deciding for them.
+#'
+#' @param ex Expression matrix, after compensation.
+#' @param cols Column indices judged: the marker channels. Scatter is not, as
+#'   flowAI excludes it by default.
+#' @return named integer, events at or below the limit per channel with any,
+#'   with attribute `events`, the number of distinct events (one event can be
+#'   below the limit in several channels, as flowAI's total_UNIQUE counts).
+#' @keywords internal
+lower_limit_outliers <- function(ex, cols) {
+  by <- integer(0); hit <- rep(FALSE, nrow(ex))
+  for (i in intersect(cols, seq_len(ncol(ex)))) {
+    x <- ex[, i]
+    neg <- x[is.finite(x) & x < 0]
+    if (length(neg) < 2L) next
+    lim <- stats::median(neg) - 3.5 * stats::mad(neg) / 0.6745
+    h <- !is.na(x) & x <= lim
+    if (any(h)) {
+      by[colnames(ex)[i]] <- sum(h)
+      hit <- hit | h
+    }
+  }
+  structure(by, events = sum(hit))
+}
+
+#' Cap values at the top of each channel's range
+#'
+#' The behaviour of earlier versions, kept for `--keep-margin-events`: every
+#' value above a channel's range is set to that range, the clamping flowCore's
+#' `read.FCS()` does by default. Only channels whose range is known are capped,
+#' so a floating-point channel whose `$PnR` describes some other scale (see
+#' [linearise_channels()]) is left alone rather than cut in the middle of its
+#' data.
+#'
+#' @param ex Expression matrix, linear units.
+#' @param scale The `scale` table from [linearise_channels()].
+#' @param used Column indices to cap. Default every column.
 #' @param warn_frac Name a channel in a warning when more than this fraction of
 #'   its events was capped. Default `0.01`.
 #' @param label File name for the log line.
 #' @return `ex` with the out-of-range values capped.
 #' @keywords internal
-clamp_to_declared_range <- function(ex, keywords, warn_frac = 0.01, label = "") {
+clamp_to_declared_range <- function(ex, scale, used = seq_len(ncol(ex)),
+                                    warn_frac = 0.01, label = "") {
   n_clamped <- 0L; many <- character(0)
-  for (i in seq_len(ncol(ex))) {
-    r <- suppressWarnings(as.numeric(keywords[[paste0("$P", i, "R")]] %||% NA))
-    if (length(r) != 1L || !is.finite(r) || r <= 0) next
+  for (i in intersect(used, seq_len(ncol(ex)))) {
+    r <- scale$range[i]
+    if (!is.finite(r) || r <= 0) next
     over <- which(ex[, i] > r)
     if (!length(over)) next
     if (length(over) > warn_frac * nrow(ex))
@@ -203,12 +505,12 @@ clamp_to_declared_range <- function(ex, keywords, warn_frac = 0.01, label = "") 
     n_clamped <- n_clamped + length(over)
   }
   if (n_clamped > 0L)
-    log_msg("  ", label, ": ", n_clamped, " value(s) above their channel's declared ",
-            "range ($PnR) capped at it")
+    log_msg("  ", label, ": ", n_clamped, " value(s) above their channel's range ",
+            "capped at it (--keep-margin-events)")
   if (length(many))
     log_msg("  WARNING ", label, ": more than ", 100 * warn_frac, "% of events were above ",
-            "$PnR in ", paste(many, collapse = ", "), ". Capped, but check that the ",
-            "declared range is right for these channels")
+            "the range in ", paste(many, collapse = ", "), ". Capped, but check ",
+            "that the declared range is right for these channels")
   ex
 }
 

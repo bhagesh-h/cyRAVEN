@@ -16,7 +16,9 @@ density_valley(
   floor = -Inf,
   prefer = c("deepest", "lowest"),
   min_lower_frac = 0.01,
-  details = FALSE
+  details = FALSE,
+  noise_alpha = 0.05,
+  ceiling = Inf
 )
 }
 \arguments{
@@ -66,6 +68,21 @@ The default returns exactly what it always has: one number or \code{NA_real_}.
 \code{\link[=threshold_uncertainty]{threshold_uncertainty()}} uses the list form, because how deep a valley is
 determines how far the cut can move under resampling, and recomputing the
 smoothed histogram elsewhere would let the two drift apart.}
+
+\item{noise_alpha}{the family-wise rate at which counting noise alone may
+pass for a slope. A valley counts only where the density falls
+significantly from the first peak to it and rises significantly from it to
+the second, each judged against Poisson noise with a two-sided Bonferroni
+quantile over the non-overlapping smoothing windows (a SiZer-style test,
+Chaudhuri and Marron 1999). Relative depth alone does not see sample size:
+on single modes of 3,000 simulated events it found a valley in 81 of 150
+samples, most of them below 95\% of the events, and on a flat shoulder of a
+few events per bin it split the shoulder. Default \code{0.05}; \code{NA} turns the
+test off.}
+
+\item{ceiling}{no cut is accepted at or above this value. Default \code{Inf}; the
+viability step passes the dye's dominant mode to look for a minimum below
+it (see \code{\link[=apply_gate_hierarchy]{apply_gate_hierarchy()}}).}
 }
 \description{
 WHAT: smooths a histogram, locates peaks above \code{peak_frac} of the maximum,

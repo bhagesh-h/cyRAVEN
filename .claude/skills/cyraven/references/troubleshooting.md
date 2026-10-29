@@ -167,9 +167,11 @@ a message that points nowhere near the cause.
 
 ## Thresholds
 
-### Most thresholds are `quantile_fallback`
+### Most thresholds are `tailgate` or `quantile_fallback`
 
-The marker did not separate positive from negative. In order:
+The marker did not separate positive from negative: `tailgate` placed the cut
+beyond the spread of the sample's main peak, and `quantile_fallback` at a fixed
+percentile where even that could not be done. In order:
 
 1. **Try `--transform logicle`.** For dim markers without clear bimodality the
    transform decides whether a stable threshold exists at all. On a seven-colour
@@ -252,7 +254,8 @@ If this happens after a code change, that is the cause.
 
 ### "batch correction refused"
 
-Cramér's *V* between batch and group exceeded `--batch-max-cramers-v` (0.6). At
+Cramér's *V* between batch and group exceeded `--batch-max-cramers-v` (by default
+Cohen's large association: 0.5 for two levels, 0.35 for three). At
 that level of confounding, removing the batch effect and removing the biological
 effect are the same operation.
 

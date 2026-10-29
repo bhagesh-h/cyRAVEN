@@ -115,3 +115,16 @@ test_that("the multiplier is read from several spellings", {
   expect_equal(total_counts_scale("PBMC count")$scale, 1)
   expect_true(is.na(total_counts_scale("PBMC count")$label))
 })
+
+test_that("a PBMC sample type is recognised as not whole blood", {
+  smap <- data.frame(sample_id = c("a", "b", "c"), patient_id = c("p1", "p2", "p3"),
+                     sample_type = c("whole blood", "PBMC", "Ficoll-isolated"))
+  st <- sample_types(smap)
+  expect_identical(names(st)[grepl(non_whole_blood_pattern(), st, ignore.case = TRUE)],
+                   c("b", "c"))
+  # read through the patient table when the sample map has no such column
+  pt <- data.frame(patient_id = c("P1", "p2"), specimen = c("PBMC", "blood"))
+  st2 <- sample_types(smap[, 1:2], pt)
+  expect_identical(unname(st2), c("PBMC", "blood", NA))
+  expect_null(sample_types(smap[, 1:2]))
+})

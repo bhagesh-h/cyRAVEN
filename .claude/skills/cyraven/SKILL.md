@@ -415,9 +415,11 @@ them.
 ### `--adaptive-gates`
 
 `density_valley()` returns NA for a unimodal marker and the threshold then comes
-from a fixed quantile. On a spectral panel that is not rare: on one sepsis cohort
-**65% of every sample-by-marker cut** was a `quantile_fallback`, so two thirds of
-the gates were placed by the constant rather than the data.
+from the tail gate (`tailgate`), or from a fixed quantile where no tail gate can
+be placed. On a spectral panel that is not rare: on one sepsis cohort, before the
+tail gate became the default, **65% of every sample-by-marker cut** was a
+`quantile_fallback`, so two thirds of the gates were placed by the constant
+rather than the data.
 
 The markers were not unimodal. The histogram is under-smoothed for such data --
 L/D showed 32 peaks in one sample, nearly all noise. Widen the kernel and CD45
@@ -446,14 +448,18 @@ T cells:
 ```
 
 asks for a second CD45 threshold derived from cells that already passed the
-hierarchy's CD45 gate. That distribution is all positive, so it is unimodal, so
-no minimum exists, so the cut falls back to the 90th percentile -- and `above` on
-that fallback keeps exactly 10% of the parent.
+hierarchy's CD45 gate. In whole blood that distribution's one minimum separates
+CD45-dim granulocytes from CD45-bright lymphocytes, so `above` silently drops the
+granulocytes; in PBMC it is all positive and has no minimum at all.
 
-Every population carrying the redundant requirement is capped at 10%, and the
-run looks plausible: the frequencies are just small. On the cohort that surfaced
-it, CD45 fell back in 17 of 20 samples and classified cells sat at 9.3 to 10.0%
-per sample. Removing it took classification from **21% to 88%**.
+When such cuts fell back to the 90th percentile, every population carrying the
+redundant requirement was capped at 10%, and the run looked plausible: the
+frequencies were just small. On the cohort that surfaced it, CD45 fell back in
+17 of 20 samples and classified cells sat at 9.3 to 10.0% per sample. Removing
+it took classification from **21% to 88%**. The tail gate that now replaces the
+quantile goes above the dominant mode unless the marker is declared `tail: lower`,
+so in PBMC, where every parent cell is CD45-positive, the requirement now keeps
+almost nothing; in whole blood it is still wrong.
 
 Check any specification you are handed for this. The rule: do not name a marker
 in a population if a gate above it already applied that marker.
@@ -475,7 +481,9 @@ impossible everywhere.
 
 A hierarchy gate whose threshold came from `quantile_fallback` has its retention
 decided by the constant `fallback_q = 0.90` rather than by the data, and the
-direction of the comparison decides which artefact you get:
+direction of the comparison decides which artefact you get. (The viability gate
+now takes a tail gate above the live cells' mode before it falls back, and CD45
+the debris reference, so this is rarer than it was.)
 
 ```
 live_cells   live <- parent & x <  threshold     keeps exactly 90%

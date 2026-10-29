@@ -66,7 +66,8 @@
 #' @param freq population_frequencies table
 #' @param value_col the compositional column (percentages)
 #' @param populations optional restriction to a closed set; defaults to every
-#'   population present, the right closure when they partition CD45+
+#'   population present, the right closure when they partition CD45+, as the
+#'   table from [exclusive_label_frequencies()] does
 #' @param delta_frac Fraction of the smallest non-zero part used to replace zeros. Default `0.65`.
 #' @return `freq` plus a `clr` column, or NULL
 #' @export
@@ -103,6 +104,47 @@ clr_frequencies <- function(freq, value_col = "pct_of_cd45_pos",
   attr(d, "clr_delta") <- delta
   attr(d, "clr_n_zeros") <- n_zero
   d
+}
+
+#' Each sample's composition by exclusive label
+#'
+#' Every CD45+ cell carries exactly one label from [score_populations()], the
+#' most specific population it satisfies or the catch-all remainder. Counted
+#' per sample, those labels partition the parent, which is what a
+#' compositional analysis needs; the declared populations' own gates overlap
+#' and nest, and do not.
+#'
+#' @param pops per-sample scored populations, each with `scored$labels`.
+#' @param gates per-sample gate results, each with `masks$cd45_pos`.
+#' @param verdicts per-sample staining verdicts, for `is_control` and
+#'   `qc_status`.
+#' @param panel_of named character, sample id to panel.
+#' @return data.frame with `sample_id`, `panel`, `population` (the label),
+#'   `count`, `pct_of_cd45_pos`, `is_control` and `qc_status`, every label
+#'   seen in the run present for every sample (zero where absent), or NULL.
+#' @export
+exclusive_label_frequencies <- function(pops, gates, verdicts = NULL, panel_of = NULL) {
+  per <- lapply(names(pops), function(s) {
+    lab <- pops[[s]]$scored$labels
+    m <- gates[[s]]$masks$cd45_pos
+    if (is.null(lab) || is.null(m) || length(lab) != length(m)) return(NULL)
+    tb <- table(lab[m & !is.na(lab)])
+    list(s = s, tb = tb, n = sum(m))
+  })
+  per <- per[!vapply(per, is.null, logical(1))]
+  if (!length(per)) return(NULL)
+  labs <- sort(unique(unlist(lapply(per, function(p) names(p$tb)))))
+  do.call(rbind, lapply(per, function(p) {
+    k <- as.integer(p$tb[labs]); k[is.na(k)] <- 0L
+    data.frame(sample_id = p$s,
+               panel = if (is.null(panel_of)) NA_character_ else
+                 as.character(panel_of[[p$s]] %||% NA_character_),
+               population = labs, count = k,
+               pct_of_cd45_pos = 100 * k / max(1L, p$n),
+               is_control = isTRUE(verdicts[[p$s]]$is_control),
+               qc_status = verdicts[[p$s]]$qc_status %||% "pass",
+               row.names = NULL, stringsAsFactors = FALSE)
+  }))
 }
 
 #' Concordance between the raw-percentage test and the CLR test
@@ -500,7 +542,8 @@ stats_paired_comparison <- function(freq, pair_of, cond_of, reference = NULL,
       ok <- in_a & in_b
       if (sum(ok) < min_pairs) next
       a <- w[[rcol]][ok]; b <- w[[ccol]][ok]
-      wt <- try(stats::wilcox.test(a, b, paired = TRUE, exact = FALSE), silent = TRUE)
+      # Exact, ties and zero differences handled: see R/rank-tests.R.
+      p_wt <- signed_rank_p(b - a)
       rows[[length(rows) + 1L]] <- data.frame(
         population = pop, measure = value_col,
         reference_condition = reference, comparison_condition = cd,
@@ -512,7 +555,7 @@ stats_paired_comparison <- function(freq, pair_of, cond_of, reference = NULL,
         # is the DIRECTION of change", which is the paired question.
         rank_biserial = round((sum(b > a) - sum(b < a)) / max(1L, sum(b != a)), 3),
         test = "Wilcoxon signed-rank (paired)",
-        p_value = if (inherits(wt, "try-error")) NA_real_ else wt$p.value,
+        p_value = p_wt,
         p_omnibus_friedman = p_omni, stringsAsFactors = FALSE)
     }
   }

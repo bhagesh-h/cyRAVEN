@@ -237,14 +237,16 @@ run_acquisition_qc <- function(reads, pops = NULL, n_bins = 40L, mad_k = 5) {
 #' @param parent logical parent-gate mask
 #' @param spec population specification
 #' @param keep logical, TRUE for events to retain
+#' @param scoped cuts derived within parent populations, or NULL; held fixed.
 #' @return data.frame with the reported and cleaned percentage per population
 #' @export
-frequency_delta_if_cleaned <- function(tmat, thr, parent, spec, keep) {
+frequency_delta_if_cleaned <- function(tmat, thr, parent, spec, keep, scoped = NULL) {
   if (is.null(tmat) || !length(keep) || all(keep)) return(NULL)
   pct_at <- function(p) {
     if (!sum(p)) return(NULL)
     hi <- derive_intermediate_bounds(tmat, thr, p, spec)
-    sp <- score_populations(tmat, thr, p, spec, hi_thr = hi, quiet = TRUE)
+    sp <- score_populations(tmat, thr, p, spec, hi_thr = hi, quiet = TRUE,
+                            scoped = scoped)
     vapply(sp$masks, function(m) 100 * sum(m) / sum(p), numeric(1))
   }
   a <- pct_at(parent)

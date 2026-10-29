@@ -42,3 +42,9 @@ logo
 # Assistant skill definition. Documentation for humans and agents, not an input
 # to the build.
 .claude
+
+# The audit against published practice and its task list: working documents
+# local to a working copy, kept out of git and the tarball for the same reason.
+comparison.md
+todo.md
+ToDo.md

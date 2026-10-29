@@ -33,7 +33,7 @@ write_config <- function(path, derived, cofactors, spec = default_population_spe
       scatter_gate = list(mode = "auto",
                           note = "lower FSC bound = deepest log10 FSC-A density valley"),
       singlet_band = list(mode = "auto", mad_k = 3,
-                          note = "median(FSC-H/FSC-A) +/- k*MAD within the scatter gate"),
+                          note = "FSC-H/FSC-A above median - k*MAD within the scatter gate"),
       staining_qc = list(min_cd45_pct_of_live = 5)),
     thresholds = derived,
     populations = spec,

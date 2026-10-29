@@ -174,7 +174,8 @@ test_that("a control beats a blind quantile but cannot argue a cut downwards", {
   # kernel to mistake for a valley. Nothing in this parent indicates a cut.
   flat <- qnorm(ppoints(5000))
   blind <- resolve_threshold("M", flat, NULL)
-  expect_identical(blind$source, "quantile_fallback")
+  # No minimum and no control: the tail gate, still flagged for review.
+  expect_identical(blind$source, "tailgate")
   expect_true(blind$needs_review)
 
   # An independent experiment beats a constant fraction of the parent outright,
@@ -186,7 +187,7 @@ test_that("a control beats a blind quantile but cannot argue a cut downwards", {
   expect_false(helped$needs_review)
   expect_equal(helped$threshold, 1.9)
   expect_equal(helped$derived_threshold, blind$threshold)
-  expect_identical(helped$derived_source, "quantile_fallback")
+  expect_identical(helped$derived_source, "tailgate")
 
   set.seed(1)
   two <- c(rnorm(4000, 0), rnorm(2000, 6))

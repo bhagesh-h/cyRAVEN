@@ -5,7 +5,14 @@
 \title{Derive the panel cofactor from SEVERAL samples, not from whichever file was
 read first}
 \usage{
-derive_cofactor_pooled(reads, sids, max_samples = 8L, warn_ratio = 2, ...)
+derive_cofactor_pooled(
+  reads,
+  sids,
+  max_samples = 8L,
+  warn_ratio = 2,
+  cells = TRUE,
+  ...
+)
 }
 \arguments{
 \item{reads}{named list of read objects (each carrying exprs + marker_cols)}
@@ -16,10 +23,16 @@ derive_cofactor_pooled(reads, sids, max_samples = 8L, warn_ratio = 2, ...)
 
 \item{warn_ratio}{Ratio of per-sample values above which a warning is emitted. Default \code{2}.}
 
+\item{cells}{When \code{TRUE} (default) each sample's cofactor is estimated on its
+scatter-gated single cells (see \code{\link[=cofactor_rows]{cofactor_rows()}}); \code{FALSE} uses every
+event, as versions before 1.0.0's audit did.}
+
 \item{...}{Passed to derive_cofactor().}
 }
 \value{
-single numeric cofactor, with attributes recording what it came from
+single numeric cofactor, with attributes recording what it came from:
+\code{per_marker_negative}, the median over samples of each marker's
+negative-population cofactor (see \code{\link[=derive_cofactor]{derive_cofactor()}}), among them.
 }
 \description{
 WHY THIS EXISTS. The original call site derived the cofactor from
