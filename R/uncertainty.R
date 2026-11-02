@@ -366,7 +366,7 @@ population_frequency_uncertainty <- function(tmat, thr, parent, spec, u,
   # Only markers a population actually reads can move it. Perturbing the rest
   # would cost time and add nothing but rounding noise to the budget.
   markers_of <- lapply(spec, function(d)
-    unique(c(setdiff(names(d), "any_of"), names(d[["any_of"]]))))
+    unique(c(setdiff(names(d), "any_of"), any_of_markers(d[["any_of"]]))))
 
   terms <- list()
   for (m in intersect(names(thr), names(u))) {

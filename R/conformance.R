@@ -50,10 +50,18 @@ spec_fingerprint <- function(spec) {
     ao <- d[["any_of"]]
     if (!is.null(ao) && length(ao)) {
       ak <- sort(names(ao))
+      # a grouped member is encoded with its markers, so changing which marker
+      # it reads changes the fingerprint
       main <- paste0(main, ";any_of(",
-                     paste(ak, vapply(ak, function(k)
-                       paste(as.character(ao[[k]]), collapse = "|"),
-                       character(1)), sep = "=", collapse = ","), ")")
+                     paste(ak, vapply(ak, function(k) {
+                       v <- ao[[k]]
+                       if (is.list(v)) {
+                         km <- sort(names(v))
+                         paste0("{", paste(km, vapply(km, function(m)
+                           as.character(v[[m]])[1], character(1)), sep = "=",
+                           collapse = "&"), "}")
+                       } else paste(as.character(v), collapse = "|")
+                     }, character(1)), sep = "=", collapse = ","), ")")
     }
     main
   }, character(1))

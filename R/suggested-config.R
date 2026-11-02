@@ -39,7 +39,13 @@
     if (is.list(v)) {
       # an any_of block, carried through unchanged
       out <- c(out, "    any_of:")
-      for (mm in names(v)) out <- c(out, sprintf("      %s: %s", q(mm), v[[mm]]))
+      for (mm in names(v)) {
+        if (is.list(v[[mm]])) {
+          out <- c(out, sprintf("      %s:", q(mm)))
+          for (m3 in names(v[[mm]]))
+            out <- c(out, sprintf("        %s: %s", q(m3), as.character(v[[mm]][[m3]])))
+        } else out <- c(out, sprintf("      %s: %s", q(mm), as.character(v[[mm]])))
+      }
     } else {
       out <- c(out, sprintf("    %s: %s", q(m), as.character(v)))
     }

@@ -974,7 +974,7 @@ run_cyraven_impl <- function(opt) {
     # is meaningless for it; the threshold machinery only needs a scale on which
     # the modes separate.
     needed <- unique(unlist(lapply(spec, function(d)
-      c(setdiff(names(d), "any_of"), names(d[["any_of"]])))))
+      c(setdiff(names(d), "any_of"), any_of_markers(d[["any_of"]])))))
     # Functional-block markers must be transformed too, even when NO gate
     # references them.
     #

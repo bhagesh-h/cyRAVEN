@@ -163,6 +163,20 @@ resolve_block_populations <- function(block, spec, available) {
 #'   the log saying one of two things, which buries the NOTEs that do differ
 #'   between samples. Callers that score once leave it FALSE and see it once per
 #'   sample; callers that score in a loop pass TRUE.
+#' The markers an `any_of` group reads
+#'
+#' A member of the group is either one condition (`CD56: above`) or a named set
+#' of conditions that must all hold (`CD16, not HLA-DR: {CD16: above, HLA-DR:
+#' below}`), so "CD56+, or CD16+ and HLA-DR-" can be written as one population.
+#' @param a an `any_of` list, or NULL.
+#' @return character vector of marker names.
+#' @keywords internal
+any_of_markers <- function(a) {
+  if (is.null(a) || !length(a)) return(character(0))
+  unique(unlist(lapply(names(a), function(k) if (is.list(a[[k]])) names(a[[k]]) else k),
+                use.names = FALSE))
+}
+
 score_populations <- function(tmat, thr, parent, spec = default_population_spec(),
                               hi_thr = NULL, quiet = FALSE, scoped = NULL) {
   avail <- colnames(tmat)
@@ -212,13 +226,17 @@ score_populations <- function(tmat, thr, parent, spec = default_population_spec(
     any_req <- req[["any_of"]]
     req_simple <- req[setdiff(names(req), "any_of")]
     if (!is.null(any_req)) {
-      amiss <- setdiff(names(any_req), avail)
-      amiss <- c(amiss, names(any_req)[!is.na(match(names(any_req), avail)) &
-                                       !is.finite(thr_pop[names(any_req)])])
+      # A member is one condition or a named set of conditions; it is usable
+      # only if every marker it reads is in the panel with a cut.
+      member_mk <- lapply(names(any_req), function(k)
+        if (is.list(any_req[[k]])) names(any_req[[k]]) else k)
+      lost <- lapply(member_mk, function(mk)
+        mk[!mk %in% avail | !is.finite(suppressWarnings(as.numeric(thr_pop[mk])))])
+      amiss <- unique(unlist(lost))
       # A disjunction survives partial absence: CD16+ OR CD56+ is still a usable
       # gate when only CD56 is in the panel. Report the loss, do not drop the
       # population -- but if EVERY member is missing there is nothing left.
-      any_req <- any_req[!names(any_req) %in% amiss]
+      any_req <- any_req[lengths(lost) == 0L]
       if (!length(any_req)) {
         unavailable[[nm]] <- paste("no any_of marker available:",
                                    paste(unique(amiss), collapse = ", "))
@@ -258,12 +276,17 @@ score_populations <- function(tmat, thr, parent, spec = default_population_spec(
              " (use above/below/intermediate/bright)"))
     }
     if (!is.null(any_req)) {
+      cond <- function(mk, dir) switch(dir,
+        above = tmat[, mk] > thr_pop[[mk]],
+        below = tmat[, mk] < thr_pop[[mk]],
+        stop("any_of supports only above/below (marker ", mk, ")"))
       any_m <- rep(FALSE, nrow(tmat))
-      for (mk in names(any_req))
-        any_m <- any_m | switch(any_req[[mk]],
-          above = tmat[, mk] > thr_pop[[mk]],
-          below = tmat[, mk] < thr_pop[[mk]],
-          stop("any_of supports only above/below (marker ", mk, ")"))
+      for (k in names(any_req)) {
+        v <- any_req[[k]]
+        any_m <- any_m | if (is.list(v))
+          Reduce(`&`, Map(cond, names(v), as.character(unlist(v))), rep(TRUE, nrow(tmat)))
+        else cond(k, v)
+      }
       m <- m & any_m
     }
     masks[[nm]] <- m
@@ -327,7 +350,7 @@ resolve_population_parents <- function(spec) {
   has_par <- vapply(spec, function(d) is.list(d) && !is.null(d[["parent"]]), logical(1))
   if (!any(has_par)) return(spec)
   resolved <- list(); scope <- list(); visiting <- character(0)
-  marker_keys <- function(d) unique(c(setdiff(names(d), "any_of"), names(d[["any_of"]])))
+  marker_keys <- function(d) unique(c(setdiff(names(d), "any_of"), any_of_markers(d[["any_of"]])))
   res <- function(nm) {
     if (!is.null(resolved[[nm]])) return(resolved[[nm]])
     if (nm %in% visiting)
@@ -365,7 +388,7 @@ resolve_population_parents <- function(spec) {
            "group; a population holds one disjunction", call. = FALSE)
     if (!is.null(d[["any_of"]])) {
       merged[["any_of"]] <- d[["any_of"]]
-      for (k in names(d[["any_of"]])) sc[[k]] <- p
+      for (k in any_of_markers(d[["any_of"]])) sc[[k]] <- p
     } else if (!is.null(pd[["any_of"]])) merged[["any_of"]] <- pd[["any_of"]]
     resolved[[nm]] <<- merged; scope[[nm]] <<- sc
     merged
