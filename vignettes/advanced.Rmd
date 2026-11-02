@@ -362,6 +362,8 @@ p-values. At these group sizes that is p-hacking with extra steps.
 | `--explore-k` | 20 | Metaclusters |
 | `--explore-qc-k` | 20 | Merged clusters of the coarse QC clustering; the gate judges their SOM nodes |
 | `--explore-grid` | 10 | SOM grid side |
+| `--explore-neighbors` | 30 | UMAP `n_neighbors` for the explore embedding |
+| `--explore-min-dist` | 0.1 | UMAP `min_dist` for the explore embedding, separate from `--min-dist` (0.3) |
 | `--explore-cells-per-sample` | 6000 | Cells drawn per sample before the gate |
 | `--explore-max-cells` | 150000 | Ceiling across all samples |
 | `--explore-markers` | every channel | Cluster on these only |
