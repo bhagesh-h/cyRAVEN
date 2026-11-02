@@ -194,6 +194,11 @@ on a panel of more than 40 markers (the cofactor's marker subset) or under
   article's group-test example labelled all twelve samples one group and
   printed `NULL`, and its account of the threshold fallback left out the tail
   gate that comes before the quantile.
+- **The explore embedding's UMAP settings are options.** Explore read
+  `--explore-neighbors` and `--explore-min-dist`, which were never defined, so
+  it always used 30 and 0.1 whatever was asked (the declared run's `--min-dist`
+  defaults to 0.3). Both are now options with those defaults, and
+  `explore_provenance.csv` records them.
 - **`--subsample`, `--p-adjust-display` and `--transform` reject values they
   do not know.** `--subsample Rare` ran the uniform draw while the manifest
   recorded "Rare", and `--explore-only` read any `--transform` other than

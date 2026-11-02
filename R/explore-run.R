@@ -401,9 +401,11 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
     }
 
     M <- as.matrix(cells[, fcols, drop = FALSE])
+    .nn <- opt$explore_neighbors %||% 30L; .md <- opt$explore_min_dist %||% 0.1
+    note("umap", sprintf("n_neighbors %d, min_dist %g", as.integer(.nn), .md),
+         "--explore-neighbors and --explore-min-dist; separate from the declared run's")
     emb <- run_umap(M, seed = seed, scale_method = umap_scale_method(opt),
-                    n_neighbors = opt$explore_neighbors %||% 30L,
-                    min_dist = opt$explore_min_dist %||% 0.1,
+                    n_neighbors = .nn, min_dist = .md,
                     n_threads = max(1L, opt$threads %||% 1L))
     # run_umap() returns $coords, not $layout. Assigning NULL to a data.frame
     # column is a silent no-op, so getting this wrong loses the columns without
