@@ -10,7 +10,8 @@ fig_recon_diagnostics(
   max_points = 40000L,
   dpi = 300,
   dens_markers = NULL,
-  colors = fcs_colors()
+  colors = fcs_colors(),
+  scale_label = "asinh intensity"
 )
 }
 \arguments{
@@ -29,6 +30,10 @@ vectors within the CD45+ parent), verdict (character, from staining QC).}
 \item{dens_markers}{The dens markers.}
 
 \item{colors}{Named list of colours; defaults to the package palette. See \code{\link[=fcs_colors]{fcs_colors()}}. Default \code{fcs_colors()}.}
+
+\item{scale_label}{Name of the scale the intensities are on, the run's
+\code{transform$label} ("asinh intensity", "logicle intensity"). Default
+\code{"asinh intensity"}.}
 }
 \value{
 the composed patchwork object (also written to \code{outfile}).

@@ -188,6 +188,11 @@ test_that("threshold drift renders, with and without a reference", {
   expect_no_error(
     suppressMessages(fig_threshold_drift(thr, f2, group_of = gof)))
   expect_figure_contract(f2, "fig_threshold_drift (no reference)")
+
+  # The axis names the run's scale: under logicle the cuts are not arcsinh values.
+  p <- suppressMessages(fig_threshold_drift(thr, f2, group_of = gof,
+                                            y_label = "derived threshold (logicle intensity)"))
+  expect_match(p$labels$y, "logicle intensity", fixed = TRUE)
 })
 
 test_that("the gate reconstruction figures render", {

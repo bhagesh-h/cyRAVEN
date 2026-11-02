@@ -9,7 +9,7 @@ emit_timepoint_figures(ctx, dir, label)
 \arguments{
 \item{ctx}{Named list of the shared artefacts: \code{freq}, \code{mfi}, \code{fx}, \code{rt},
 \code{cells}, \code{tc}, \code{ufreq}, \code{markers}, \code{covariates}, \code{feature_cols},
-\code{panel_label}, \code{colors}.}
+\code{panel_label}, \code{colors}, \code{scale_label} (the run's transform label).}
 
 \item{dir}{Destination directory; created if absent.}
 

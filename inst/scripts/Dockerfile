@@ -130,7 +130,8 @@ RUN R CMD INSTALL --no-multiarch --with-keep.source /opt/cyraven/src \
 # parser and every dependency the CLI touches.
 RUN Rscript "$(Rscript -e "cat(system.file('scripts','cyraven.R',package='cyRAVEN'))")" --help > /dev/null \
  && Rscript -e "for (p in c('cyRAVEN','flowCore','uwot','data.table','ggplot2', \
-                            'patchwork','viridisLite','scales','yaml','optparse','hexbin')) \
+                            'patchwork','viridisLite','scales','yaml','optparse','hexbin', \
+                            'PeacoQC','edgeR')) \
                   cat(sprintf('%-12s %s\n', p, as.character(packageVersion(p))))" \
  && Rscript -e "cat('flowCore patch:', packageDescription('flowCore')\$cyRAVENPatch, '\n')"
 

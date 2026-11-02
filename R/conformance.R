@@ -73,11 +73,15 @@ spec_fingerprint <- function(spec) {
 #' @param spec population specification
 #' @param opt the resolved option list
 #' @param cofactors per-panel cofactors
+#' @param transforms per-panel transforms from [make_transform()]; their
+#'   method and parameters are stored so a later run's cuts can be put on this
+#'   run's scale (see [specification_conformance()]).
 #' @return `path`, invisibly
 #' @export
 write_spec_baseline <- function(path, thr_all, freq, spec, opt = list(),
-                                cofactors = list()) {
+                                cofactors = list(), transforms = list()) {
   mk <- NULL
+  thr_all <- qc_pass_rows(thr_all)
   if (!is.null(thr_all) && nrow(thr_all)) {
     key <- paste(thr_all$panel, thr_all$marker, sep = "\r")
     mk <- do.call(rbind, lapply(split(thr_all, key), function(d) data.frame(
@@ -107,6 +111,8 @@ write_spec_baseline <- function(path, thr_all, freq, spec, opt = list(),
     cyraven_version = as.character(utils::packageVersion("cyRAVEN")),
     transform = opt$transform %||% "arcsinh",
     cofactors = cofactors,
+    transforms = lapply(transforms, function(t)
+      list(method = t$method, params = t$params)),
     spec = spec_fingerprint(spec),
     markers = mk,
     populations = pp)
@@ -139,9 +145,18 @@ read_spec_baseline <- function(path) {
 #' marker whose baseline samples happened to agree closely would otherwise divide
 #' by near zero and fail on a difference of no consequence.
 #'
-#' A CHANGED TRANSFORM INVALIDATES EVERY THRESHOLD COMPARISON, because thresholds
-#' are expressed on the analysis scale. That case is reported as its own verdict
-#' rather than as dozens of drifted markers.
+#' THE CUTS ARE COMPARED IN INSTRUMENT UNITS, on the baseline's scale.
+#' Thresholds are expressed on the analysis scale, and that scale is re-derived
+#' from each run's data: the arcsinh cofactor of the same 30 files moved from
+#' 261 to 403 between two versions of this package, which moves every cut on
+#' the transformed axis without moving it on the instrument's. Comparing the
+#' transformed values across runs therefore measured the change of ruler. Each
+#' marker's median cut is carried back to instrument units by this run's
+#' transform and forward by the baseline's, then compared there against the
+#' baseline's spread. A baseline written before transforms were stored is
+#' rebuilt from its arcsinh cofactor; where either transform cannot be
+#' rebuilt, a changed transform makes the comparison "not comparable", as
+#' before.
 #'
 #' @param thr_all this run's thresholds table
 #' @param freq this run's frequency table
@@ -150,17 +165,35 @@ read_spec_baseline <- function(path) {
 #' @param transform this run's transform name
 #' @param z_qualify robust z above which a marker is qualified
 #' @param z_fail robust z above which a marker fails
+#' @param transforms this run's per-panel transforms from [make_transform()],
+#'   or NULL to compare on the analysis scale only when it is unchanged.
 #' @return list(markers, populations, spec_changes, summary)
 #' @export
 specification_conformance <- function(thr_all, freq, spec, baseline,
                                       transform = "arcsinh",
-                                      z_qualify = 3.5, z_fail = 6) {
+                                      z_qualify = 3.5, z_fail = 6,
+                                      transforms = NULL) {
   verdict_of <- function(z) ifelse(!is.finite(z), "not comparable",
                             ifelse(z > z_fail, "fail",
                             ifelse(z > z_qualify, "qualify", "pass")))
 
   scale_changed <- !identical(as.character(transform),
                               as.character(baseline$transform %||% "arcsinh"))
+  # The baseline's own transform per panel, rebuilt from what it stored.
+  base_tr <- function(panel) {
+    tr <- baseline$transforms[[panel]]
+    if (!is.null(tr)) return(rebuild_transform(tr))
+    cf <- suppressWarnings(as.numeric(baseline$cofactors[[panel]] %||% NA_real_))[1]
+    if (identical(baseline$transform %||% "arcsinh", "arcsinh") && is.finite(cf) && cf > 0)
+      make_transform("arcsinh", cofactor = cf) else NULL
+  }
+  # A cut of this run, in instrument units, on the baseline's scale; NA where
+  # either transform cannot be rebuilt.
+  on_baseline_scale <- function(t, panel, marker) {
+    ct <- transforms[[panel]]; bt <- base_tr(panel)
+    if (is.null(ct) || is.null(bt) || !is.finite(t)) return(NA_real_)
+    tryCatch(bt$fn(ct$inv(t, marker), marker), error = function(e) NA_real_)
+  }
 
   # ---- specification drift, checked before anything derived from it ----------
   now <- spec_fingerprint(spec); was <- baseline$spec %||% character(0)
@@ -183,6 +216,7 @@ specification_conformance <- function(thr_all, freq, spec, baseline,
   # ---- per-marker threshold location ----------------------------------------
   mk <- NULL
   bm <- baseline$markers
+  thr_all <- qc_pass_rows(thr_all)
   if (!is.null(thr_all) && nrow(thr_all) && !is.null(bm) && nrow(bm)) {
     key <- paste(thr_all$panel, thr_all$marker, sep = "\r")
     cur <- do.call(rbind, lapply(split(thr_all, key), function(d) data.frame(
@@ -198,22 +232,32 @@ specification_conformance <- function(thr_all, freq, spec, baseline,
     m <- merge(cur, bm, by = c("panel", "marker"), suffixes = c("", "_baseline"),
                all.x = TRUE)
     s <- pmax(m$mad_threshold, 0.25)
-    z <- abs(m$median_threshold - m$median_threshold_baseline) / s
+    mapped <- if (is.null(transforms)) rep(NA_real_, nrow(m)) else
+      vapply(seq_len(nrow(m)), function(i)
+        on_baseline_scale(m$median_threshold[i], m$panel[i], m$marker[i]), numeric(1))
+    # Where the cut could be carried to the baseline's scale it is compared
+    # there, whatever the transforms; otherwise only an unchanged transform is
+    # compared, on the analysis scale, as before.
+    comparable <- is.finite(mapped) | !scale_changed
+    cur_on_base <- ifelse(is.finite(mapped), mapped, m$median_threshold)
+    z <- abs(cur_on_base - m$median_threshold_baseline) / s
+    z[!comparable] <- NA_real_
     mk <- data.frame(
       panel = m$panel, marker = m$marker,
       n_samples = m$n, n_samples_baseline = m$n_baseline,
       median_threshold = round(m$median_threshold, 4),
+      median_threshold_on_baseline_scale = round(cur_on_base, 4),
       baseline_threshold = round(m$median_threshold_baseline, 4),
       baseline_mad = round(m$mad_threshold, 4),
       robust_z = round(z, 2),
       fallback_rate = round(m$fallback_rate, 3),
       baseline_fallback_rate = round(m$fallback_rate_baseline, 3),
       n_manual_overrides = m$n_manual %||% 0L,
-      verdict = if (scale_changed) "not comparable"
-                else ifelse((m$n_manual %||% 0L) > 0L, "manually set",
-                            verdict_of(z)),
+      verdict = ifelse(!comparable, "not comparable",
+                ifelse((m$n_manual %||% 0L) > 0L, "manually set",
+                       verdict_of(z))),
       note = ifelse(is.na(m$median_threshold_baseline), "absent from baseline",
-             ifelse(scale_changed, "transform differs from baseline",
+             ifelse(!comparable, "transform differs from baseline",
              ifelse((m$n_manual %||% 0L) > 0L,
                     "one or more cuts were set by hand; see override_reason in thresholds_used.csv",
              ifelse(m$fallback_rate > (m$fallback_rate_baseline + 0.25),
@@ -270,7 +314,8 @@ specification_conformance <- function(thr_all, freq, spec, baseline,
   n_qual <- sum(c(mk$verdict, pp$verdict) == "qualify", na.rm = TRUE)
   list(markers = mk, populations = pp, spec_changes = sc,
        summary = list(n_fail = n_fail, n_qualify = n_qual,
-                      transform_changed = scale_changed,
+                      transform_changed = scale_changed &&
+                        !any(mk$verdict != "not comparable", na.rm = TRUE),
                       spec_changed = !is.null(sc),
                       baseline_created = baseline$created %||% NA_character_))
 }

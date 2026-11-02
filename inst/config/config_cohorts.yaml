@@ -2,7 +2,8 @@
 #
 # This file pairs with a sample sheet: one CSV with a row per FCS file, carrying
 # what each file is, whose it is and which group and batch it belongs to. The
-# two together specify a run completely. See the Inputs article, and
+# two together specify a run completely. See "Inputs: the sample sheet and the
+# config" in the Get started article, and
 # system.file("examples", "analysis_template.yaml", package = "cyRAVEN") for an
 # annotated skeleton of every section this file may contain.
 #
@@ -159,7 +160,9 @@ populations:
   # granulocyte also counted as an NK cell, and in whole blood granulocytes
   # outnumber NK cells about ten to one. HLA-DR below and CD14 below: CD16+
   # monocytes have low side scatter too, and NK cells are the HLA-DR-negative,
-  # CD14-negative ones.
+  # CD14-negative ones. The cost: HLA-DR+ NK cells whose CD56 clears its cut
+  # match neither this rule nor Dendritic cells (CD56 below) and are counted
+  # under "Other CD45+".
   NK cells:
     CD3: below
     CD19: below

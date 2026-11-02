@@ -49,12 +49,16 @@ abundance_measure <- function(freq, prefer = c("auto", "absolute", "frequency"))
 #' and cell-abundance distributions are right-skewed with outliers, so normality is
 #' not a safe assumption and a t-test's nominal p-value would be unreliable.
 #' Wilcoxon rank-sum (Mann-Whitney) assumes only independence and ordinal
-#' comparability. Kruskal-Wallis is its multi-group extension. Both are exact-rank
-#' based, so they behave sensibly at n = 6.
+#' comparability. Its p-value is computed exactly, ties included (see
+#' [rank_sum_p()]), so it behaves sensibly at n = 6. Kruskal-Wallis is its
+#' multi-group extension; its p-value is R's chi-squared approximation, which is
+#' rough at a handful of donors per group, and it is read as an omnibus screen
+#' before the pairwise columns.
 #'
 #' WHY BOTH RAW AND ADJUSTED p: testing 12 populations x 2 groups is 24 tests, at
-#' which ~1 in 5 chance of a spurious p < 0.05 somewhere is expected under the
-#' null. Reporting only raw p invites reading noise as signal; reporting only
+#' which, under the null and taking the tests as independent, about one
+#' p < 0.05 (1.2) is expected and the chance of at least one is
+#' 1 - 0.95^24 = 71%. Reporting only raw p invites reading noise as signal; reporting only
 #' adjusted p hides a real trend in an underpowered study. Both are written, with
 #' Benjamini-Hochberg FDR (not Bonferroni) because these tests are correlated and
 #' the goal is a ranked shortlist, not a single confirmatory decision.
@@ -883,3 +887,74 @@ fig_population_ratios <- function(rt, outfile, group_of = NULL, stats = NULL,
 }
 
 # =============================================================================
+
+# =============================================================================
+# COUNT-MODEL ABUNDANCE TEST, opt-in (--edger)
+# =============================================================================
+#
+# The rank tests above compare per-sample percentages and stay primary. A count
+# model compares the cell counts themselves, with each sample's total as the
+# offset, and is what diffcyt's differential-abundance method does (Weber et
+# al. 2019, Commun Biol 2:183; testDA_edgeR). It is run here as diffcyt runs
+# it, on populations that partition the parent, since a count model of nested
+# populations counts a cell more than once: each sample's exclusive labels
+# (exclusive_label_frequencies()). Populations with fewer than 3 cells in more
+# than half the samples are filtered out; library sizes are the remaining
+# counts' column sums; no TMM normalisation; dispersions from estimateDisp()
+# with no abundance trend; a likelihood-ratio test per group against the
+# reference; Benjamini-Hochberg within each comparison.
+
+#' Count-model differential abundance, as diffcyt-DA-edgeR
+#'
+#' @param counts long table with `sample_id`, `population`, `count` (exclusive
+#'   labels), and optionally `is_control`/`qc_status`.
+#' @param group_of named vector, sample id to group.
+#' @param reference reference group, or NULL for the first.
+#' @param min_cells,min_samples a population is tested when it holds at least
+#'   `min_cells` cells in at least `min_samples` samples (default half of them).
+#' @param min_n fewest samples per group for a group to be tested.
+#' @return data.frame, one row per population and comparison, or NULL.
+#' @keywords internal
+stats_edger_abundance <- function(counts, group_of, reference = NULL,
+                                  min_cells = 3L, min_samples = NULL, min_n = 3L) {
+  if (!requireNamespace("edgeR", quietly = TRUE))
+    stop("--edger needs the Bioconductor package edgeR", call. = FALSE)
+  d <- qc_pass_rows(counts)
+  if (is.null(d) || !nrow(d)) return(NULL)
+  d$group <- unname(group_of[as.character(d$sample_id)])
+  d <- d[!is.na(d$group), , drop = FALSE]
+  if (!nrow(d)) return(NULL)
+  M <- stats::xtabs(count ~ population + sample_id, data = d)
+  M <- matrix(as.numeric(M), nrow(M), dimnames = dimnames(M))
+  grp <- as.character(group_of[colnames(M)])
+  n_by <- table(grp)
+  keep_g <- names(n_by)[n_by >= min_n]
+  if (length(keep_g) < 2L) return(NULL)
+  M <- M[, grp %in% keep_g, drop = FALSE]; grp <- grp[grp %in% keep_g]
+  if (is.null(reference) || !reference %in% grp) reference <- sort(unique(grp))[1]
+  g <- stats::relevel(factor(grp), ref = reference)
+  if (is.null(min_samples)) min_samples <- ncol(M) / 2
+  keep <- rowSums(M >= min_cells) >= min_samples
+  if (sum(keep) < 1L) return(NULL)
+  M <- M[keep, , drop = FALSE]
+  design <- stats::model.matrix(~ g)
+  y <- edgeR::DGEList(M)
+  y <- edgeR::estimateDisp(y, design, trend.method = "none")
+  fit <- edgeR::glmFit(y, design)
+  rows <- list()
+  for (j in seq(2L, ncol(design))) {
+    lrt <- edgeR::glmLRT(fit, coef = j)
+    tt <- edgeR::topTags(lrt, n = Inf, adjust.method = "BH", sort.by = "none")$table
+    lev <- levels(g)[j]
+    rows[[length(rows) + 1L]] <- data.frame(
+      population = rownames(tt), reference_group = reference, comparison_group = lev,
+      n_reference = sum(g == reference), n_comparison = sum(g == lev),
+      logFC = round(tt$logFC, 4), logCPM = round(tt$logCPM, 4),
+      LR = round(tt$LR, 4), p_value = tt$PValue, p_adj_BH = tt$FDR,
+      test = "edgeR negative binomial GLM, likelihood ratio (diffcyt-DA-edgeR)",
+      row.names = NULL, stringsAsFactors = FALSE)
+  }
+  out <- do.call(rbind, rows)
+  out$significant_BH <- !is.na(out$p_adj_BH) & out$p_adj_BH < 0.05
+  out[order(out$comparison_group, out$p_value), , drop = FALSE]
+}

@@ -4,7 +4,14 @@
 \alias{save_umap_model}
 \title{Save a trained UMAP model plus the scaling needed to reproduce its input}
 \usage{
-save_umap_model(model, path, scale_params, features, meta = list())
+save_umap_model(
+  model,
+  path,
+  scale_params,
+  features,
+  meta = list(),
+  transform = NULL
+)
 }
 \arguments{
 \item{model}{A trained uwot model.}
@@ -16,6 +23,9 @@ save_umap_model(model, path, scale_params, features, meta = list())
 \item{features}{Character vector of feature names the model was trained on.}
 
 \item{meta}{Named list of metadata stored alongside the model. Default \code{list()}.}
+
+\item{transform}{the run's transform from \code{\link[=make_transform]{make_transform()}}, whose method
+and parameters are stored so a projection can carry a later run onto it.}
 }
 \description{
 The scaling parameters travel WITH the model. Re-deriving median/MAD from a

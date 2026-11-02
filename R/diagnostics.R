@@ -177,17 +177,21 @@ batch_mixing_report <- function(cells, batch_col, group_col = "cohort",
     # Cramer's V: association between two categoricals, scaled to \code{[0,1]} so it
     # does not depend on table size the way chi-squared does. 1 means each batch
     # contains exactly one group -- total confounding, no correction is safe.
-    chi <- suppressWarnings(stats::chisq.test(tb)$statistic)
-    nn <- sum(tb)
-    v <- sqrt(as.numeric(chi) / (nn * (min(dim(tb)) - 1)))
+    # The same cramers_v() the correction's refusal uses (no continuity
+    # correction, which is how V is defined), and the verdicts on Cohen's
+    # scale for this table's size, medium w = 0.3 and large w = 0.5 over
+    # sqrt(min(levels) - 1): the "substantial" row is exactly where
+    # --correct-batch refuses, so the two outputs cannot disagree.
+    v <- cramers_v(bl[keep], g[keep])
+    k1 <- sqrt(max(1L, min(dim(tb)) - 1L))
     data.frame(
       batch_column = batch_col, group_column = gc,
       n_batches = nrow(tb), n_groups = ncol(tb),
       cramers_v = round(v, 3),
       verdict = if (!is.finite(v)) "not estimable"
                 else if (v >= 0.8) "SEVERE - batch and group are near-identical; NO batch correction is safe"
-                else if (v >= 0.5) "substantial - batch and group overlap; correction would remove real signal"
-                else if (v >= 0.3) "moderate - interpret batch-adjacent findings with care"
+                else if (v > 0.5 / k1) "substantial - batch and group overlap; correction would remove real signal and is refused"
+                else if (v >= 0.3 / k1) "moderate - interpret batch-adjacent findings with care"
                 else "low - batch and group are largely separable",
       stringsAsFactors = FALSE)
   }
@@ -439,10 +443,13 @@ stats_threshold_drift <- function(thr, group_of, spec = NULL, min_n = 3L) {
 #' @param panel_label Marker-panel name added to the figure title; empty for none. Default `""`.
 #' @param dpi Resolution in dots per inch. May be reduced automatically to respect the raster ceiling; see [safe_ggsave()]. Default `200`.
 #' @param colors Named list of colours; defaults to the package palette. See [fcs_colors()]. Default `fcs_colors()`.
+#' @param y_label Axis label naming the scale the cuts are on, e.g. the run's
+#'   `transform$label`. Default `"derived threshold (asinh intensity)"`.
 #' @export
 fig_threshold_drift <- function(thr, outfile, group_of, stats = NULL,
                                 reference = NULL, panel_label = "", dpi = 200,
-                                colors = fcs_colors()) {
+                                colors = fcs_colors(),
+                                y_label = "derived threshold (asinh intensity)") {
   if (is.null(thr) || !nrow(thr)) return(invisible(NULL))
   d <- thr[is.finite(thr$threshold), , drop = FALSE]
   d <- qc_pass_rows(d)
@@ -484,7 +491,7 @@ fig_threshold_drift <- function(thr, outfile, group_of, stats = NULL,
                colour = colors$bracket) +
     scale_fill_manual(values = fills, name = NULL) +
     facet_wrap(~ facet, scales = "free_y") +
-    labs(x = NULL, y = "derived threshold (arcsinh units)",
+    labs(x = NULL, y = y_label,
          title = paste0("Gating-threshold drift across cohorts",
                         if (nzchar(panel_label)) paste0(", ", panel_label) else ""),
          subtitle = paste0(

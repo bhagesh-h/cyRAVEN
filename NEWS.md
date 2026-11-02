@@ -1,5 +1,229 @@
 # cyRAVEN (development)
 
+## PeacoQC and edgeR, opt-in
+
+Two published methods the documentation named as missing, now available. Both
+are off by default, and neither changes a run that does not ask for it.
+
+- **`--peacoqc`** removes the events PeacoQC (Emmaneel et al. 2022) flags
+  before any cofactor, threshold or frequency is derived. Its input is prepared
+  as the PeacoQC vignette prescribes (margins removed, compensated, logicle on
+  the fluorescence channels) and run with `determine_good_cells = "all"`.
+  `peacoqc_summary.csv` gives per file the events removed and the share each
+  check flagged, and notes where PeacoQC did not run its isolation tree (it
+  needs 150 time bins). It replaces `--drop-unstable-events` when both are
+  given; `acquisition_qc.csv` still describes the acquisition as it was, and
+  the MIFlowCyt record says the events were removed. On the 24 KMT2 files at
+  25,000 events it removed a median 2.0% per file (0 to 14.5%), and the
+  frequencies' median distance from the manual gating went from 0.49 to 0.47
+  points.
+- **`--edger`** adds diffcyt-DA-edgeR (Weber et al. 2019) on each sample's
+  exclusive-label counts: populations with 3 or more cells in half the
+  samples, no TMM normalisation, dispersion without a trend, a likelihood-ratio
+  test of each group against the reference, BH. It is written to
+  `edger_abundance_stats.csv` beside the rank tests, which stay primary, and
+  `statistical_methods.csv` lists it as used. The tests run on the gated
+  populations, not on clusters defined on a subsample, which was the objection
+  to diffcyt as a whole.
+
+PeacoQC and edgeR are Suggests, installed in the image; a run given either
+option without its package stops before reading any file. `--drop-unstable-events`
+with `--no-acquisition-qc`, which removed nothing without saying so, now stops
+too.
+
+## A second pass over the statistics, diagnostics and cluster names
+
+Each item was shown wrong by the code, the cited definition or a simulation
+before it was changed. Gates, thresholds and population frequencies change only
+on a panel of more than 40 markers (the cofactor's marker subset) or under
+`--drop-unstable-events` (which events acquisition QC flags).
+
+- **Confounding is judged within cohorts.** A covariate confounds a comparison
+  when it differs between cohorts and tracks the outcome *conditional on* the
+  cohort. The association was tested across the pooled cohorts, where a real
+  group difference makes any unbalanced covariate track the outcome by itself:
+  two cohorts of ten, ages 30 and 55, a group effect and no age effect, read
+  `HIGH` in 199 of 200 simulated cohorts. It is now a partial Spearman
+  correlation with cohort held fixed (a rank *F* test for a categorical
+  covariate): 5% `HIGH` there, 82% for a real age effect.
+- **Batch alignment keeps every group on one scale.** Each group was aligned to
+  the mean of its own batches' quantiles, so groups measured in different
+  batches carried different batch effects: identical cells, batch 2 one unit
+  high, one group in batch 1 only, came out 0.49 apart. The goal now uses the
+  batches every group was measured in (0.02 apart). Where no batch holds every
+  group nothing is corrected and `batch_correction.csv` says why; a forced
+  correction there used to report "corrected" with the data unchanged.
+- **`statistical_methods.csv` lists what the run wrote.** The t-tests, ANOVAs,
+  Tukey, Games-Howell and Dunn, written by default to `parametric_tests.csv`
+  and `posthoc_tests.csv`, were listed as not used; a paired signed-rank test
+  as not declared; diffcyt as available through `--external-labels`, which
+  turns labels into gates. Fisher's exact test, used for a categorical
+  covariate, was listed as not used.
+- **The paired effect size is the matched-pairs rank-biserial** (Kerby 2014),
+  (R+ − R−)/(R+ + R−) on the ranks of |d|, the effect of the signed-rank test
+  beside it. `rank_biserial` held the share of pairs up minus down, the sign
+  test's effect.
+- **Clinical association with marker intensity is tested within each
+  population**, for the population and marker pairs `functional_markers.csv`
+  reports. It took the median of the populations' medians per sample, which
+  followed whichever population type the specification listed most and
+  described no set of cells. `clinical_association_markers.csv` is keyed
+  `population_marker` and carries `population` and `marker`.
+- **The gate-uncertainty ratio is taken in the compared units.** With
+  `wbc_per_ul` the group test compares cells/µL, and `difference_over_gate_u`
+  divided that by an uncertainty in percentage points. Each sample's
+  uncertainty is now carried into cells/µL by its own WBC.
+- **Conformance compares cuts in instrument units.** The cofactor and logicle
+  widths are re-derived from each run's data, which moves every cut on the
+  transformed axis (by log(c₂/c₁) for a cofactor change) without moving it on
+  the instrument's. The baseline now stores its transforms and each median cut
+  is compared on the baseline's scale; older baselines are rebuilt from their
+  cofactor.
+- **The batch diagnostic and the refusal agree.** `batch_group_confounding.csv`
+  computed Cramér's V with a continuity correction and graded it at fixed 0.3,
+  0.5 and 0.8, while the refusal uses Cohen's 0.5/√(k − 1); with three batches
+  V = 0.40 read "moderate" there and was refused here.
+- **Acquisition QC judges the stored values** before gating, instead of
+  log10(max(x, 1)), whose kink at 1 is where a compensated channel's negatives
+  centre: simulated, 0.22 false flags per channel and a missed shift, against
+  none.
+- **Explore cluster names.** `Non-classical monocytes (CD14low CD16+)` was CD3−
+  CD14− CD16+ with no monocyte marker, which is every CD16+ NK cell and
+  neutrophil, and outranked `NK cells`; it now needs HLA-DR (and CD56− where
+  measured). `NKT cells` is `NKT-like cells`, as in the template, and the PD-1+
+  subsets no longer say "(exhausted)", which one marker cannot show.
+- **`--write-config` no longer writes one sample's cuts as fixed cuts.** Each
+  marker's cut from the first sample was written under `thresholds:`, the key
+  a run applies to every sample, so running with the written config replaced
+  every sample's own cut by that one. The cuts are summarised per marker
+  (median, range, sources) under `thresholds_derived:`, which no run reads, and
+  the file names the transform the run used instead of always "asinh".
+- **Counts are read in the sheet's number format.** Count columns had every
+  comma made a decimal point, so an exported "1,500" cells/µL read 1.5, and a
+  German "1.500" read 1.5 as a number; separators in thousands position are now
+  removed by the file's convention (semicolon files: points between thousands).
+  `wbc_per_ul` is read the same way, and values outside 100–200,000 cells/µL
+  are named in a warning, since a haemogram's 10³/µL (6.5) makes every
+  concentration a thousandth of the truth.
+- **`--subsample rare` is weighted back where shares are reported.** Cluster
+  sizes, purity and label capture in the gate–cluster agreement, subcluster
+  occupancy, medians and Cliff's delta, the density figures (`umap_density*.png`)
+  and the population shares in the key of `umap_populations.png` now carry the
+  cells' sampling weights; they described the density-reweighted draw, not the
+  cells.
+- **Two files with one sample id no longer overwrite each other.** Without a
+  sheet, ids come from keywords or a well-like file prefix, and files sharing
+  one ("B01 p016 ...", "B01 p018 ...") replaced each other with no message;
+  they now fall back to the file name, and a sheet giving two files one id
+  stops the run.
+- **A `--peer-cuts` replacement is recorded on its own row.** Where a control
+  tube's rows came first, the replacement was written onto another sample's or
+  marker's row of `thresholds_used.csv` (scoring used the right cut).
+- **Controls and staining-QC failures are kept out of the remaining
+  cohort-wide estimates**: the spreading report (which took the first eight
+  tubes), the threshold drift tests and the baseline comparison (the threshold
+  table now carries `is_control` and `qc_status`), and the CLR's zero
+  replacement.
+- **Blind explore names its clusters against real cuts.** Without
+  `--maybe-learn` every marker was called against its pooled median, which
+  calls half of all cells positive by construction, so a marker on 5% of cells
+  read about 50% positive in clusters that do not carry it. Each sample's cut is
+  now placed on its own explore cells by the declared run's density rule; no
+  declared output is read. Scored against the KMT2 manual gating, the share
+  of cells in clusters named B cells, CD8 T cells and classical monocytes
+  moved from a median 3–6 points off to 0.5–1.3 points off. Its debris call
+  now uses each file's CD45 debris reference, as the declared gate does: the
+  2-means split of cluster medians it used cut through CD45-dim cells on the
+  sepsis PBMC files (a node at CD45 2.42 dropped beside nodes at 2.71 kept);
+  KMT2 keeps the same cells.
+- **The cluster-agreement check sees the unlabelled cells.** Without `--other`
+  the "Other CD45+" cells were dropped from the figure copy of the embedding,
+  and the unsupervised clustering and its agreement with the gates, and the
+  external-label gates, read that copy: a cluster of cells the specification
+  does not describe, which the check exists to report, could not appear. They
+  now read every embedded cell; on KMT2 a 520-cell cluster, two thirds
+  unlabelled, is reported as undescribed.
+- `--explore-only` honours `--transform logicle`; it always built arcsinh.
+- **Five figure descriptions in `report.html` described another figure or a
+  comparison the figure does not draw.** `recon_diagnostics.png` and
+  `gating_qc.png` had each other's content (the second is the one with every
+  cut on its distribution); `frequency_uncertainty.png` claimed a counting
+  uncertainty it does not draw; `umap_multigraph_overlay.png` was called a
+  neighbour graph; and `absolute_counts_qc.png`, here and in two vignettes, was
+  said to compare the supplied counts with the run's frequencies, when it draws
+  the supplied counts alone. Tables and figures the report had no line for now
+  have one.
+- **Intensity axes name the run's scale.** The recon diagnostics, the marker
+  UMAPs, the multigraph overlay, the phenotype heatmap, the marker-state and
+  timepoint intensity figures and the threshold-drift figure said "asinh" or
+  "arcsinh units" whatever the transform; under `--transform logicle` their
+  values are logicle values. They now carry the transform's own label, as
+  `gating_qc.png` already did.
+- **The threshold scale check uses passing samples as peers**, as every other
+  cohort-wide estimate does; a staining-QC failure is compared against them but
+  no longer helps set the peer median. The documentation sent readers to
+  `threshold_scale_qc.csv` for each sample's robust *z*; that file summarises
+  per marker, and the per-sample `robust_z`, `peer_median` and `scale_outlier`
+  are in `thresholds_used.csv`, as the run log said.
+- **A learned gating strategy is exported whole or not at all.** Where one
+  level could not be expressed on the instrument's scale, the Gating-ML skipped
+  that gate and parented the next level on the one above it, so the exported
+  child selected a larger population than the one scored; the vertex table had
+  the same gap. Such a strategy is now left out of both, with a warning naming
+  it.
+- **Failures that removed an output now say so.** `--save-umap-model`, the
+  spreading report, the FMO agreement, the group tests on `cells_absolute`, the
+  compositional concordance, the suggested next config and explore's group
+  tests, figures and report could fail without a log line; a failed explore
+  figure was also counted as written.
+- **`posthoc_tests.csv` says which p-values are already adjusted over pairs.**
+  Tukey HSD and Games-Howell refer to the studentized range, which controls
+  the error over a population's pairs; Dunn's `p_value` is the unadjusted
+  pairwise p. The new column `p_value_adjusted_over_pairs` keeps the three from
+  being read as one quantity. The Advanced article described the parametric
+  tests as run on arcsine square-root percentages; they run on the logit
+  (log concentrations for cells/µL), as `parametric_tests.csv` records.
+- **Documentation that pointed at nothing, or quoted the wrong limit.** The
+  `--flowjo-export` help named `docs/flowjo_interactive.md`, which never
+  existed; help text, the shipped config, the demo data and the package help
+  named an Inputs, Output or Gating article and `config` or `statistics`
+  vignettes, all since merged into Get started and Advanced, which they now
+  name. Get started said batch correction is refused above V = 0.6; the limit
+  is Cohen's 0.5/√(k − 1). The shipped config now says that HLA-DR+ NK cells
+  whose CD56 clears its cut are counted under "Other CD45+". The About
+  article's group-test example labelled all twelve samples one group and
+  printed `NULL`, and its account of the threshold fallback left out the tail
+  gate that comes before the quantile.
+- **`--subsample` and `--p-adjust-display` reject values they do not know.**
+  `--subsample Rare` ran the uniform draw while the manifest recorded "Rare";
+  both now stop the run and name the accepted values.
+- **`--rank-ancova` is a group test like the others.** It ran inside the
+  confounding diagnostic, so `--no-confounding` (or a failed diagnostic)
+  skipped it, and `--no-group-tests` did not.
+- **`--no-report` skips only `report.html`**, as documented. It also skipped
+  `statistical_methods.csv` and `normality_tests.csv`, which are documented as
+  written on every run, and `--explore` and `--split-by-timepoint` when they
+  were asked for, without a message.
+- **A saved UMAP model projects a later run on the model's own scale.** The
+  model stored its feature scaling but not the transform, so a run with a
+  re-derived cofactor or logicle width was projected as if its numbers meant
+  what the training run's did, while the log called the coordinates
+  comparable. The transform is now saved with the model and each feature is
+  carried through instrument units onto it first.
+- The learned gates' held-out F1 is reported on cells that did not choose the
+  penalty; an absolute count labelled by a patient sampled more than once is no
+  longer attached to the first visit; a panel with fewer than two embedding
+  features skips the embedding instead of stopping the run; the threshold
+  table's `cofactor` is NA under logicle.
+- Smaller: Tukey HSD pairs are rebuilt from the group levels (a hyphen in a
+  group name broke them); tail-gate and quantile bootstrap replicates obey the
+  zero-signal floor the reported cut does; with more than 40 markers the
+  cofactor is estimated from an evenly spaced subset rather than a random one;
+  the learned-gate figures no longer overwrite the functional-marker table that
+  `--split-by-timepoint` reads; documentation that called Kruskal-Wallis exact,
+  put 24 null tests at a 1-in-5 chance of a false positive (71%), and called
+  Spearman on a 0/1 variable the rank-biserial correlation.
+
 ## Checked against published practice
 
 Every step of the pipeline was compared with published flow cytometry protocols,

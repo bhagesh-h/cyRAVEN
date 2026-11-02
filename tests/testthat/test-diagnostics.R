@@ -166,3 +166,26 @@ test_that("a single group column still yields a one-row confounding table", {
   expect_identical(nrow(br$confounding), 1L)
   expect_identical(br$confounding$group_column, "grp")
 })
+
+test_that("the batch diagnostic's Cramer's V and verdict match the refusal's", {
+  # Same V as cramers_v() (no continuity correction) and the verdict scaled by
+  # table size, so a 3 x 3 association that correct_batch() refuses is not
+  # called moderate here.
+  mk_cells <- function(tab) {
+    b <- rep(rownames(tab), rowSums(tab))
+    g <- unlist(lapply(seq_len(nrow(tab)), function(i)
+      rep(colnames(tab), tab[i, ])))
+    data.frame(umap_1 = seq_along(b), umap_2 = 0, batch = b, cohort = g,
+               stringsAsFactors = FALSE)
+  }
+  t2 <- matrix(c(70, 30, 30, 70), 2, dimnames = list(c("b1", "b2"), c("x", "y")))
+  r2 <- suppressMessages(batch_mixing_report(mk_cells(t2), "batch", n_perm = 2L))
+  expect_equal(r2$confounding$cramers_v, 0.4)
+  expect_match(r2$confounding$verdict, "^moderate")
+  t3 <- matrix(c(60, 20, 20, 20, 60, 20, 20, 20, 60), 3,
+               dimnames = list(c("b1", "b2", "b3"), c("x", "y", "z")))
+  r3 <- suppressMessages(batch_mixing_report(mk_cells(t3), "batch", n_perm = 2L))
+  expect_equal(r3$confounding$cramers_v, 0.4)
+  expect_match(r3$confounding$verdict, "^substantial")
+  expect_gt(0.4, cramers_v_limit(mk_cells(t3)$batch, mk_cells(t3)$cohort))
+})

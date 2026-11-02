@@ -42,10 +42,12 @@ Imports:
     viridisLite,
     yaml
 Suggests:
+    edgeR,
     FlowSOM,
     hexbin,
     knitr,
     optparse,
+    PeacoQC,
     readxl,
     rmarkdown,
     testthat (>= 3.0.0),

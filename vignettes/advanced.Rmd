@@ -69,8 +69,15 @@ CD14-`, where every call is a percentage of cells above their own sample's
 threshold, rather than a colour you interpreted.
 
 Run without `--maybe-learn`, explore is blind: it sees the
-transform and the group labels and nothing else, and names its clusters from
-pooled medians. That is the right default, and section 6 explains why.
+transform and the group labels and nothing else. It names its clusters against
+cuts it places on each sample's own cells by the declared run's rule (a valley,
+else a tail gate above the dominant mode), reading none of the declared run's
+cuts, and calls a cluster debris when most of its cells sit below its file's CD45
+debris reference, the 99.5th percentile of CD45 on the events the scatter gate
+rejects, as the declared CD45 gate defines CD45-negative. A pooled median, used
+before for the names, calls half of all cells positive for every marker; a
+2-means split of cluster medians, used before for debris, cut through CD45-dim
+cells on PBMC. Blind is the right default, and section 6 explains why.
 
 ### 2. The three ways to run it
 
@@ -269,7 +276,7 @@ specification rather than a cell type. Letting it compete would name most
 clusters "Other" on a specification with modest coverage, which is true but not
 informative. A cluster at or
 above 70% catch-all is reported as **undescribed**, which is a gap in the
-specification rather than a property of the cluster. A cluster more than half
+specification rather than a property of the cluster. A cluster half or more
 catch-all is never called confident, however clean its F1 against the remainder.
 
 **Identity** is read from the cluster's own marker profile.
@@ -329,7 +336,8 @@ finds rank tests instead.
 and Welch's *t*, one-way and two-way ANOVA with Tukey, repeated measures,
 Mann-Whitney, Kruskal-Wallis with Dunn, chi-squared, Bonferroni, and the
 cytometry-specific diffcyt family (edgeR, limma-voom, GLMM), and for each one
-says whether this run computed it and **why**.
+says whether this run computed it and **why**. The edgeR form runs with
+`--edger`.
 
 **`normality_tests.csv`** carries the evidence: a Shapiro-Wilk test per
 population per group, and a Brown-Forsythe test for equal variances across
@@ -702,11 +710,15 @@ Output: `cluster_gate_proposals.csv`, `cluster_gate_polygons.csv`,
 ### 9. Covariates
 
 A variable confounds a comparison only when it both differs between groups and
-associates with the outcome. Either condition alone is inert, and flagging either
-alone would raise an alarm on any study with unequal age distributions.
+associates with the outcome within the groups. Either condition alone is inert,
+and flagging either alone would raise an alarm on any study with unequal age
+distributions.
 
 `confounding_diagnostics.csv` reports both conditions using tests estimable at
-small *n*, and assigns a `confounder_risk` verdict.
+small *n*, and assigns a `confounder_risk` verdict. The outcome association is a
+partial Spearman correlation with the group held fixed (a rank *F* test for a
+categorical covariate): tested across the pooled groups, a real group
+difference makes any unbalanced covariate track the outcome by itself.
 
 Adjustment is opt-in and kept separate. At single-digit *n* per group, a
 model carrying group with age and sex expends most residual degrees of freedom on
@@ -763,7 +775,8 @@ and recomputing yields the score this dataset would produce under no batch
 structure.
 
 **10.2 Separability.** `batch_group_confounding.csv` reports Cramér's *V* between
-batch and study group. Where patients and controls were acquired in distinct
+batch and study group, and between batch and timepoint where the sheet has one.
+Where patients and controls were acquired in distinct
 periods, *V* approaches unity and batch is not distinguishable from the
 comparison of interest.
 
@@ -851,7 +864,8 @@ single embedding computed across all samples.
 
 Every check above is internal to one run. This one is not.
 
-`threshold_scale_qc.csv` compares each threshold against the other samples of the
+The scale check (`scale_outlier` in `thresholds_used.csv`, summarised in
+`threshold_scale_qc.csv`) compares each threshold against the other samples of the
 same panel, which identifies a single deviant tube. It cannot identify a cohort
 that moved as a whole, because the leave-one-out peer median moves with it. After
 a laser service, a reagent lot change or six months of drift, every sample can
@@ -872,9 +886,13 @@ measurement and should not be pooled until someone has looked. `--fail-on-drift`
 turns that verdict into an exit code for scheduled runs, raised after every
 output has been written.
 
-Two results are withdrawn rather than reported. A transform differing from the
-baseline's puts thresholds on a different scale, and a redefined population is a
-different population; both read `not comparable`, which is not a small drift.
+Cuts are compared in instrument units: each marker's median cut is carried back
+through this run's transform and forward through the baseline's, because the
+cofactor and logicle widths are re-derived from every run's data and a changed
+ruler would otherwise read as drift. Two results are withdrawn rather than
+reported: a cut whose transform cannot be rebuilt on both sides when the
+transforms differ, and a redefined population, which is a different population;
+both read `not comparable`, which is not a small drift.
 
 ### 12. Provenance
 
@@ -918,10 +936,11 @@ exhaustive list rather than a second copy of them.
 | `margin_events.csv` | Per file: margin events removed (or capped), events below a channel's lower limit by flowAI's rule (counted, not removed: in compensated data they are mostly cells bright in a spilling channel, and removing them would bias those cells' frequency), channels linearised from `$PnE`, and the compensation applied |
 | `thresholds_used.csv` | Threshold, derivation, cofactor and outlier status per sample and marker |
 | `thresholds_within_parents.csv` | Cuts a population with `parent:` derives on its parent's events, beside the CD45<sup>+</sup> cut |
-| `threshold_scale_qc.csv` | Panel median and robust *z* per marker |
+| `threshold_scale_qc.csv` | Per panel and marker: median, range, and how many cuts are scale outliers or fallbacks. Written when any cut is an outlier; the per-sample robust *z* is in `thresholds_used.csv` |
 | `acquisition_qc.csv`, `.png` | Per-sample acquisition stability, and the flagged intervals |
 | `acquisition_qc_bins.csv` | Per-interval rate and channel departure |
 | `acquisition_qc_impact.csv` | How far each population would move if the flagged intervals were excluded |
+| `peacoqc_summary.csv` | Per file, the events PeacoQC removed, the share each of its checks flagged, and a note where the isolation tree was not run (fewer than 150 time bins), written by `--peacoqc` |
 | `fmo_agreement.csv` | Derived cut against its FMO-anchored equivalent, in units of the cut's own uncertainty |
 | `controls_refused.csv` | Channels where a declared control could not anchor a cut, and why |
 | `spreading_pairs.csv` | Per channel pair, how much wider the receiver's negatives become, overall and at a given source level, and `trend_rho`, a screen for compensation or unmixing error (`trend_unresolved` where spreading alone could produce the trend) |
@@ -1001,7 +1020,7 @@ that happened to clear the depth rule, and the two are indistinguishable in
 `thresholds_used.csv`.
 
 `u_combined` is `NA` rather than zero where it could not be computed, which
-happens for a threshold taken from a separate control tube. `n_terms_missing` on
+happens for a threshold taken from a separate control tube. `u_n_terms_missing` on
 the frequency table counts how many of a population's markers contributed
 nothing, so a small total that is small only because most terms are absent is
 distinguishable from a tight one.
@@ -1126,6 +1145,7 @@ produce coordinates that are geometrically valid and biologically meaningless.
 | `population_ratios_stats.csv` | Declared ratios between groups |
 | `compositional_clr_stats.csv` | Abundance tests on centred log-ratios |
 | `compositional_concordance.csv` | Classification of each result against both parameterisations |
+| `edger_abundance_stats.csv` | edgeR count-model test of each population's cell counts, each group against the reference, written by `--edger` |
 | `paired_comparison_stats.csv` | Paired designs, written by `--paired-column` |
 | `covariate_adjusted_stats.csv` | Rank ANCOVA, written by `--rank-ancova` |
 | `subcluster_marker_shifts.csv` | Pooled-event marker shifts per compartment |
@@ -1183,13 +1203,18 @@ whether it should have.
 #### `parametric_tests.csv` and `posthoc_tests.csv`
 
 The rank tests remain the primary result. These hold the parametric equivalents
-most immunology papers report, computed on arcsine square root transformed
-percentages, which stabilises the variance of proportion data.
+most immunology papers report, computed on the logit of each percentage (on log
+concentrations where the abundance is cells/µL), which stabilises the variance of
+proportion data. The `transform` column records which.
 
 Two groups give Welch's t-test with Student's alongside it and Cohen's *d*. Three
 or more give Welch's ANOVA with the classical one-way alongside it and eta
 squared. `posthoc_tests.csv` then carries Games-Howell, Tukey HSD and Dunn for
-every pair.
+every pair. Their `p_value` differs in kind: Tukey HSD and Games-Howell refer to
+the studentized range and are already adjusted over the population's pairs,
+Dunn's is the unadjusted pairwise p (`p_value_adjusted_over_pairs` says which).
+`p_adjusted_BH` applies Benjamini-Hochberg within each test across every
+population and pair.
 
 Every row records `shapiro_p` and `brown_forsythe_p` with the derived
 `residuals_normal`, `equal_variance` and `assumptions_met`. Where
@@ -1227,7 +1252,7 @@ column with `--clinical-columns`, or `samples: clinical_columns:` in the config
 | `clinical_landscape.png` | The whole cohort as one picture: one column per sample ordered by the first numeric variable, every clinical variable as a strip above, every population as a z-scored row below |
 | `clinical_effects_<variable>.png` | Every population's effect against that variable, ordered, with a 95% percentile bootstrap interval on each |
 | `clinical_<variable>.png` | The data behind one column of the heatmap: a scatter against a numeric variable, a box plot against a categorical one, one point per sample and one panel per population. Where a categorical variable's labels are too long to fit under the panels, such as organism names, each category gets a colour and is named once in a legend, with its sample count |
-| `clinical_association_markers.csv`, `clinical_association_markers.png` | The same against per-sample median marker intensity, collapsed across populations |
+| `clinical_association_markers.csv`, `clinical_association_markers.png` | The same against each population's median marker intensity, one test per population and marker (the pairs in `functional_markers.csv`) |
 | `population_trajectories.png` | Written by `--paired-column` with `--condition-column`, and coloured by the first two-level clinical column when there is one: per-patient lines across the conditions with the median over them |
 
 The test follows the variable's type rather than being chosen: **Spearman's rho**
@@ -1267,8 +1292,9 @@ and two columns describing it, and an association found against both is one
 finding reported twice. `clinical_variables_correlation.png` is where that is
 visible: circle area is the absolute Spearman coefficient, fill is its sign, and
 the number is printed where the unadjusted p-value is below 0.05. Two-level
-variables are included coded 0/1, for which Spearman is the rank-biserial
-correlation; variables with three or more unordered levels are excluded and named
+variables are included coded 0/1, for which Spearman is the point-biserial
+correlation of the ranks (not the rank-biserial: two perfectly separated groups
+of five give 0.87, not 1); variables with three or more unordered levels are excluded and named
 in the caption, because there is no ordering to correlate and coding them 1/2/3
 would invent one.
 
@@ -1357,7 +1383,7 @@ is what cyRAVEN resolves from `$PnS`.
 | `absolute_counts.csv`, `absolute_counts.png` | Measured cells per microlitre per sample and population, written by `--absolute-counts` |
 | `absolute_counts_raw.csv` | The supplied workbook flattened to CSV exactly as read, before any header or population-name interpretation. Open this first when a population from `--absolute-counts` looks wrong: it separates a reading problem from a mapping one |
 | `absolute_counts_stats.csv` | Between-group tests on the measured counts, on `cells_per_ul`. Written when the run performs group tests, so it needs `--group-column` and is absent under `--no-group-tests` |
-| `absolute_counts_qc.png` | The supplied counts against the frequencies this run measured, same flag. Written unconditionally whenever counts are supplied, and deliberately before the group-comparison figure, because a unit or mapping error has to be visible before the more inviting figure is read as a finding |
+| `absolute_counts_qc.png` | The supplied counts, one log-scale tile per sample and population, controls and QC failures labelled, same flag. Written unconditionally whenever counts are supplied, and deliberately before the group-comparison figure, because a unit or mapping error has to be visible before the more inviting figure is read as a finding |
 | `populations_unavailable.csv` | One row per sample and population the panel cannot score, with the reason. Written only when there is at least one |
 | `flowjo/` | UMAP-annotated FCS, written by `--flowjo-export` |
 | `config_derived.yaml` | Derived parameters, written by `--write-config` |
@@ -1413,6 +1439,8 @@ A measured yield per acquisition is what separates the two.
 | `absolute_vs_share.png` | The two measures side by side per population. Where a global depletion is visible as the thing a share cannot express |
 | `absolute_vs_share_by_timepoint.png` | The same, once per visit, under `--split-by-timepoint` |
 | `explore_total_counts_qc.png`, `explore_absolute_vs_share.png` | The twins of those two inside `explore/` |
+| `explore_cluster_stats_absolute.csv` | Inside `explore/`: the donor-level cluster tests on cells per cluster, kept apart from the share tests in `explore_cluster_stats.csv` |
+| `explore_cluster_count_concordance.csv` | Inside `explore/`: per cluster, whether the two agree. `absolute only` is a compartment that changed size with its composition unchanged; `share only` is a redistribution |
 
 `population_frequencies.csv` gains `total_cells`, `cells_absolute` and
 `count_basis`; where the sheet carries `blood_volume_ml` it gains `cells_per_ml`
@@ -1435,7 +1463,7 @@ populations.
 | `clinical_<variable>.png` | One figure per variable named to the flag, showing the association with every population |
 | `clinical_effects_<variable>.png` | The effect sizes for that variable with their bootstrap intervals, populations ordered by effect |
 | `clinical_association.csv` | Every variable against every population: the test chosen from the column's type, `estimate`, `effect`, `ci_low`, `ci_high`, `p_value`, `p_adj_BH`, and `underpowered` |
-| `clinical_association_markers.csv`, `.png` | The same against marker expression rather than abundance |
+| `clinical_association_markers.csv`, `.png` | The same against marker expression within each population rather than abundance |
 | `clinical_variables_correlation.png` | **Read this first.** p-values are adjusted within each variable on the assumption that the variables are separate questions, and this is where you see whether they are |
 | `clinical_landscape.png` | Every clinical variable and population on one grid, columns ordered by timepoint then study group |
 | `clinical_timepoint.png`, `clinical_infection_focus.png` | A categorical clinical column gets the same treatment as a numeric one, with the test following the type |
@@ -1799,10 +1827,12 @@ columns that decide between them sit on the parametric row.
 
 **The transform.** Frequencies are proportions. They are bounded, their variance
 depends on their mean, and near 0 or 100 they are strongly skewed, which is
-exactly where rare populations live. The arcsine square root transform stabilises
-that variance and is the conventional remedy, so the parametric tests run on
-transformed values. Group means are reported back on the percentage scale,
-because a difference of 0.07 arcsine units means nothing to a reader.
+exactly where rare populations live. The parametric tests therefore run on the
+empirical logit, log((p + e) / (1 − p + e)) with `e` the smallest non-zero
+proportion so that 0% and 100% stay finite. It is symmetric about 50% and
+stabilises the variance near 0 and 100%, where the arcsine square root, the older
+remedy, does not. Group means are reported back on the percentage scale, because
+a difference in logits means nothing to a reader.
 
 **Which test.** Two groups give Welch's *t*-test, which does not assume equal
 variances, with Student's *t* beside it. Three or more give Welch's ANOVA with
@@ -1905,7 +1935,8 @@ independently.
 
 `stats_confounding()` therefore reports the two conditions that jointly define a
 confounder: differential distribution across groups, and association with the
-outcome. `stats_rank_ancova()` fits the adjusted model on request, labels every
+outcome within groups (Rothman, Greenland & Lash 2008), a partial Spearman
+correlation with group held fixed. `stats_rank_ancova()` fits the adjusted model on request, labels every
 row `EXPLORATORY`, and records `NOT FITTED` with the reason where residual
 degrees of freedom are insufficient.
 
@@ -1955,7 +1986,7 @@ population associated with both is one finding counted twice.
 `fig_clinical_correlogram()` exists to make that visible before the heatmap is
 read, because no correction can repair it and nothing else in the run would show
 it. Two-level variables appear there coded 0/1, for which Spearman is the
-rank-biserial correlation; variables with three or more unordered levels are
+point-biserial correlation of the ranks; variables with three or more unordered levels are
 excluded rather than coded 1/2/3, which would invent an ordering.
 
 #### 4b. Effect intervals on a small cohort
@@ -2108,10 +2139,11 @@ Where each method came from, and what it is for.
 
 **Proportions.** Population frequencies are bounded and their variance depends on
 their mean, so a test assuming constant variance is wrong in a way that gets
-worse as the population gets rarer. The arcsine square root transform is the
-standard remedy, and its asymptotic variance is known rather than estimated from
-the data, which is what lets ordinary ANOVA machinery run on top of it
-([Frontiers in Psychology, 2022](https://www.frontiersin.org/articles/10.3389/fpsyg.2022.1045436)).
+worse as the population gets rarer. The logit is used here: Warton and Hui
+(2011, *Ecology* 92:3) argue the arcsine square root should not be used for
+proportions, and for flow cytometry results the logit gives symmetric
+distributions and homogeneous variances near 0 and 100% (Seiffert et al. 2024,
+*Front Mol Biosci* 11:1335174).
 
 **Unequal variance.** Welch's t-test and Welch's ANOVA do not assume equal
 variances, so they stay valid when group sizes and spreads differ, which they

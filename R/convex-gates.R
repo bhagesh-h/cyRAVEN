@@ -303,7 +303,9 @@ gate_metrics <- function(inside, y, n_target_total = sum(y == 1)) {
 #'   the cases tried, inside the seed-to-seed spread) for roughly twice the
 #'   runtime. It is left available for a dataset where the fit does get stuck
 #' @param lambda_grid tightness values to search
-#' @param holdout fraction of cells reserved for evaluation, stratified by label
+#' @param holdout fraction of cells reserved for evaluation, stratified by
+#'   label; half of them choose the penalty and the other half give the
+#'   reported held-out metrics
 #' @param n_target_total recall denominator; defaults to the targets supplied
 #' @param max_cells subsample ceiling for the fit
 #' @param seed RNG seed; the stream is restored on exit
@@ -365,6 +367,19 @@ learn_convex_gate <- function(X, y, n_planes = 8L,
           sample(idx_neg, max(1L, floor(holdout * length(idx_neg)))))
   tr <- setdiff(seq_along(y), te)
   if (sum(y[tr] == 1) < 10L || sum(y[te] == 1) < 5L) { tr <- seq_along(y); te <- tr }
+  # THE PENALTY IS CHOSEN ON ONE HALF OF THE HELD-OUT CELLS AND REPORTED ON THE
+  # OTHER. Choosing lambda by the F1 of the cells the F1 is then reported on
+  # makes the reported score the maximum over the grid, which overstates it.
+  # The held-out cells are split, stratified by label, into a validation half
+  # that picks lambda and a test half used for nothing but the report; with too
+  # few target cells for both, the two coincide as before.
+  va <- te
+  te_pos <- te[y[te] == 1]; te_neg <- te[y[te] == 0]
+  if (!identical(te, tr) && length(te_pos) >= 10L && length(te_neg) >= 10L) {
+    va <- c(sample(te_pos, floor(length(te_pos) / 2)),
+            sample(te_neg, floor(length(te_neg) / 2)))
+    te <- setdiff(te, va)
+  }
 
   n_fix <- 4L
   n_planes <- max(n_fix + 1L, as.integer(n_planes))
@@ -398,6 +413,7 @@ learn_convex_gate <- function(X, y, n_planes = 8L,
   # not by the share of all cells. Getting that wrong makes deep levels look
   # better than they are, which is the one direction a hierarchy must not err in.
   n_te_tgt <- n_target_total * sum(y[te] == 1) / max(1L, sum(y == 1))
+  n_va_tgt <- n_target_total * sum(y[va] == 1) / max(1L, sum(y == 1))
 
   # The observed data range, as four half-planes, intersected with the fitted
   # ones before the polygon is formed. WHY: a boundary drawn where no cell was
@@ -466,7 +482,7 @@ learn_convex_gate <- function(X, y, n_planes = 8L,
     if (is.null(poly)) return(NULL)
     inside <- point_in_polygon(Z, poly)
     list(W = W, b = b, polygon = poly, inside = inside, lambda = lambda,
-         score = gate_metrics(inside[te], y[te], n_te_tgt)[["f1"]])
+         score = gate_metrics(inside[va], y[va], n_va_tgt)[["f1"]])
   }
 
   best <- NULL

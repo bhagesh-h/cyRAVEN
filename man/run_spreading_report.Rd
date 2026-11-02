@@ -11,7 +11,8 @@ run_spreading_report(
   panel_of = NULL,
   max_samples = 8L,
   flag_ratio = 1.25,
-  trend_flag = 0.3
+  trend_flag = 0.3,
+  exclude = character(0)
 )
 }
 \arguments{
@@ -35,6 +36,9 @@ conventional moderate correlation, not a validated cut. A negative trend
 on a pair whose receiver is \code{flag_ratio} times wider at a given source
 level is reported as \code{trend_unresolved} instead, since truncation at the
 receiver's cut produces one from spreading alone.}
+
+\item{exclude}{sample ids kept out: declared controls and staining-QC
+failures, which are not samples of the cohort.}
 }
 \value{
 list(pairs, receivers), each a data.frame, or NULL

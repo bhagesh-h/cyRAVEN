@@ -386,8 +386,22 @@ clin_associate <- function(d, key_col, value_col, clin, patient_of = NULL,
 
 #' Clinical variables against population frequencies and marker intensities
 #'
+#' MARKER INTENSITY IS TESTED WITHIN A POPULATION. A marker's level is a
+#' property of a defined cell population, which is how a differential-state
+#' test asks it (diffcyt-DS, Weber et al. 2019; [stats_marker_state()] here),
+#' so each population and marker pair is one test, keyed `"<population>,
+#' <marker>"`. This used to take, per sample and marker, the median of the
+#' declared populations' medians: populations nest and the list is the
+#' specification's, so that value followed whichever population type the
+#' specification listed most (for HLA-DR, the T-cell subsets) and described
+#' no set of cells. The pipeline passes functional_markers.csv, whose pairs are
+#' the ones the gating document scopes as interpretable, and
+#' population_marker_mfi.csv only where no functional block resolved.
+#'
 #' @param freq population_frequencies table.
-#' @param mfi population_marker_mfi table, optional.
+#' @param mfi per-sample marker medians by population, with `sample_id`,
+#'   `population`, `marker` and `median_asinh` (functional_markers.csv or
+#'   population_marker_mfi.csv), optional.
 #' @param clin named list of clinical variables, sample_id -> value.
 #' @param patient_of named vector sample_id -> patient_id, used to report an
 #'   association at the donor level where a variable is a property of the donor
@@ -408,17 +422,21 @@ stats_clinical_association <- function(freq, mfi = NULL, clin = list(),
                             clin, patient_of = patient_of, min_n = min_n)
   }
   mk <- NULL
-  if (!is.null(mfi) && nrow(mfi) && "median_asinh" %in% names(mfi)) {
+  if (!is.null(mfi) && nrow(mfi) &&
+      all(c("sample_id", "population", "marker", "median_asinh") %in% names(mfi))) {
     d <- qc_pass_rows(mfi)
-    # One row per sample x marker x population would test the same marker many
-    # times over. The question here is the marker across the whole sample, so the
-    # populations are collapsed to one median per sample and marker.
-    if (all(c("sample_id", "marker") %in% names(d))) {
-      agg <- stats::aggregate(list(median_asinh = d$median_asinh),
-                              by = list(sample_id = d$sample_id, marker = d$marker),
-                              FUN = stats::median, na.rm = TRUE)
-      mk <- clin_associate(agg, "marker", "median_asinh", clin,
-                           patient_of = patient_of, min_n = min_n)
+    d <- d[!duplicated(d[, c("sample_id", "population", "marker")]), , drop = FALSE]
+    d$population_marker <- paste0(d$population, ", ", d$marker)
+    mk <- clin_associate(d, "population_marker", "median_asinh", clin,
+                         patient_of = patient_of, min_n = min_n)
+    if (!is.null(mk)) {
+      key <- d[!duplicated(d$population_marker), c("population_marker",
+                                                   "population", "marker")]
+      i <- match(mk$population_marker, key$population_marker)
+      mk <- data.frame(mk[, 1:2, drop = FALSE],
+                       population = key$population[i], marker = key$marker[i],
+                       mk[, -(1:2), drop = FALSE], check.names = FALSE,
+                       stringsAsFactors = FALSE)
     }
   }
   if (is.null(pop) && is.null(mk)) return(NULL)
@@ -775,7 +793,10 @@ fig_clinical_forest <- function(assoc, key_col, var_name, outfile, dpi = 200,
 #' finding reported twice. This figure is where that is visible.
 #'
 #' WHAT IS INCLUDED. Numeric variables, and two-level variables coded 0/1 -- for
-#' which Spearman is the rank-biserial correlation, a legitimate quantity.
+#' which Spearman is the point-biserial correlation of the ranks, a legitimate
+#' quantity. It is not the rank-biserial correlation: it is that times
+#' sqrt(3pq n^2 / (n^2 - 1)), so two perfectly separated groups of five give
+#' 0.87 rather than 1, and its magnitude is not comparable with a Cliff's delta.
 #' Variables with three or more unordered levels are excluded and named in the
 #' caption: there is no ordering to correlate, and coding them 1/2/3 would invent
 #' one.
@@ -797,9 +818,9 @@ fig_clinical_correlogram <- function(clin, outfile, dpi = 200,
     } else {
       f <- factor(trimws(as.character(v)))
       if (nlevels(f) == 2L) {
-        # 0/1 for a two-level variable, so the coefficient is the rank-biserial
-        # correlation. The level that sorts first is 0, which is stated in the
-        # caption because the SIGN is meaningless without it.
+        # 0/1 for a two-level variable, so the coefficient is the point-biserial
+        # correlation of the ranks. The level that sorts first is 0, which is
+        # stated in the caption because the SIGN is meaningless without it.
         num[[paste0(cv, " [", levels(f)[2], "=1]")]] <- as.numeric(f) - 1
       } else dropped <- c(dropped, cv)
     }

@@ -140,6 +140,28 @@ run_cyraven_impl <- function(opt) {
   }, add = TRUE)
 
   cfg <- if (!is.null(opt$config)) yaml::read_yaml(opt$config) else list()
+  # Asked-for methods that cannot run stop the run here, before any file is
+  # read. --peacoqc changes every count, so continuing without it would report
+  # uncleaned numbers from a run that asked for cleaned ones.
+  if (isTRUE(opt$peacoqc) && !requireNamespace("PeacoQC", quietly = TRUE))
+    stop("--peacoqc needs the Bioconductor package PeacoQC (installed in the ",
+         "cyRAVEN image)", call. = FALSE)
+  if (isTRUE(opt$edger) && !requireNamespace("edgeR", quietly = TRUE))
+    stop("--edger needs the Bioconductor package edgeR (installed in the ",
+         "cyRAVEN image)", call. = FALSE)
+  # Options with a fixed set of values are checked here rather than read with a
+  # fallback: --subsample Rare silently ran the uniform draw.
+  for (.ch in list(list("subsample", c("uniform", "rare")),
+                   list("p_adjust_display", c("raw", "BH")))) {
+    .v <- opt[[.ch[[1]], exact = TRUE]]
+    if (!is.null(.v) && !.v %in% .ch[[2]])
+      stop("--", gsub("_", "-", .ch[[1]]), " must be one of ",
+           paste(.ch[[2]], collapse = ", "), "; got '", .v, "'", call. = FALSE)
+  }
+  if (isTRUE(opt$drop_unstable_events) && isTRUE(opt$no_acquisition_qc) &&
+      !isTRUE(opt$peacoqc))
+    stop("--drop-unstable-events removes the intervals acquisition QC flags and ",
+         "cannot be combined with --no-acquisition-qc", call. = FALSE)
   # `parent:` keys resolved here, once: every consumer below sees each
   # population's complete conditions, and the cuts a child places within its
   # parent are derived per sample at scoring. See resolve_population_parents().
@@ -363,9 +385,31 @@ run_cyraven_impl <- function(opt) {
                 paste0(" (evenly sampled from ", rd$n_events_file, " in file)") else "",
               ", ", length(rd$marker_cols),
               " markers, sample_id '", rd$sample_id, "'")
-      reads[[rd$sample_id]] <- rd
+      reads[[length(reads) + 1L]] <- rd
     }
   }
+  # ONE FILE, ONE SAMPLE ID. The reads are keyed by sample_id, and a second file
+  # with the same id replaced the first, which then left the analysis with no
+  # message. Ids from the sheet are the user's: two files given one id stop the
+  # run. Ids derived without a sheet ($WELLID, $SRC, a well-like prefix such as
+  # "B01" shared by a plate's files) fall back to the file name where they clash.
+  .ids <- vapply(reads, `[[`, "", "sample_id")
+  if (anyDuplicated(.ids)) {
+    .from_sheet <- vapply(reads, function(r) !is.null(.sid_for(r$file)), logical(1))
+    .clash <- .ids %in% .ids[duplicated(.ids)]
+    if (any(.clash & .from_sheet))
+      stop("the sample sheet gives the same sample_id to more than one file: ",
+           paste(unique(.ids[.clash & .from_sheet]), collapse = ", "),
+           ". Each acquisition needs its own sample_id.", call. = FALSE)
+    .stem <- sub("\\.fcs$", "", vapply(reads, function(r) basename(r$file), ""),
+                 ignore.case = TRUE)
+    log_msg("  NOTE ", sum(.clash), " file(s) derived the same sample_id (",
+            paste(utils::head(unique(.ids[.clash]), 5), collapse = ", "),
+            "); their file names are used instead")
+    .ids[.clash] <- make.unique(.stem[.clash])
+    for (.i in which(.clash)) reads[[.i]]$sample_id <- .ids[.i]
+  }
+  names(reads) <- .ids
   # ---- what reading did to each file ------------------------------------------
   # Margin events removed (or capped under --keep-margin-events), log channels
   # linearised, and the compensation actually applied. Written for every run,
@@ -469,6 +513,9 @@ run_cyraven_impl <- function(opt) {
   # threshold and frequency below is computed from whatever events survive this
   # step. Reporting is unconditional; removal is not.
   .aqc <- NULL
+  # What removed events before gating, if anything did; the MIFlowCyt record
+  # states it.
+  .removal <- NULL
   if (!isTRUE(opt$no_acquisition_qc)) {
     log_step("STEP 1b - acquisition-time stability")
     .aqc <- tryCatch(
@@ -504,7 +551,7 @@ run_cyraven_impl <- function(opt) {
       # Removal, when asked for. Done by rewriting the event matrix, so every
       # stage below sees the cleaned file and nothing needs to know this
       # happened. The counts change, which is exactly why it is opt-in.
-      if (isTRUE(opt$drop_unstable_events)) {
+      if (isTRUE(opt$drop_unstable_events) && !isTRUE(opt$peacoqc)) {
         n_drop <- 0L; n_files <- 0L
         for (s in names(.aqc$flagged)) {
           fl <- .aqc$flagged[[s]]
@@ -517,7 +564,63 @@ run_cyraven_impl <- function(opt) {
                 n_files, " file(s). Every count, threshold and frequency below ",
                 "is computed on the remaining events, and the decision is ",
                 "recorded in the run manifest")
+        .removal <- "drop_unstable_events"
       }
+    }
+    if (isTRUE(opt$drop_unstable_events) && !isTRUE(opt$peacoqc) && is.null(.aqc))
+      log_msg("  WARNING --drop-unstable-events: acquisition QC did not run, so ",
+              "no events were removed")
+  }
+
+  # ---- PeacoQC, opt-in -------------------------------------------------------
+  # The validated alternative to removing the in-house detector's intervals:
+  # PeacoQC's flagged events are removed before any cofactor, threshold or
+  # frequency is derived. Run after the report above, so acquisition_qc.csv
+  # still describes the acquisition as it was. Replaces --drop-unstable-events
+  # when both are given.
+  if (isTRUE(opt$peacoqc)) {
+    log_step("STEP 1c - PeacoQC")
+    if (isTRUE(opt$drop_unstable_events))
+      log_msg("  --peacoqc given: its flagged events are removed instead of the ",
+              "in-house detector's (--drop-unstable-events ignored)")
+    .pq <- list()
+    for (s in names(reads)) {
+      r <- tryCatch(peacoqc_one(reads[[s]]), error = function(e) {
+        log_msg("  WARNING PeacoQC on ", s, ": ", conditionMessage(e))
+        NULL
+      })
+      if (is.null(r)) next
+      n0 <- nrow(reads[[s]]$exprs)
+      ok <- !is.null(r$good) && length(r$good) == n0
+      if (ok) {
+        reads[[s]]$exprs <- reads[[s]]$exprs[r$good, , drop = FALSE]
+        reads[[s]]$n_events <- nrow(reads[[s]]$exprs)
+      }
+      .pq[[s]] <- data.frame(sample_id = s, events_before = n0,
+                             events_removed = if (ok) n0 - sum(r$good) else 0L,
+                             pct_removed = if (ok) round(r$pct_removed, 3) else NA_real_,
+                             pct_isolation_tree = round(r$pct_it, 3),
+                             pct_mad = round(r$pct_mad, 3),
+                             pct_consecutive = round(r$pct_consecutive, 3),
+                             note = if (ok) r$reason %||% NA_character_ else
+                               (r$reason %||% "no events removed"),
+                             stringsAsFactors = FALSE)
+    }
+    if (length(.pq)) {
+      .pq <- do.call(rbind, .pq)
+      write.csv(.pq, file.path(opt$outdir, "peacoqc_summary.csv"), row.names = FALSE)
+      log_msg("wrote peacoqc_summary.csv (", sum(.pq$events_removed), " event(s) ",
+              "removed across ", sum(.pq$events_removed > 0), " of ", nrow(.pq),
+              " file(s); median ", round(stats::median(.pq$pct_removed, na.rm = TRUE), 2),
+              "% per file). Every count, threshold and frequency below is on ",
+              "the remaining events")
+      .big <- .pq[is.finite(.pq$pct_removed) & .pq$pct_removed > 30, , drop = FALSE]
+      if (nrow(.big))
+        log_msg("  NOTE PeacoQC removed more than 30% of ", nrow(.big), " file(s): ",
+                paste(.big$sample_id, collapse = ", "), ". Look at those acquisitions")
+      .removal <- "peacoqc"
+    } else {
+      log_msg("  WARNING --peacoqc: PeacoQC ran on no file, so no events were removed")
     }
   }
 
@@ -530,6 +633,17 @@ run_cyraven_impl <- function(opt) {
     log_step("EXPLORE ONLY - unsupervised discovery, declared analysis skipped")
     tr_only <- list()
     for (p in fpr$panels) {
+      # The transform asked for, as STEP 2 builds it; this path always built
+      # arcsinh, so --transform logicle was ignored here without a word.
+      if (identical(opt$transform %||% "arcsinh", "logicle")) {
+        .lp <- derive_logicle_pooled(reads, transform_samples(p$samples, smap),
+                                     m = opt$logicle_m %||% 4.5,
+                                     seed = opt$seed %||% 42L)
+        if (is.null(.lp))
+          stop("panel '", p$name, "': no logicle parameters could be derived")
+        tr_only[[p$name]] <- make_transform("logicle", logicle = .lp)
+        next
+      }
       cf <- opt[["cofactor", exact = TRUE]] %||%
         derive_cofactor_pooled(reads, transform_samples(p$samples, smap),
                                cells = !isTRUE(opt$all_events_cofactor))
@@ -810,6 +924,12 @@ run_cyraven_impl <- function(opt) {
 
   # ---- QC figure FIRST ------------------------------------------------------
   log_step("STEP 3 - initial QC diagnostics")
+  # The scale every intensity figure is drawn on; under logicle the values are
+  # not arcsinh values, and the axes have to say so.
+  .scale_lab <- local({
+    l <- unique(vapply(transforms, function(t) t$label %||% "transformed intensity", ""))
+    if (length(l) == 1L) l else "transformed intensity"
+  })
   for (s in names(gates)) {
     g <- gates[[s]]; rd <- reads[[s]]
     lin <- intersect(c("CD3", "CD4", "CD8", "CD14", "CD19", "CD56", "HLA-DR"),
@@ -831,7 +951,8 @@ run_cyraven_impl <- function(opt) {
                        cd45_threshold = g$cd45_threshold,
                        marker_densities = dens)
   }
-  fig_recon_diagnostics(recon, file.path(opt$outdir, "recon_diagnostics.png"))
+  fig_recon_diagnostics(recon, file.path(opt$outdir, "recon_diagnostics.png"),
+                        scale_label = .scale_lab)
 
   # ---- populations ----------------------------------------------------------
   log_step("STEP 4 - scoring populations")
@@ -951,8 +1072,11 @@ run_cyraven_impl <- function(opt) {
       thr_rows[[length(thr_rows) + 1L]] <- data.frame(
         sample_id = s, panel = pn, marker = m, threshold = rr$threshold,
         source = rr$source, needs_review = rr$needs_review,
+        # The arcsinh cofactor this cut sits under; NA under logicle or no
+        # transform, where the panel's derived cofactor was not applied, and
+        # for a scatter channel, which is on log10.
         cofactor = if (!is.null(tr$cofactor_of) && m %in% names(rd$marker_cols))
-          tr$cofactor_of(m) else cf,
+          tr$cofactor_of(m) else NA_real_,
         # The cut the sample's own density implied, kept even where a control
         # replaced it, so the two remain comparable downstream.
         derived_threshold = rr$derived_threshold %||% NA_real_,
@@ -1030,7 +1154,10 @@ run_cyraven_impl <- function(opt) {
     .thr_df <- .thr_df[!.thr_df$sample_id %in% declared_controls(smap), , drop = FALSE]
     .rep <- if (nrow(.thr_df)) peer_cut_replacements(.thr_df) else NULL
     if (!is.null(.rep)) {
-      .row_of <- setNames(seq_along(thr_rows), paste(.thr_df$sample_id, .thr_df$marker, sep = "\r"))
+      # Keyed on thr_rows itself, not on .thr_df: the controls were taken out of
+      # .thr_df, so its positions are not thr_rows' wherever a control row came
+      # first, and the replacement was written onto another sample's row.
+      .row_of <- thr_row_index(thr_rows)
       for (r in seq_len(nrow(.rep))) {
         s <- .rep$sample_id[r]; m <- .rep$marker[r]; k <- .row_of[[paste(s, m, sep = "\r")]]
         thr_rows[[k]]$derived_threshold <- thr_rows[[k]]$threshold
@@ -1075,14 +1202,24 @@ run_cyraven_impl <- function(opt) {
                 x_label = if (length(.tr_lab) == 1L) .tr_lab else "transformed intensity")
 
   if (!is.null(opt$write_config)) {
-    derived <- list()
-    for (s in names(pops)) for (m in names(pops[[s]]$details)) {
-      d <- pops[[s]]$details[[m]]
-      if (is.null(derived[[m]]))
-        derived[[m]] <- list(threshold = round(d$threshold, 4), source = d$source,
-                             needs_review = d$needs_review)
-    }
-    write_config(opt$write_config, derived, cofactors, spec, blocks, colors = fcs_colors())
+    # Every sample's cut summarised per marker, not the first sample's cut: a
+    # value under thresholds: would fix that cut for every sample next run.
+    .d <- do.call(rbind, lapply(names(pops), function(s)
+      do.call(rbind, lapply(names(pops[[s]]$details), function(m) {
+        d <- pops[[s]]$details[[m]]
+        data.frame(marker = m, threshold = d$threshold, source = d$source,
+                   needs_review = isTRUE(d$needs_review), stringsAsFactors = FALSE)
+      }))))
+    derived <- if (is.null(.d)) list() else lapply(split(.d, .d$marker), function(x) {
+      t <- x$threshold[is.finite(x$threshold)]
+      list(median = if (length(t)) round(stats::median(t), 4) else NA_real_,
+           range = if (length(t)) round(range(t), 4) else NA_real_,
+           n_samples = nrow(x),
+           sources = as.list(table(x$source)),
+           n_needs_review = sum(x$needs_review))
+    })
+    write_config(opt$write_config, derived, cofactors, spec, blocks,
+                 colors = fcs_colors(), transform_method = opt$transform %||% "arcsinh")
     return(invisible(NULL))
   }
 
@@ -1103,9 +1240,10 @@ run_cyraven_impl <- function(opt) {
   # ---- what excluding the flagged intervals would cost ----------------------
   # The quantity that turns a QC flag into a decision. Computed only when the
   # events are still present: with --drop-unstable-events they are already gone
-  # and the difference is zero by construction.
+  # and the difference is zero by construction, and after --peacoqc the flags no
+  # longer line up with the remaining events.
   if (!is.null(.aqc) && !is.null(.aqc$flagged) &&
-      !isTRUE(opt$drop_unstable_events)) {
+      !isTRUE(opt$drop_unstable_events) && !isTRUE(opt$peacoqc)) {
     .imp <- list()
     for (s in names(.aqc$flagged)) {
       fl <- .aqc$flagged[[s]]
@@ -1302,6 +1440,14 @@ run_cyraven_impl <- function(opt) {
     }
     cells <- data.table::rbindlist(rows, use.names = TRUE, fill = TRUE)
     fcols <- intersect(feats, colnames(cells))
+    # An embedding needs two features; a smaller panel used to stop the whole
+    # run here, after every table it had already computed, instead of skipping
+    # the one step it cannot do.
+    if (length(fcols) < 2L) {
+      log_msg(p$name, ": fewer than 2 embedding features (",
+              paste(fcols, collapse = ", "), "), embedding skipped")
+      next
+    }
     .fmat <- as.matrix(cells[, fcols, with = FALSE])
 
     # ---- optional batch correction ------------------------------------------
@@ -1383,7 +1529,8 @@ run_cyraven_impl <- function(opt) {
                                          paste0(".", p$name) else ""))
       .pc <- if (!is.null(.saved))
         project_umap(.saved, .fmat,
-                     n_threads = if (opt$threads > 0) opt$threads else 1L) else NULL
+                     n_threads = if (opt$threads > 0) opt$threads else 1L,
+                     transform = transforms[[p$name]]) else NULL
       if (!is.null(.pc)) {
         log_msg("  projected ", nrow(.pc), " cells into the saved embedding ",
                 "(coordinates are comparable with the run that trained it)")
@@ -1405,8 +1552,11 @@ run_cyraven_impl <- function(opt) {
       # be silently wrong for all but the first.
       .mp <- paste0(opt$save_umap_model,
                     if (length(fpr$panels) > 1L) paste0(".", p$name) else "")
-      try(save_umap_model(emb$model, .mp, emb$scale_params, fcols,
-                          meta = emb$params), silent = TRUE)
+      tryCatch(save_umap_model(emb$model, .mp, emb$scale_params, fcols,
+                               meta = emb$params, transform = transforms[[p$name]]),
+               error = function(e)
+                 log_msg("  WARNING --save-umap-model: the model was not saved to ",
+                         .mp, ": ", conditionMessage(e)))
     }
     # names must match the figure layer's aesthetics and the documented
     # cells_umap.csv schema; run_umap() returns them as umap_1/umap_2
@@ -1480,8 +1630,9 @@ run_cyraven_impl <- function(opt) {
 
     sfx <- if (length(fpr$panels) > 1L) paste0("_", p$name) else ""
     # Drop the "Other CD45+" leftover from the FIGURE data only (see --other).
-    # embeddings/all_cells keep every cell, so cells_umap.csv, the FlowJo export
-    # and every table below are untouched by this.
+    # all_cells keeps every cell, and cells_umap.csv, the FlowJo export, the
+    # unsupervised clustering with its gate agreement, and the external-label
+    # gates read all_cells; embeddings[[...]]$cells is the figure copy.
     if (!isTRUE(opt$include_other)) {
       .ec <- embeddings[[p$name]]$cells
       .keep <- !grepl("^Other|unclassified", .ec$population_label, ignore.case = TRUE)
@@ -1590,7 +1741,7 @@ run_cyraven_impl <- function(opt) {
               ", every other output is unaffected"))
     fig_marker_grid(embeddings[[p$name]]$cells, fcols,
                     file.path(opt$outdir, paste0("umap_markers", sfx, ".png")),
-                    panel_label = p$name)
+                    panel_label = p$name, scale_label = .scale_lab)
     # ONE GRID PER TIMEPOINT, beside the pooled one.
     #
     # The pooled grid answers "where is this marker at all"; it cannot answer
@@ -1613,7 +1764,7 @@ run_cyraven_impl <- function(opt) {
           .sub, fcols,
           file.path(opt$outdir, paste0("umap_markers", sfx, "_",
                                        gsub("[^A-Za-z0-9]+", "_", .tp), ".png")),
-          panel_label = paste0(p$name, " - ", .tp)),
+          panel_label = paste0(p$name, " - ", .tp), scale_label = .scale_lab),
           error = function(e)
             log_msg("  WARNING umap_markers ", .tp, " failed: ",
                     conditionMessage(e), ", every other output is unaffected"))
@@ -1651,7 +1802,7 @@ run_cyraven_impl <- function(opt) {
         embeddings[[p$name]]$cells, fcols,
         file.path(opt$outdir, paste0("marker_umaps_by_group", sfx)),
         group_col = if (.has_group) gcol else NULL,
-        panel_label = p$name), silent = TRUE)
+        panel_label = p$name, scale_label = .scale_lab), silent = TRUE)
       if (inherits(.mg, "try-error"))
         log_msg("  NOTE marker UMAPs failed, continuing: ",
                 conditionMessage(attr(.mg, "condition")))
@@ -1721,7 +1872,7 @@ run_cyraven_impl <- function(opt) {
         fig_multigraph_overlay(
           ec, file.path(opt$outdir, paste0("umap_multigraph_overlay", sfx, ".png")),
           markers = fcols, group_col = gcol, panel_label = p$name, subcluster = sub,
-          reference = opt$reference_group)
+          reference = opt$reference_group, scale_label = .scale_lab)
         if (!is.null(sub)) {
           sh <- stats_subcluster_shifts(ec, markers = fcols, subcluster = sub,
                                         group_col = gcol, reference = opt$reference_group)
@@ -1777,6 +1928,16 @@ run_cyraven_impl <- function(opt) {
   # reference it is being judged against), scaled by the MAD of those others so
   # the tolerance adapts to how variable that marker legitimately is.
   thr_all <- do.call(rbind, thr_rows)
+  # is_control and qc_status, as the frequency and MFI tables carry them, so
+  # qc_pass_rows() can keep controls and staining-QC failures out of the
+  # threshold drift tests and the baseline comparison; without them it passed
+  # every row through.
+  if (!is.null(thr_all) && nrow(thr_all)) {
+    thr_all$is_control <- vapply(thr_all$sample_id, function(s)
+      isTRUE(verdicts[[s]]$is_control), logical(1))
+    thr_all$qc_status <- vapply(thr_all$sample_id, function(s)
+      verdicts[[s]]$qc_status %||% "pass", character(1))
+  }
   # The override columns exist on every row but only earn their place in the
   # written table when the run declares at least one. A run with none must write
   # the file it has always written.
@@ -1806,9 +1967,11 @@ run_cyraven_impl <- function(opt) {
     for (key in unique(paste(thr_all$panel, thr_all$marker, sep = "\r"))) {
       idx <- which(paste(thr_all$panel, thr_all$marker, sep = "\r") == key)
       v <- thr_all$threshold[idx]
-      # Peers are the cohort's samples; a control is compared against them but
-      # is not one of them. See declared_controls().
-      peer <- !thr_all$sample_id[idx] %in% .ctl_ids
+      # Peers are the cohort's samples that passed staining QC; a control or a
+      # failed sample is compared against them but is not one of them, as in
+      # every other cohort-wide estimate. See declared_controls().
+      peer <- !thr_all$sample_id[idx] %in% .ctl_ids &
+        (thr_all$qc_status[idx] %||% "pass") %in% "pass"
       # Need enough peers for "the others" to mean anything.
       if (sum(is.finite(v[peer])) < 4L) next
       for (j in seq_along(idx)) {
@@ -1900,8 +2063,16 @@ run_cyraven_impl <- function(opt) {
   # package could otherwise only report without a cause.
   if (!isTRUE(opt$no_spreading)) {
     .sp <- tryCatch(run_spreading_report(pops, gates, thr_all, fpr$assignment,
-                                         max_samples = opt$spreading_max_samples %||% 8L),
-                    error = function(e) NULL)
+                                         max_samples = opt$spreading_max_samples %||% 8L,
+                                         exclude = c(declared_controls(smap),
+                                           names(verdicts)[vapply(verdicts, function(v)
+                                             !identical(v$qc_status %||% "pass", "pass"),
+                                             logical(1))])),
+                    error = function(e) {
+                      log_msg("  WARNING spreading report failed: ", conditionMessage(e),
+                              ", every other output is unaffected")
+                      NULL
+                    })
     if (!is.null(.sp)) {
       write.csv(.sp$pairs, file.path(opt$outdir, "spreading_pairs.csv"),
                 row.names = FALSE)
@@ -1946,7 +2117,11 @@ run_cyraven_impl <- function(opt) {
   if (length(.fmo_used)) {
     .fa <- tryCatch(fmo_agreement(thr_all, do.call(rbind, .fmo_used),
                                   unc = unc$thresholds),
-                    error = function(e) NULL)
+                    error = function(e) {
+                      log_msg("  WARNING FMO agreement failed: ", conditionMessage(e),
+                              ", every other output is unaffected")
+                      NULL
+                    })
     if (!is.null(.fa) && nrow(.fa)) {
       write.csv(.fa, file.path(opt$outdir, "fmo_agreement.csv"), row.names = FALSE)
       .nd <- sum(grepl("^derived cut well", .fa$verdict))
@@ -2047,8 +2222,21 @@ run_cyraven_impl <- function(opt) {
       m <- merge(k, pw[, c(".j", "wbc_per_ul")], by = ".j", all.x = TRUE)
       m <- m[!is.na(m$wbc_per_ul) & !is.na(m$sample_id), , drop = FALSE]
       if (nrow(m))
-        wbc_lookup <- setNames(as.numeric(m$wbc_per_ul), m$sample_id)
+        wbc_lookup <- setNames(parse_sheet_number(m$wbc_per_ul), m$sample_id)
     }
+  }
+  # A haemogram reports WBC in 10^3/uL (G/L), 4 to 11 in health, and a sheet
+  # exported with thousands separators can put 6.500 for 6,500. Either read as
+  # cells/uL makes every concentration a thousandth of the truth. Blood
+  # leukocytes run from a few hundred to some 100,000 per uL even in disease,
+  # so values outside that are named rather than used silently.
+  if (!is.null(wbc_lookup)) {
+    .odd <- wbc_lookup[is.finite(wbc_lookup) & (wbc_lookup < 100 | wbc_lookup > 2e5)]
+    if (length(.odd))
+      log_msg("  WARNING wbc_per_ul outside 100-200,000 cells/uL for ",
+              length(.odd), " sample(s) (", paste(utils::head(sprintf("%s = %g",
+              names(.odd), .odd), 4), collapse = ", "), "). A value like 6.5 is ",
+              "10^3/uL; enter cells/uL (6500), or every cells_per_ul is 1000x off")
   }
   # DUAL-PLATFORM COUNTING NEEDS WHOLE BLOOD. The percentage and the blood
   # count must describe the same specimen (Brando et al. 2000): a PBMC
@@ -2098,7 +2286,7 @@ run_cyraven_impl <- function(opt) {
   # Uncertainty columns are APPENDED, never inserted, and only when the analysis
   # ran. Every column this table has always had keeps its name, its meaning and
   # its position, so a script reading it by name or by position is unaffected and
-  # the values themselves are bit-identical to a run without --uncertainty.
+  # the values themselves are bit-identical to a run with --no-uncertainty.
   if (!is.null(freq) && !is.null(unc) && !is.null(unc$frequencies)) {
     .uf <- unc$frequencies
     .k <- match(paste(freq$sample_id, freq$population, sep = "\r"),
@@ -2478,7 +2666,8 @@ run_cyraven_impl <- function(opt) {
           # NA are not information, and a file whose shape depends on a flag that
           # produced nothing is a worse contract than one that does not change.
           if (!is.null(unc))
-            gstats <- tryCatch(annotate_gate_uncertainty(gstats, unc$frequencies),
+            gstats <- tryCatch(annotate_gate_uncertainty(gstats, unc$frequencies,
+                                                         freq = freq_p),
                                error = function(e) gstats)
           write.csv(gstats, file.path(opt$outdir,
                                       paste0("group_comparison_stats", sfx, ".csv")),
@@ -2514,7 +2703,11 @@ run_cyraven_impl <- function(opt) {
                                      reference = opt$reference_group,
                                      min_n = min_group_n,
                                      value_col = "cells_absolute"),
-              error = function(e) NULL)
+              error = function(e) {
+                log_msg("  WARNING group tests on cells_absolute failed: ",
+                        conditionMessage(e), ", every other output is unaffected")
+                NULL
+              })
             if (!is.null(astats) && nrow(astats)) {
               astats$count_basis <- "dual-platform: share x external total"
               write.csv(astats, file.path(opt$outdir,
@@ -2717,7 +2910,8 @@ run_cyraven_impl <- function(opt) {
       if (exists("mfi", inherits = FALSE) && !is.null(mfi))
         .ext_ok("marker intensity by timepoint",
           fig_marker_by_timepoint(mfi, smap,
-            file.path(opt$outdir, "timepoint_marker_intensity.png")))
+            file.path(opt$outdir, "timepoint_marker_intensity.png"),
+            scale_label = .scale_lab))
     })
     log_msg("wrote timepoint figures: trajectories per population, subset ",
             "balance, marker intensity. These are the PAIRED views -- the same ",
@@ -2888,7 +3082,8 @@ run_cyraven_impl <- function(opt) {
       }
       fig_marker_state(mfi, file.path(opt$outdir, "marker_state.png"),
                        group_of = if (grouped) group_of else NULL, stats = ms,
-                       reference = opt$reference_group, p_source = p_src)
+                       reference = opt$reference_group, p_source = p_src,
+                       scale_label = .scale_lab)
     })
   }
 
@@ -2898,7 +3093,8 @@ run_cyraven_impl <- function(opt) {
       if (!is.null(mfi))
         fig_population_marker_heatmap(
           mfi, file.path(opt$outdir, "population_marker_heatmap.png"),
-          annotate_expected = expected_positive_markers(spec))
+          annotate_expected = expected_positive_markers(spec),
+          scale_label = .scale_lab)
     })
     .ext_ok("cohort composition heatmap", {
       if (!is.null(.cells_all) && grouped)
@@ -2985,7 +3181,11 @@ run_cyraven_impl <- function(opt) {
       # carries exactly one most-specific label, the remainder included, so the
       # label counts are a composition in Aitchison's sense, and the CLR and its
       # raw-percentage comparison are computed over them.
-      fexcl <- exclusive_label_frequencies(pops, gates, verdicts, fpr$assignment)
+      # The cohort's samples only: the zero replacement takes its delta from
+      # the smallest share in the table, and a control tube's shares, which
+      # the tests never read, set it for every sample.
+      fexcl <- qc_pass_rows(exclusive_label_frequencies(pops, gates, verdicts,
+                                                        fpr$assignment))
       fclr <- clr_frequencies(fexcl)
       if (!is.null(fclr)) {
         cstats <- stats_group_comparison(fclr, group_of,
@@ -3002,6 +3202,9 @@ run_cyraven_impl <- function(opt) {
                                             reference = opt$reference_group,
                                             value_col = "pct_of_cd45_pos"),
                      silent = TRUE)
+          if (inherits(raw, "try-error"))
+            log_msg("  WARNING compositional concordance not written: ",
+                    conditionMessage(attr(raw, "condition")))
           if (!inherits(raw, "try-error")) {
             conc <- compositional_concordance(raw, cstats)
             if (!is.null(conc)) {
@@ -3024,6 +3227,42 @@ run_cyraven_impl <- function(opt) {
     })
   }
 
+  # ---- count-model abundance test, opt-in (--edger) -------------------------
+  # diffcyt-DA-edgeR on each panel's exclusive-label counts; beside the rank
+  # tests, never instead of them. See stats_edger_abundance().
+  if (isTRUE(opt$edger) && group_tests && !is.null(pops)) {
+    .ext_ok("edgeR count-model abundance", {
+      .cnt <- exclusive_label_frequencies(pops, gates, verdicts, fpr$assignment)
+      .res <- list()
+      for (.pn in unique(stats::na.omit(.cnt$panel %||% NA_character_))) {
+        .r <- stats_edger_abundance(.cnt[.cnt$panel == .pn, , drop = FALSE],
+                                    group_of, reference = opt$reference_group,
+                                    min_n = min_group_n)
+        if (!is.null(.r)) { .r$panel <- .pn; .res[[.pn]] <- .r }
+      }
+      if (all(is.na(.cnt$panel))) {
+        .r <- stats_edger_abundance(.cnt, group_of, reference = opt$reference_group,
+                                    min_n = min_group_n)
+        if (!is.null(.r)) .res[["all"]] <- .r
+      }
+      if (length(.res)) {
+        .er <- do.call(rbind, .res)
+        write.csv(.er, file.path(opt$outdir, "edger_abundance_stats.csv"),
+                  row.names = FALSE)
+        log_msg("wrote edger_abundance_stats.csv (", nrow(.er), " test(s), ",
+                sum(.er$significant_BH), " with BH-adjusted p < 0.05). A count ",
+                "model of exclusive labels, beside the rank tests on percentages")
+      } else {
+        log_msg("  NOTE --edger: no comparison had enough samples per group or ",
+                "populations with enough cells to test")
+      }
+    })
+  } else if (isTRUE(opt$edger)) {
+    log_msg("  NOTE --edger: no between-group test runs on this cohort (",
+            if (isTRUE(opt$no_group_tests)) "--no-group-tests" else "no grouping",
+            "), so no edgeR test either")
+  }
+
   # ---- confounding: is a cohort difference really an age or sex difference? -
   if (!isTRUE(opt$no_confounding) && grouped && !is.null(freq) &&
       TRUE) {
@@ -3039,22 +3278,35 @@ run_cyraven_impl <- function(opt) {
                 hi, " flagged HIGH)")
         if (hi > 0)
           log_msg("  NOTE ", hi, " population(s) have a covariate that is BOTH ",
-                  "unbalanced across cohorts AND associated with abundance. For ",
+                  "unbalanced across cohorts AND associated with abundance within ",
+                  "cohorts. For ",
                   "those, a cohort difference and a covariate difference are not ",
                   "separable by this design.")
       }
-      if (isTRUE(opt$rank_ancova)) {
-        ra <- stats_rank_ancova(freq, patients, smap, group_of, covariates = cvs)
-        if (!is.null(ra)) {
-          write.csv(ra, file.path(opt$outdir, "covariate_adjusted_stats.csv"),
-                    row.names = FALSE)
-          log_msg("wrote covariate_adjusted_stats.csv (", nrow(ra),
-                  " EXPLORATORY rank-ANCOVA fits; ",
-                  sum(grepl("^NOT FITTED", ra$status)),
-                  " refused for too few residual df)")
-        }
+    })
+  }
+
+  # ---- covariate-adjusted rank ANCOVA, opt-in (--rank-ancova) ----------------
+  # A between-group test, so it follows group_tests; its own block, so neither
+  # --no-confounding nor a failed diagnostic takes it down.
+  if (isTRUE(opt$rank_ancova) && group_tests && !is.null(freq)) {
+    .ext_ok("rank ANCOVA", {
+      cvs <- trimws(strsplit(opt$covariates %||% "age,sex", ",")[[1]])
+      cvs <- cvs[nzchar(cvs)]
+      ra <- stats_rank_ancova(freq, patients, smap, group_of, covariates = cvs)
+      if (!is.null(ra)) {
+        write.csv(ra, file.path(opt$outdir, "covariate_adjusted_stats.csv"),
+                  row.names = FALSE)
+        log_msg("wrote covariate_adjusted_stats.csv (", nrow(ra),
+                " EXPLORATORY rank-ANCOVA fits; ",
+                sum(grepl("^NOT FITTED", ra$status)),
+                " refused for too few residual df)")
       }
     })
+  } else if (isTRUE(opt$rank_ancova)) {
+    log_msg("  NOTE --rank-ancova: no between-group test runs on this cohort (",
+            if (isTRUE(opt$no_group_tests)) "--no-group-tests" else "no grouping",
+            "), so no rank ANCOVA either")
   }
 
   # ---- clinical variables against populations and markers -------------------
@@ -3105,7 +3357,11 @@ run_cyraven_impl <- function(opt) {
         # one patient counted three times. See clin_variable_unit().
         .pat_of <- if ("patient_id" %in% names(smap))
           stats::setNames(as.character(smap$patient_id), .sid) else NULL
-        ca <- stats_clinical_association(freq, mfi, clin, patient_of = .pat_of)
+        # Marker intensity within populations: the pairs functional_markers.csv
+        # scopes as interpretable, every pair only where no block resolved.
+        ca <- stats_clinical_association(
+          freq, if (!is.null(fx) && nrow(fx)) fx else mfi, clin,
+          patient_of = .pat_of)
         if (!is.null(ca)) {
           if (!is.null(ca$populations)) {
             write.csv(ca$populations,
@@ -3149,11 +3405,11 @@ run_cyraven_impl <- function(opt) {
                       file.path(opt$outdir, "clinical_association_markers.csv"),
                       row.names = FALSE)
             log_msg("wrote clinical_association_markers.csv (",
-                    nrow(ca$markers), " marker x variable test(s))")
-            fig_clinical_heatmap(ca$markers, "marker",
+                    nrow(ca$markers), " population x marker x variable test(s))")
+            fig_clinical_heatmap(ca$markers, "population_marker",
                                  file.path(opt$outdir,
                                            "clinical_association_markers.png"),
-                                 title = "Clinical variables against marker intensity")
+                                 title = "Clinical variables against marker intensity within populations")
           }
         } else {
           log_msg("  NOTE clinical association produced no testable pair; every ",
@@ -3258,9 +3514,12 @@ run_cyraven_impl <- function(opt) {
                   "define, part of any abundance difference is a difference in ",
                   "the DEFINITION, not in the biology.")
       }
+      # The cuts are on each panel's transform; under logicle they are not
+      # arcsinh values.
       fig_threshold_drift(thr_all, file.path(opt$outdir, "threshold_drift.png"),
                           group_of = group_of, stats = td,
-                          reference = opt$reference_group)
+                          reference = opt$reference_group,
+                          y_label = paste0("derived threshold (", .scale_lab, ")"))
     })
   }
 
@@ -3330,7 +3589,8 @@ run_cyraven_impl <- function(opt) {
           # partly an acquisition difference, and the reader has to be told
           # which variable it is.
           if (!is.null(br$confounding)) {
-            .cf <- br$confounding[br$confounding$cramers_v >= 0.3, , drop = FALSE]
+            .cf <- br$confounding[!grepl("^(low|not estimable)", br$confounding$verdict),
+                                  , drop = FALSE]
             for (.i in seq_len(nrow(.cf)))
               log_msg("  NOTE batch overlaps ", .cf$group_column[.i],
                       " (Cramer's V = ", .cf$cramers_v[.i], ", ",
@@ -3393,7 +3653,10 @@ run_cyraven_impl <- function(opt) {
     for (pn in names(embeddings)) {
       .ext_ok(paste0("unsupervised clustering (", pn, ")"), {
         sfx2 <- if (length(embeddings) > 1L) paste0("_", pn) else ""
-        ec <- embeddings[[pn]]$cells
+        # Every embedded cell, the unlabelled remainder included: hiding it
+        # (the figure copy, without --other) left the agreement nothing to call
+        # an undescribed population, which is what the check is for.
+        ec <- all_cells[[pn]] %||% embeddings[[pn]]$cells
         uc <- run_unsupervised_clusters(ec, embeddings[[pn]]$features,
                                         n_clusters = opt$cluster_k,
                                         grid = opt$cluster_grid, seed = opt$seed,
@@ -3473,11 +3736,14 @@ run_cyraven_impl <- function(opt) {
                         "these cells sit in marker space, not that they are a ",
                         "real population. Metrics are held-out, but the cluster ",
                         "itself came from the same cells.")
-                fx <- as.matrix(ec[, intersect(embeddings[[pn]]$features,
-                                               names(ec)), drop = FALSE])
+                # Not `fx`: .ext_ok evaluates in this function's frame, so the
+                # name would overwrite the functional-marker table that the
+                # timepoint split reads later.
+                .fxm <- as.matrix(ec[, intersect(embeddings[[pn]]$features,
+                                                 names(ec)), drop = FALSE])
                 for (kk in names(ex$strategies)) {
                   fig_gate_strategy(
-                    fx, as.integer(uc$cluster == as.integer(kk)),
+                    .fxm, as.integer(uc$cluster == as.integer(kk)),
                     ex$strategies[[kk]],
                     file.path(opt$outdir, paste0("cluster_gate_strategy_",
                                                  kk, sfx2, ".png")),
@@ -3501,7 +3767,9 @@ run_cyraven_impl <- function(opt) {
       .lab <- read_external_labels(opt$external_labels)
       for (pn in names(embeddings)) {
         sfx3 <- if (length(embeddings) > 1L) paste0("_", pn) else ""
-        .ec <- join_external_labels(embeddings[[pn]]$cells, .lab)
+        # Every embedded cell: the unlabelled remainder are candidate false
+        # positives for a learned gate, and leaving them out overstated precision.
+        .ec <- join_external_labels(all_cells[[pn]] %||% embeddings[[pn]]$cells, .lab)
         if (is.null(.ec)) next
         .xl <- explain_external_labels(
           .ec, embeddings[[pn]]$features, seed = opt$seed %||% 42L,
@@ -3573,7 +3841,8 @@ run_cyraven_impl <- function(opt) {
     .drift_failed <- isTRUE(.ext_ok("specification conformance", {
       .bl <- read_spec_baseline(opt$baseline)
       .cf <- specification_conformance(thr_all, freq, spec, .bl,
-                                       transform = opt$transform %||% "arcsinh")
+                                       transform = opt$transform %||% "arcsinh",
+                                       transforms = transforms)
       if (!is.null(.cf$markers))
         write.csv(.cf$markers, file.path(opt$outdir,
                   "specification_conformance.csv"), row.names = FALSE)
@@ -3603,7 +3872,8 @@ run_cyraven_impl <- function(opt) {
   }
   if (!is.null(opt$write_baseline)) {
     .ext_ok("baseline", {
-      write_spec_baseline(opt$write_baseline, thr_all, freq, spec, opt, cofactors)
+      write_spec_baseline(opt$write_baseline, thr_all, freq, spec, opt, cofactors,
+                          transforms)
       log_msg("wrote baseline ", opt$write_baseline,
               " (compare a later run against it with --baseline)")
     })
@@ -3617,7 +3887,168 @@ run_cyraven_impl <- function(opt) {
     .ext_ok("MIFlowCyt report", {
       write_miflowcyt(file.path(opt$outdir, "miflowcyt.md"), reads, opt = opt,
                       spec = spec, transforms = transforms, fpr = fpr,
-                      thresholds = thr_all)
+                      thresholds = thr_all, removal = .removal)
+    })
+  }
+
+  # ---- the methods catalogue, and the evidence for it ---------------------
+  # Immunophenotyping papers report t-tests and ANOVA; this run reports rank
+  # tests. statistical_methods.csv states every commonly reported method and
+  # what was done about it, and normality_tests.csv carries the Shapiro-Wilk
+  # and Brown-Forsythe results that justify the choice, so a reader can check
+  # it rather than take it on trust. Both are written on every run, including
+  # ungrouped ones, where the catalogue records why no test ran at all.
+  .ext_ok("statistical methods catalogue", {
+    ngrp <- if (!is.null(group_of))
+      length(unique(stats::na.omit(unname(group_of)))) else NA_integer_
+    ntest <- if (exists("gstats", inherits = FALSE) && !is.null(gstats))
+      nrow(gstats) else NA_integer_
+    # What ran is read from what was written, so the catalogue cannot list a
+    # test this run did not compute, or omit one it did.
+    .wrote <- function(pat) length(list.files(opt$outdir, pattern = pat)) > 0L
+    smt <- statistical_methods_table(
+      n_groups = ngrp, paired = .wrote("^paired_comparison_stats\\.csv$"),
+      n_tests = ntest,
+      ran = list(group_tests = group_tests,
+                 parametric = .wrote("^parametric_tests.*\\.csv$"),
+                 compositional = .wrote("^compositional_clr_stats\\.csv$"),
+                 uncertainty = !is.null(unc),
+                 normality = !is.null(freq) && !is.null(group_of),
+                 batch = .wrote("^batch_mixing_stats\\.csv$"),
+                 confounding = .wrote("^confounding_diagnostics\\.csv$"),
+                 rank_ancova = .wrote("^covariate_adjusted_stats\\.csv$"),
+                 edger = .wrote("^edger_abundance_stats\\.csv$")))
+    write.csv(smt, file.path(opt$outdir, "statistical_methods.csv"),
+              row.names = FALSE)
+    log_msg("wrote statistical_methods.csv (", nrow(smt),
+            " methods; ", sum(smt$role == "used"), " used)")
+  })
+  .ext_ok("normality and variance diagnostics", {
+    if (!is.null(freq) && !is.null(group_of)) {
+      nt <- normality_report(freq, group_of)
+      if (!is.null(nt) && nrow(nt)) {
+        write.csv(nt, file.path(opt$outdir, "normality_tests.csv"),
+                  row.names = FALSE)
+        nnorm <- sum(grepl("^departs", nt$interpretation))
+        log_msg("wrote normality_tests.csv (", nrow(nt), " tests; ", nnorm,
+                " departing from normal). Shapiro-Wilk at these group sizes ",
+                "has little power, so a non-significant result is not ",
+                "evidence of normality -- which is the argument for the ",
+                "rank tests used above.")
+      }
+    }
+  })
+
+  # ---- explore mode -------------------------------------------------------
+  # Everything below writes into <outdir>/explore/ and touches no existing
+  # output. Wrapped like every other extension, so a failure here cannot take
+  # down a run whose declared deliverables are already on disk.
+  if (isTRUE(opt$explore)) {
+    .ext_ok("explore mode", {
+      # --maybe-learn is the only thing that lets the two analyses see each
+      # other. Without it explore gets the transform and the group labels and
+      # nothing else: the transform because it is a property of the panel
+      # derived from the data rather than anything the specification decided,
+      # and the group labels because they come from the sample sheet, not from
+      # the analysis. Thresholds, QC verdicts, scored populations and the
+      # confounding verdict are all products of the declared run, so they are
+      # withheld, and explore names its clusters against cuts it places on each
+      # sample's own cells (see run_explore()).
+      .learn <- isTRUE(opt$maybe_learn)
+      .conf <- NULL
+      if (.learn) {
+        .cpath <- file.path(opt$outdir, "batch_group_confounding.csv")
+        if (file.exists(.cpath))
+          .conf <- utils::read.csv(.cpath, stringsAsFactors = FALSE)
+      }
+      log_msg("explore: ", if (.learn)
+        "--maybe-learn is set, the declared run lends its thresholds, QC verdicts and confounding verdict"
+        else "isolated from the declared analysis; pass --maybe-learn to link them")
+      .ex <- run_explore(reads, fpr, opt, opt$outdir, transforms = transforms,
+                         gates = if (.learn) gates else NULL,
+                         verdicts = if (.learn) verdicts else NULL,
+                         pops = if (.learn) pops else NULL,
+                         group_of = group_of, confounding = .conf,
+                         total_counts = .total_counts,
+                         file_paths = fcs)
+
+      # The other direction, and the only thing explore is allowed to add to
+      # the declared deliverables. One file, written only under the flag, so a
+      # run without it produces byte-identical output to a run with no
+      # --explore at all.
+      if (.learn && !is.null(.ex$gaps) && nrow(.ex$gaps)) {
+        write.csv(.ex$gaps, file.path(opt$outdir, "spec_gaps.csv"),
+                  row.names = FALSE)
+        nlump <- sum(.ex$gaps$issue == "population spans several clusters")
+        nmiss <- sum(.ex$gaps$issue == "cluster no declared population covers")
+        log_msg("wrote spec_gaps.csv (", nlump, " population(s) spanning ",
+                "several clusters, ", nmiss, " cluster(s) nothing covers). ",
+                "This is what unsupervised clustering says about the ",
+                "specification, and it exists only because --maybe-learn is set.")
+
+        # THE NEXT SPECIFICATION, ASSEMBLED RATHER THAN DESCRIBED.
+        #
+        # spec_gaps.csv says which clusters nothing covers; the explore
+        # suggested spec says what those clusters are. Until now the user had
+        # to read one, find the entry in the other, and paste it into a third
+        # file by hand -- and the suggested spec could not be run even then,
+        # because it was written in a vocabulary no parser accepts.
+        #
+        # This writes the declared specification with the uncovered clusters
+        # appended as further populations, in the config's own format, ready
+        # to pass straight back as --config. It is still a DRAFT: a cluster is
+        # not a population, the names are placeholders, and the entries want
+        # merging and naming before anyone reports a frequency from them.
+        # Nothing in this run uses it.
+        .nextcfg <- try(write_suggested_config(
+          cfg, .ex, file.path(opt$outdir, "suggested_config_next_run.yaml")),
+          silent = TRUE)
+        if (inherits(.nextcfg, "try-error"))
+          log_msg("  WARNING suggested_config_next_run.yaml not written: ",
+                  conditionMessage(attr(.nextcfg, "condition")))
+        if (!inherits(.nextcfg, "try-error") && !is.null(.nextcfg))
+          log_msg("wrote suggested_config_next_run.yaml (", .nextcfg$n_declared,
+                  " declared population(s) + ", .nextcfg$n_added,
+                  " draft population(s) for the clusters nothing covered). ",
+                  "Curate it, then pass it as --config; nothing in THIS run ",
+                  "used it.")
+      }
+    })
+  }
+
+  # ---- the whole figure set, once per timepoint ---------------------------
+  # Placed here, before the report, so the split figures exist when the report
+  # sweeps the directory. See R/split-by.R for why this is a second pass over
+  # the computed artefacts rather than a pipeline run per visit.
+  if (isTRUE(opt$split_by_timepoint)) {
+    .ext_ok("split figures by timepoint", {
+      log_step("STEP 7e - figures split by timepoint")
+      .mp <- length(fpr$panels) > 1L
+      for (.pn in names(.split_panels)) {
+        .bypanel <- function(x) if (.mp && !is.null(x) && "panel" %in% names(x))
+          x[!is.na(x$panel) & x$panel == .pn, , drop = FALSE] else x
+        split_figures_by_timepoint(list(
+          smap         = smap,
+          freq         = .bypanel(freq),
+          mfi          = .bypanel(mfi),
+          fx           = .bypanel(fx),
+          rt           = .bypanel(rt),
+          tc           = .total_counts,
+          ufreq        = if (!is.null(unc)) unc$frequencies else NULL,
+          cells        = .split_panels[[.pn]]$cells,
+          markers      = .split_panels[[.pn]]$markers,
+          feature_cols = .split_panels[[.pn]]$markers,
+          panel_label  = if (.mp) .pn else "",
+          # The clinical variables and the donor map travel with the rest, so
+          # each visit's figures can refit the associations on that visit's
+          # samples instead of showing a cohort-level fit beside one visit's
+          # data. Both may be NULL; the split checks.
+          clin         = if (exists("clin", inherits = FALSE)) clin else NULL,
+          patient_of   = if (exists(".pat_of", inherits = FALSE)) .pat_of else NULL,
+          colors       = fcs_colors(),
+          scale_label  = .scale_lab),
+          opt$outdir)
+      }
     })
   }
 
@@ -3626,150 +4057,6 @@ run_cyraven_impl <- function(opt) {
   # written by default because the reading order is the part of this package a
   # directory listing cannot convey.
   if (!isTRUE(opt$no_report)) {
-    # ---- the methods catalogue, and the evidence for it ---------------------
-    # Immunophenotyping papers report t-tests and ANOVA; this run reports rank
-    # tests. statistical_methods.csv states every commonly reported method and
-    # what was done about it, and normality_tests.csv carries the Shapiro-Wilk
-    # and Brown-Forsythe results that justify the choice, so a reader can check
-    # it rather than take it on trust. Both are written on every run, including
-    # ungrouped ones, where the catalogue records why no test ran at all.
-    .ext_ok("statistical methods catalogue", {
-      ngrp <- if (!is.null(group_of))
-        length(unique(stats::na.omit(unname(group_of)))) else NA_integer_
-      ntest <- if (exists("gstats", inherits = FALSE) && !is.null(gstats))
-        nrow(gstats) else NA_integer_
-      smt <- statistical_methods_table(n_groups = ngrp, paired = FALSE,
-                                       n_tests = ntest)
-      write.csv(smt, file.path(opt$outdir, "statistical_methods.csv"),
-                row.names = FALSE)
-      log_msg("wrote statistical_methods.csv (", nrow(smt),
-              " methods; ", sum(smt$role == "used"), " used)")
-    })
-    .ext_ok("normality and variance diagnostics", {
-      if (!is.null(freq) && !is.null(group_of)) {
-        nt <- normality_report(freq, group_of)
-        if (!is.null(nt) && nrow(nt)) {
-          write.csv(nt, file.path(opt$outdir, "normality_tests.csv"),
-                    row.names = FALSE)
-          nnorm <- sum(grepl("^departs", nt$interpretation))
-          log_msg("wrote normality_tests.csv (", nrow(nt), " tests; ", nnorm,
-                  " departing from normal). Shapiro-Wilk at these group sizes ",
-                  "has little power, so a non-significant result is not ",
-                  "evidence of normality -- which is the argument for the ",
-                  "rank tests used above.")
-        }
-      }
-    })
-
-    # ---- explore mode -------------------------------------------------------
-    # Everything below writes into <outdir>/explore/ and touches no existing
-    # output. Wrapped like every other extension, so a failure here cannot take
-    # down a run whose declared deliverables are already on disk.
-    if (isTRUE(opt$explore)) {
-      .ext_ok("explore mode", {
-        # --maybe-learn is the only thing that lets the two analyses see each
-        # other. Without it explore gets the transform and the group labels and
-        # nothing else: the transform because it is a property of the panel
-        # derived from the data rather than anything the specification decided,
-        # and the group labels because they come from the sample sheet, not from
-        # the analysis. Thresholds, QC verdicts, scored populations and the
-        # confounding verdict are all products of the declared run, so they are
-        # withheld and explore names its clusters from pooled medians instead --
-        # which is what a blind unsupervised run has.
-        .learn <- isTRUE(opt$maybe_learn)
-        .conf <- NULL
-        if (.learn) {
-          .cpath <- file.path(opt$outdir, "batch_group_confounding.csv")
-          if (file.exists(.cpath))
-            .conf <- utils::read.csv(.cpath, stringsAsFactors = FALSE)
-        }
-        log_msg("explore: ", if (.learn)
-          "--maybe-learn is set, the declared run lends its thresholds, QC verdicts and confounding verdict"
-          else "isolated from the declared analysis; pass --maybe-learn to link them")
-        .ex <- run_explore(reads, fpr, opt, opt$outdir, transforms = transforms,
-                           gates = if (.learn) gates else NULL,
-                           verdicts = if (.learn) verdicts else NULL,
-                           pops = if (.learn) pops else NULL,
-                           group_of = group_of, confounding = .conf,
-                           total_counts = .total_counts,
-                           file_paths = fcs)
-
-        # The other direction, and the only thing explore is allowed to add to
-        # the declared deliverables. One file, written only under the flag, so a
-        # run without it produces byte-identical output to a run with no
-        # --explore at all.
-        if (.learn && !is.null(.ex$gaps) && nrow(.ex$gaps)) {
-          write.csv(.ex$gaps, file.path(opt$outdir, "spec_gaps.csv"),
-                    row.names = FALSE)
-          nlump <- sum(.ex$gaps$issue == "population spans several clusters")
-          nmiss <- sum(.ex$gaps$issue == "cluster no declared population covers")
-          log_msg("wrote spec_gaps.csv (", nlump, " population(s) spanning ",
-                  "several clusters, ", nmiss, " cluster(s) nothing covers). ",
-                  "This is what unsupervised clustering says about the ",
-                  "specification, and it exists only because --maybe-learn is set.")
-
-          # THE NEXT SPECIFICATION, ASSEMBLED RATHER THAN DESCRIBED.
-          #
-          # spec_gaps.csv says which clusters nothing covers; the explore
-          # suggested spec says what those clusters are. Until now the user had
-          # to read one, find the entry in the other, and paste it into a third
-          # file by hand -- and the suggested spec could not be run even then,
-          # because it was written in a vocabulary no parser accepts.
-          #
-          # This writes the declared specification with the uncovered clusters
-          # appended as further populations, in the config's own format, ready
-          # to pass straight back as --config. It is still a DRAFT: a cluster is
-          # not a population, the names are placeholders, and the entries want
-          # merging and naming before anyone reports a frequency from them.
-          # Nothing in this run uses it.
-          .nextcfg <- try(write_suggested_config(
-            cfg, .ex, file.path(opt$outdir, "suggested_config_next_run.yaml")),
-            silent = TRUE)
-          if (!inherits(.nextcfg, "try-error") && !is.null(.nextcfg))
-            log_msg("wrote suggested_config_next_run.yaml (", .nextcfg$n_declared,
-                    " declared population(s) + ", .nextcfg$n_added,
-                    " draft population(s) for the clusters nothing covered). ",
-                    "Curate it, then pass it as --config; nothing in THIS run ",
-                    "used it.")
-        }
-      })
-    }
-
-    # ---- the whole figure set, once per timepoint ---------------------------
-    # Placed here, before the report, so the split figures exist when the report
-    # sweeps the directory. See R/split-by.R for why this is a second pass over
-    # the computed artefacts rather than a pipeline run per visit.
-    if (isTRUE(opt$split_by_timepoint)) {
-      .ext_ok("split figures by timepoint", {
-        log_step("STEP 7e - figures split by timepoint")
-        .mp <- length(fpr$panels) > 1L
-        for (.pn in names(.split_panels)) {
-          .bypanel <- function(x) if (.mp && !is.null(x) && "panel" %in% names(x))
-            x[!is.na(x$panel) & x$panel == .pn, , drop = FALSE] else x
-          split_figures_by_timepoint(list(
-            smap         = smap,
-            freq         = .bypanel(freq),
-            mfi          = .bypanel(mfi),
-            fx           = .bypanel(fx),
-            rt           = .bypanel(rt),
-            tc           = .total_counts,
-            ufreq        = if (!is.null(unc)) unc$frequencies else NULL,
-            cells        = .split_panels[[.pn]]$cells,
-            markers      = .split_panels[[.pn]]$markers,
-            feature_cols = .split_panels[[.pn]]$markers,
-            panel_label  = if (.mp) .pn else "",
-            # The clinical variables and the donor map travel with the rest, so
-            # each visit's figures can refit the associations on that visit's
-            # samples instead of showing a cohort-level fit beside one visit's
-            # data. Both may be NULL; the split checks.
-            clin         = if (exists("clin", inherits = FALSE)) clin else NULL,
-            patient_of   = if (exists(".pat_of", inherits = FALSE)) .pat_of else NULL,
-            colors       = fcs_colors()),
-            opt$outdir)
-        }
-      })
-    }
-
     .ext_ok("run report", {
       write_run_report(opt$outdir, opt = opt, verdicts = verdicts)
     })

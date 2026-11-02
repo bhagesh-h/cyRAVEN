@@ -4,7 +4,7 @@
 \alias{project_umap}
 \title{Project new cells into a saved embedding}
 \usage{
-project_umap(saved, mat, n_threads = 1L)
+project_umap(saved, mat, n_threads = 1L, transform = NULL)
 }
 \arguments{
 \item{saved}{A model loaded by \code{\link[=load_umap_model]{load_umap_model()}}.}
@@ -12,6 +12,9 @@ project_umap(saved, mat, n_threads = 1L)
 \item{mat}{Numeric matrix, cells x features.}
 
 \item{n_threads}{Number of threads. Default \code{1L}.}
+
+\item{transform}{this run's transform; where it differs from the one the
+model stored, each feature is carried onto the stored one first.}
 }
 \description{
 Refuses rather than improvises when the feature sets differ: a model trained

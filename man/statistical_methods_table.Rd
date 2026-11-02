@@ -7,15 +7,21 @@
 statistical_methods_table(
   n_groups = NA_integer_,
   paired = FALSE,
-  n_tests = NA_integer_
+  n_tests = NA_integer_,
+  ran = list()
 )
 }
 \arguments{
 \item{n_groups}{Number of group levels compared, or NA.}
 
-\item{paired}{Whether a paired design was detected.}
+\item{paired}{Whether a paired comparison was written.}
 
 \item{n_tests}{Number of tests corrected together, or NA.}
+
+\item{ran}{Named list of logicals saying which analyses wrote output:
+\code{group_tests}, \code{parametric}, \code{compositional}, \code{uncertainty}, \code{normality},
+\code{batch}, \code{confounding}, \code{rank_ancova}, \code{edger}. An absent entry takes the value a
+grouped run with the default options has.}
 }
 \value{
 data.frame.
@@ -24,5 +30,12 @@ data.frame.
 Every commonly reported test in the immunophenotyping and cytometry
 literature, what this run did about it, and why. Written on every run so the
 reasoning travels with the numbers.
+}
+\details{
+WHAT "USED" MEANS. A method is listed as used only where this run wrote its
+result, which \code{ran} records from the files actually written. The parametric
+tests are written by default beside the rank tests (parametric_tests.csv,
+posthoc_tests.csv), so they are used, as secondary results; listing them as
+not used, as this table once did, contradicted the run's own outputs.
 }
 \keyword{internal}

@@ -12,7 +12,8 @@ fig_marker_grid(
   ncol = NULL,
   dpi = 300,
   panel_size = 2.5,
-  colors = fcs_colors()
+  colors = fcs_colors(),
+  scale_label = "asinh intensity"
 )
 }
 \arguments{
@@ -31,6 +32,10 @@ fig_marker_grid(
 \item{panel_size}{The panel size. Default \code{2.5}.}
 
 \item{colors}{Named list of colours; defaults to the package palette. See \code{\link[=fcs_colors]{fcs_colors()}}. Default \code{fcs_colors()}.}
+
+\item{scale_label}{Name of the scale the intensities are on, the run's
+\code{transform$label} ("asinh intensity", "logicle intensity"). Default
+\code{"asinh intensity"}.}
 }
 \description{
 WHAT: one small UMAP per marker, coloured by that marker's asinh intensity.

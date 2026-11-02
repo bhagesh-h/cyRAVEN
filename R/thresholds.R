@@ -380,8 +380,8 @@ resolve_threshold <- function(marker, x_parent, cfg_value = NULL,
 
 #' The fixed cut a `thresholds:` configuration entry declares, if any
 #'
-#' An entry is a bare number, or a list as `write_config()` emits it
-#' (`threshold`, `source`, `needs_review`, and optionally `tail`).
+#' An entry is a bare number, or a list carrying `threshold` and optionally
+#' `tail` (other fields, such as `source`, are ignored).
 #' @param v the entry, or NULL.
 #' @return a number, or NULL.
 #' @keywords internal

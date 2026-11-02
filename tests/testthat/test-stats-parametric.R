@@ -142,6 +142,10 @@ test_that("posthoc_group_tests runs all three methods and needs three groups", {
   expect_true(all(c("p_value", "p_adjusted_BH") %in% names(ph)))
   # Adjustment is within a method, so each family keeps its own three pairs.
   expect_equal(as.integer(table(ph$test)[["Games-Howell"]]), 3L)
+  # Tukey and Games-Howell p already control the error over the pairs; Dunn's
+  # does not, and the table has to say so.
+  expect_true(all(ph$p_value_adjusted_over_pairs[ph$test != "Dunn"]))
+  expect_false(any(ph$p_value_adjusted_over_pairs[ph$test == "Dunn"]))
 
   # Two groups is not a post-hoc situation.
   g2 <- setNames(rep(c("g1", "g2"), each = 9), paste0("s", 1:18))
@@ -186,4 +190,22 @@ test_that("a concentration is log-transformed, not treated as a percentage", {
   expect_equal(res$measure, "cells_per_ul")
   expect_equal(res$transform, "log")
   expect_lt(res$p_value, 0.001)
+})
+
+test_that("Tukey HSD pairs survive group names that contain a hyphen", {
+  # TukeyHSD names rows "<b>-<a>"; splitting on "-" mislabelled any group whose
+  # own name held one.
+  set.seed(4)
+  g <- rep(c("Non-pulmonary", "Pulmonary", "Urinary-tract"), each = 6)
+  pct <- c(rnorm(6, 10, 1), rnorm(6, 20, 1), rnorm(6, 30, 1))
+  freq <- data.frame(sample_id = paste0("s", 1:18), population = "P",
+                     pct_of_cd45_pos = pct, qc_status = "pass",
+                     stringsAsFactors = FALSE)
+  ph <- posthoc_group_tests(freq, setNames(g, freq$sample_id), transform = "none")
+  tk <- ph[ph$test == "Tukey HSD", ]
+  expect_equal(nrow(tk), 3L)
+  expect_true(all(c(tk$group_a, tk$group_b) %in% unique(g)))
+  m <- tapply(pct, g, mean)
+  expect_equal(as.numeric(tk$difference),
+               as.numeric(m[tk$group_b] - m[tk$group_a]), tolerance = 1e-8)
 })

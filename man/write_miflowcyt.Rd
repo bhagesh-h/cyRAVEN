@@ -11,7 +11,8 @@ write_miflowcyt(
   spec = NULL,
   transforms = NULL,
   fpr = NULL,
-  thresholds = NULL
+  thresholds = NULL,
+  removal = NULL
 )
 }
 \arguments{
@@ -28,6 +29,9 @@ write_miflowcyt(
 \item{fpr}{panel fingerprint result, for the panel-to-sample assignment}
 
 \item{thresholds}{the \code{thresholds_used.csv} table, or NULL}
+
+\item{removal}{what removed events before gating: \code{"peacoqc"},
+\code{"drop_unstable_events"}, or NULL when nothing did}
 }
 \value{
 the path, invisibly

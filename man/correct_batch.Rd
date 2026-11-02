@@ -57,8 +57,9 @@ CytoNorm package, which learns its maps from anchor samples, and the name
 claimed otherwise.
 
 THE GOAL. With \code{group} supplied and \code{goal = "group"}, the default, each study
-group is aligned towards its own pooled distribution; see
-\code{\link[=align_within_groups]{align_within_groups()}}. \code{goal = "pooled"} aligns every batch towards all
+group is aligned towards the mean of its quantiles over the batches every
+group was measured in, and nothing is corrected where no batch holds every
+group; see \code{\link[=align_within_groups]{align_within_groups()}}. \code{goal = "pooled"} aligns every batch towards all
 samples together, which assumes the batches hold the same biology.
 
 THE METHOD IS CHOSEN AFTER THE REFUSAL, NEVER BEFORE IT. A better alignment

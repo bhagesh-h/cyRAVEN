@@ -62,6 +62,7 @@ write_explore_report <- function(ex_dir, opt = NULL) {
     if (length(b)) b[1] else NA_character_
   } else NA_character_
   thr_based <- identical(basis, "per-sample thresholds")
+  dens_based <- identical(basis, "per-sample density cuts")
 
   secs <- list()
 
@@ -76,6 +77,15 @@ write_explore_report <- function(ex_dir, opt = NULL) {
                   "THAT SAMPLE'S OWN threshold for each marker, so the",
                   "phenotype is a measurement rather than a reading off a",
                   "colour scale.")
+          else if (dens_based)
+            paste("No declared pipeline was read, so each sample's cut for each",
+                  "marker was placed on its own cells by the declared run's",
+                  "rule (a valley, else a tail gate above the dominant mode),",
+                  "and each cluster is named from the fraction of its cells",
+                  "above its sample's cut. A cluster is debris when most of its",
+                  "cells sit below its file's CD45 debris reference, as the",
+                  "declared gate defines CD45-negative. Run with --maybe-learn",
+                  "to use the declared run's cuts, controls and overrides.")
           else
             paste("No declared pipeline ran, so cluster naming falls back to",
                   "pooled medians -- what a standalone clusterer has. Run with",
@@ -270,6 +280,10 @@ write_explore_report <- function(ex_dir, opt = NULL) {
               paste("Unsupervised discovery, with clusters named against each",
                     "sample's own marker thresholds. Nothing here was used to",
                     "produce the declared results in the parent directory.")
+            else if (dens_based)
+              paste("Blind unsupervised discovery. Nothing from the declared",
+                    "run was read; clusters are named against cuts placed on",
+                    "each sample's own cells.")
             else
               paste("Standalone unsupervised discovery. No declared pipeline",
                     "ran, so clusters are named from pooled medians rather than",

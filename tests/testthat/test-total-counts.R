@@ -128,3 +128,15 @@ test_that("a PBMC sample type is recognised as not whole blood", {
   expect_identical(unname(st2), c("PBMC", "blood", NA))
   expect_null(sample_types(smap[, 1:2]))
 })
+
+test_that("an absolute count labelled by a patient sampled twice is not guessed", {
+  # setNames() on a repeated patient id returned the first acquisition, so the
+  # count landed on whichever visit came first.
+  smap <- data.frame(sample_id = c("S1", "S2", "S3"),
+                     patient_id = c("P1", "P1", "P2"),
+                     file = c("a.fcs", "b.fcs", "c.fcs"), stringsAsFactors = FALSE)
+  ac <- data.frame(sample_raw = c("P1", "P2"), population = "T cells",
+                   cells_per_ul = c(1000, 2000), stringsAsFactors = FALSE)
+  out <- suppressMessages(match_absolute_counts_samples(ac, smap))
+  expect_identical(out$sample_id, "S3")
+})

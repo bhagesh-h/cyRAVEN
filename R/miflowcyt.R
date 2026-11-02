@@ -94,10 +94,13 @@ miflowcyt_parameters <- function(kw) {
 #' @param transforms named list of per-panel transform objects
 #' @param fpr panel fingerprint result, for the panel-to-sample assignment
 #' @param thresholds the `thresholds_used.csv` table, or NULL
+#' @param removal what removed events before gating: `"peacoqc"`,
+#'   `"drop_unstable_events"`, or NULL when nothing did
 #' @return the path, invisibly
 #' @export
 write_miflowcyt <- function(path, reads, opt = NULL, spec = NULL,
-                            transforms = NULL, fpr = NULL, thresholds = NULL) {
+                            transforms = NULL, fpr = NULL, thresholds = NULL,
+                            removal = NULL) {
   if (is.null(reads) || !length(reads)) return(invisible(NULL))
   TBC <- "**TO BE COMPLETED** -- this cannot be derived from the data files."
 
@@ -158,6 +161,14 @@ write_miflowcyt <- function(path, reads, opt = NULL, spec = NULL,
                        "--max-events-per-file was set to ",
                        opt$max_events_per_file,
                        ", sampled evenly through the acquisition."), "")
+  if (identical(removal, "peacoqc"))
+    ln <- c(ln, paste0("Events analysed excludes the events PeacoQC (Emmaneel et ",
+                       "al. 2022) flagged as unstable, removed before gating ",
+                       "(--peacoqc); per file in `peacoqc_summary.csv`."), "")
+  else if (identical(removal, "drop_unstable_events"))
+    ln <- c(ln, paste0("Events analysed excludes the acquisition intervals ",
+                       "flagged as unstable, removed before gating ",
+                       "(--drop-unstable-events); per file in `acquisition_qc.csv`."), "")
 
   # 3.2 detector configuration. Reported once per distinct panel rather than once
   # per file: repeating an identical 20-row table for every sample would bury the
@@ -250,12 +261,16 @@ write_miflowcyt <- function(path, reads, opt = NULL, spec = NULL,
   # submissions answer with a screenshot. Here it is the executable definition.
   ln <- c(ln, "### 4.4 Gating", "",
           "Thresholds are derived independently within each sample from that",
-          "sample's own marker density, not transferred between samples. The",
+          "sample's own marker density, except where a control tube set the",
+          "cut (`control_q995`, `fmo_q995`, `fmm_q995`) or `--auto-fix-gates`",
+          "took the median of the other samples' density minima",
+          "(`peer_median`); the count of each source is listed below. The",
           "hierarchy preceding any marker evaluation is:", "",
           paste("0. Margin events, at the top of a marker or scatter channel's",
                 "range, removed at reading (`margin_events.csv`)."),
           paste("1. Scatter, above the lowest qualifying minimum of the log10",
-                "FSC-A density, below its 99.9th percentile, and within the 0.5th",
+                "FSC-A density (its 60th percentile, with a warning, where there",
+                "is none), below its 99.9th percentile, and within the 0.5th",
                 "to 99.5th percentile of SSC-A."),
           paste0("2. Singlets: FSC-H:FSC-A ratio above its median minus ",
                  or_absent(opt$singlet_mad_k %||% 3), " MAD. Doublets have a low",

@@ -132,8 +132,8 @@ round(density_valley(x), 2)
 
 Thresholds are placed at the density minimum within each sample.
 `density_valley()` returns `NA` for unimodal distributions, after which
-`resolve_threshold()` attempts a declared unstained control and falls back to a
-flagged quantile. Derivation is recorded per threshold in `thresholds_used.csv`.
+`resolve_threshold()` uses a declared control if there is one, otherwise a tail
+gate above the dominant mode, and only then a flagged quantile. Derivation is recorded per threshold in `thresholds_used.csv`.
 
 Per-sample thresholding accommodates staining variation but permits the
 definition of a population to differ between groups, which
@@ -195,7 +195,7 @@ freq <- data.frame(
     rnorm(12, 25, 4), rnorm(12, 10, 2))),
   is_control = FALSE, qc_status = "pass")
 grp <- setNames(
-  rep(c("HC", "Patient"), each = 12)[1:12],
+  rep(c("HC", "Patient"), each = 6),
   ids)
 
 res <- stats_group_comparison(
@@ -225,7 +225,8 @@ biological effect are not separable.
 which would render an abundance difference partly definitional.
 
 `stats_confounding()` reports whether a covariate both differs across groups and
-associates with the outcome, the two conditions jointly defining a confounder.
+associates with the outcome within groups, the two conditions jointly defining a
+confounder.
 
 `cluster_gate_agreement()` cross-tabulates declared labels against unsupervised
 clusters, which can reveal a population absent from
@@ -250,7 +251,7 @@ st <- explain_cluster(marker_matrix,
                       cluster_id == 7)
 # marker pair and metrics per level
 st$summary
-# vertices, in arcsinh units
+# vertices, on the analysis scale (arcsinh or logicle)
 st$levels[[1]]$polygon
 ```
 
@@ -510,11 +511,14 @@ pipeline is not the same thing.
 
 #### What is deliberately not adopted
 
-**diffcyt's empirical-Bayes moderation** (edgeR, limma-voom, GLMM). It borrows
-strength across clusters via a shared prior, which pays off at mass-cytometry
-marker counts with hundreds of clusters. On a declared panel of a dozen
-populations there is little to borrow, and the moderation is harder to explain
-than it is worth. Reachable through `--external-labels` for anyone who wants it.
+**diffcyt's empirical-Bayes moderation as the primary test** (edgeR,
+limma-voom, GLMM). It borrows strength across clusters via a shared dispersion
+prior, which pays off at mass-cytometry marker counts with hundreds of clusters.
+On a declared panel of a dozen populations there is little to borrow, so the
+rank tests on one value per donor stay primary. The edgeR form, with
+diffcyt-DA-edgeR's defaults applied to each sample's exclusive-label counts, is
+available beside them with `--edger`; limma-voom and the GLMM are not
+implemented.
 
 **A data-determined cluster count.** Phenograph and consensus methods choose *k*
 from the data. `--explore-k` is a setting, and `explore_provenance.csv` says so,

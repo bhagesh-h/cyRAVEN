@@ -89,3 +89,31 @@ test_that("reading something that is not a baseline fails clearly", {
   expect_error(read_spec_baseline(p), "not a cyRAVEN baseline")
   expect_error(read_spec_baseline(tempfile()), "baseline not found")
 })
+
+test_that("cuts are compared in instrument units when the cofactor changed", {
+  # The same instrument-unit cuts under a cofactor re-derived from the data are
+  # different numbers on the transformed axis, by log(c2 / c1) in the log
+  # region; compared there a fourfold change reads as drift, compared in
+  # instrument units it does not.
+  thr <- synth_thresholds(); fq <- synth_freq()
+  spec <- list(`B cells` = list(CD19 = "above"))
+  tr_old <- list(P1 = make_transform("arcsinh", cofactor = 150))
+  tr_new <- list(P1 = make_transform("arcsinh", cofactor = 600))
+  p <- withr::local_tempfile(fileext = ".rds")
+  write_spec_baseline(p, thr, fq, spec, opt = list(transform = "arcsinh"),
+                      transforms = tr_old)
+  moved <- thr
+  moved$threshold <- asinh(sinh(thr$threshold) * 150 / 600)
+  bl <- read_spec_baseline(p)
+
+  naive <- specification_conformance(moved, fq, spec, bl)
+  expect_true(any(naive$markers$verdict %in% c("qualify", "fail")))
+  cf <- specification_conformance(moved, fq, spec, bl, transforms = tr_new)
+  expect_true(all(cf$markers$verdict == "pass"))
+  expect_true(all(cf$markers$robust_z < 1e-6))
+
+  # A baseline written before transforms were stored is rebuilt from its cofactor.
+  bl$transforms <- NULL; bl$cofactors <- list(P1 = 150)
+  old <- specification_conformance(moved, fq, spec, bl, transforms = tr_new)
+  expect_true(all(old$markers$verdict == "pass"))
+})

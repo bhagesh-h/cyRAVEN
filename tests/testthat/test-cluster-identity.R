@@ -230,3 +230,23 @@ test_that("a profile with no frac_pos columns yields NULL rather than failing", 
   expect_null(annotate_clusters_with_subsets(
     data.frame(cluster = "k1", cells = 10, stringsAsFactors = FALSE)))
 })
+
+test_that("CD16+ NK and neutrophil clusters are not called non-classical monocytes", {
+  # CD3- CD14low CD16+ is also every CD16+ NK cell and every neutrophil; without
+  # a monocyte marker it outranked "NK cells" as the more specific match.
+  mk <- c("CD3", "CD4", "CD8", "CD14", "CD16", "CD19", "CD56", "HLA-DR")
+  prof <- data.frame(cluster = c("nk", "neut", "ncm"), rbind(
+    c(.02, .03, .2, .02, .90, .01, .95, .10),
+    c(.01, .05, .01, .20, .97, .01, .05, .02),
+    c(.01, .30, .01, .30, .95, .01, .05, .95)), check.names = FALSE)
+  names(prof)[-1] <- paste0("frac_pos.", mk)
+  a <- annotate_clusters_with_subsets(prof)
+  lab <- setNames(a$subset_label, a$cluster)
+  expect_identical(unname(lab["nk"]), "NK cells")
+  expect_false(isTRUE(grepl("monocyte", lab["neut"])))
+  expect_match(lab["ncm"], "^Non-classical monocytes")
+  # Without HLA-DR the subset is not defined at all.
+  expect_false(any(grepl("Non-classical", names(immune_subset_spec(
+    c("CD3", "CD14", "CD16", "CD56"), parent = NULL)))))
+  expect_true("NKT-like cells" %in% names(immune_subset_spec(c("CD3", "CD56"))))
+})

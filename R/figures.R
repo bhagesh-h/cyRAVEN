@@ -528,15 +528,21 @@ fig_umap_populations <- function(cells, outfile, panel_label = "", width = 11,
   if (!all(c("umap_1", "umap_2", "population_label") %in% names(cells)) || !nrow(cells))
     return(invisible(NULL))
   n <- table(cells$population_label)
-  keylab <- stats::setNames(sprintf("%s  (%.1f%%)", names(n), 100 * as.numeric(n) / sum(n)),
-                            names(n))
+  # Shares weighted back under --subsample rare, as umap_composition.png does.
+  wtd <- "sampling_weight" %in% names(cells) && all(is.finite(cells$sampling_weight))
+  sh <- if (wtd) {
+    ws <- tapply(cells$sampling_weight, factor(cells$population_label, levels = names(n)), sum)
+    as.numeric(ws) / sum(ws)
+  } else as.numeric(n) / sum(n)
+  keylab <- stats::setNames(sprintf("%s  (%.1f%%)", names(n), 100 * sh), names(n))
   fig <- umap_discrete(cells, "population_label", colors = colors,
                        point_size = auto_point_aes(nrow(cells))$size * 1.6,
                        title = paste0("Gated populations on the shared CD45+ UMAP",
                                       if (nzchar(panel_label)) paste0(", ", panel_label) else ""),
                        subtitle = paste0(format(nrow(cells), big.mark = ","),
                                          " cells; names at each population's median position, ",
-                                         "share of the embedded cells in the key")) +
+                                         if (wtd) "share of the cells (weighted back from the rare-enriched draw) in the key"
+                                         else "share of the embedded cells in the key")) +
     scale_colour_manual(values = population_colours(names(n), colors = colors),
                         labels = keylab, name = NULL, drop = FALSE) +
     theme(legend.position = "right", legend.justification = "top")
@@ -743,10 +749,13 @@ pretty_label <- function(x) {
 #' @param dpi Resolution in dots per inch. May be reduced automatically to respect the raster ceiling; see [safe_ggsave()]. Default `300`.
 #' @param panel_size The panel size. Default `2.5`.
 #' @param colors Named list of colours; defaults to the package palette. See [fcs_colors()]. Default `fcs_colors()`.
+#' @param scale_label Name of the scale the intensities are on, the run's
+#'   `transform$label` ("asinh intensity", "logicle intensity"). Default
+#'   `"asinh intensity"`.
 #' @export
 fig_marker_grid <- function(cells, markers, outfile, panel_label = "",
                             ncol = NULL, dpi = 300, panel_size = 2.5,
-                            colors = fcs_colors()) {
+                            colors = fcs_colors(), scale_label = "asinh intensity") {
   markers <- markers[markers %in% names(cells)]
   if (!length(markers)) { warning("[fig] no markers to grid"); return(invisible(NULL)) }
   ncol <- if (is.null(ncol)) ceiling(sqrt(length(markers))) else ncol
@@ -776,9 +785,9 @@ fig_marker_grid <- function(cells, markers, outfile, panel_label = "",
     patchwork::plot_annotation(
       title = paste0("Marker expression on the shared embedding",
                      if (nzchar(panel_label)) paste0(", ", panel_label) else ""),
-      subtitle = paste("asinh-transformed intensity; each panel has its OWN",
+      subtitle = paste0(scale_label, "; each panel has its OWN ",
                        "colour scale, clipped to its 1st-99th percentile.",
-                       "\nBar labels give that marker's low/high value,",
+                       "\nBar labels give that marker's low/high value, ",
                        "colours are NOT comparable between panels."),
       theme = theme(plot.title = element_text(face = "bold", size = 13),
                     plot.subtitle = element_text(size = 9)))
@@ -872,11 +881,15 @@ marker_facet_cols <- function(cells, feature_cols = character(0),
 #' @param panel_label Marker-panel name added to each title; empty for none. Default `""`.
 #' @param dpi Resolution in dots per inch. Default `170`.
 #' @param colors Named list of colours; defaults to the package palette. Default `fcs_colors()`.
+#' @param scale_label Name of the scale the intensities are on, the run's
+#'   `transform$label` ("asinh intensity", "logicle intensity"). Default
+#'   `"asinh intensity"`.
 #' @return Character vector of the files written, invisibly.
 #' @export
 fig_marker_umaps_by_group <- function(cells, markers, outdir, group_col = NULL,
                                       panel_label = "", dpi = 170,
-                                      colors = fcs_colors()) {
+                                      colors = fcs_colors(),
+                                      scale_label = "asinh intensity") {
   markers <- markers[markers %in% names(cells)]
   if (!length(markers) || !nrow(cells)) return(invisible(character(0)))
 
@@ -943,7 +956,7 @@ fig_marker_umaps_by_group <- function(cells, markers, outdir, group_col = NULL,
     else
       # The strip now says "All samples", so repeating it here would label the
       # same fact twice; what is left is the part the strip cannot carry.
-      "colour is asinh intensity, clipped to the 1st-99th percentile"
+      paste0("colour is ", scale_label, ", clipped to the 1st-99th percentile")
     p <- umap_continuous(cells, m, title = ttl, subtitle = sub,
                          point_size = ps, legend_name = m, colors = colors)
     # A RULE BETWEEN THE PANELS, AND A TITLE BAR ON EVERY ONE. Every facet is the
@@ -1045,14 +1058,19 @@ fig_density_by_sample <- function(cells, outfile, panel_label = "",
   max_row <- 12L
   ncol <- if (n <= max_row) n else ceiling(sqrt(n))
   nrow <- ceiling(n / ncol)
+  # Under --subsample rare each embedded cell carries its inverse inclusion
+  # probability; unweighted, the bins would count the rare-enriched draw.
+  wtd <- "sampling_weight" %in% names(d) && all(is.finite(d$sampling_weight))
   fig <- ggplot(d, aes(umap_1, umap_2)) +
-    stat_bin_hex(bins = 70, aes(fill = after_stat(count))) +
+    (if (wtd) stat_bin_hex(bins = 70, aes(fill = after_stat(count), weight = .data$sampling_weight))
+     else stat_bin_hex(bins = 70, aes(fill = after_stat(count)))) +
     scale_fill_viridis_c(option = colors$density_viridis, trans = "log10", name = "cells",
                          labels = scales::label_number(accuracy = 1)) +
     facet_wrap(vars(.data[[facet_by]]), ncol = ncol) +
     labs(title = paste0("Cell density per ", pretty_label(facet_by),
                         if (nzchar(panel_label)) paste0(", ", panel_label) else ""),
-         subtitle = "shared embedding, log-scaled counts",
+         subtitle = if (wtd) "shared embedding, log-scaled counts weighted back from the rare-enriched draw"
+                    else "shared embedding, log-scaled counts",
          x = "UMAP 1", y = "UMAP 2") +
     coord_equal() + theme_cyto(colors = colors)
   safe_ggsave(outfile, plot = fig, width = max(5, 3.6 * ncol),
@@ -1084,10 +1102,14 @@ fig_density_by_sample <- function(cells, outfile, panel_label = "",
 #' @param dpi Resolution in dots per inch. May be reduced automatically to respect the raster ceiling; see [safe_ggsave()]. Default `300`.
 #' @param dens_markers The dens markers.
 #' @param colors Named list of colours; defaults to the package palette. See [fcs_colors()]. Default `fcs_colors()`.
+#' @param scale_label Name of the scale the intensities are on, the run's
+#'   `transform$label` ("asinh intensity", "logicle intensity"). Default
+#'   `"asinh intensity"`.
 #' @return the composed patchwork object (also written to `outfile`).
 #' @export
 fig_recon_diagnostics <- function(recon, outfile, max_points = 40000L,
-                                  dpi = 300, dens_markers = NULL, colors = fcs_colors()) {
+                                  dpi = 300, dens_markers = NULL, colors = fcs_colors(),
+                                  scale_label = "asinh intensity") {
   if (!length(recon)) { warning("[fig] no recon records"); return(invisible(NULL)) }
   # Fixed seed so the thinning below picks the same cells on a re-run, and the
   # stream put back afterwards so drawing a figure cannot change which cells the
@@ -1133,7 +1155,7 @@ fig_recon_diagnostics <- function(recon, outfile, max_points = 40000L,
       p2 <- ggplot(d2, aes(cd45, ssc)) +
         stat_bin_hex(bins = 80, aes(fill = after_stat(count))) +
         scale_fill_viridis_c(option = colors$density_viridis, trans = "log10", guide = "none") +
-        labs(x = "CD45 (asinh)", y = expression(log[10]~"SSC-A")) +
+        labs(x = paste0("CD45 (", scale_label, ")"), y = expression(log[10]~"SSC-A")) +
         theme_cyto(10, colors = colors)
       if (is.finite(r$cd45_threshold %||% NA))
         p2 <- p2 + geom_vline(xintercept = r$cd45_threshold, colour = colors$gate_highlight,
@@ -1164,7 +1186,7 @@ fig_recon_diagnostics <- function(recon, outfile, max_points = 40000L,
         scale_colour_manual(values = pop_palette(length(unique(d3$marker)), colors = colors),
                             name = NULL) +
         guides(colour = guide_legend(ncol = 2, override.aes = list(linewidth = 1.2))) +
-        labs(x = "asinh intensity", y = "density",
+        labs(x = scale_label, y = "density",
              # For a control the "CD45+" parent is a quantile-fallback slice, so
              # any apparent bimodality here is the cut, not real staining. Say so
              # on the panel rather than letting the reader infer staining.
@@ -1487,6 +1509,22 @@ subcluster_by_reference <- function(cells, markers, group_col = "cohort",
   sub
 }
 
+#' Cliff's delta of `b` against `a` with per-cell weights
+#'
+#' The sum over pairs of w_a w_b sign(b - a), over the sum of the weights'
+#' products: P(b > a) - P(b < a) for weighted samples, as the unweighted delta
+#' is for equal weights. Sorted once, so no pair is enumerated.
+#' @param a,b numeric vectors.
+#' @param wa,wb their non-negative weights.
+#' @return numeric in \code{[-1, 1]}.
+#' @keywords internal
+weighted_cliff <- function(a, b, wa, wb) {
+  o <- order(a); a <- a[o]; cw <- c(0, cumsum(wa[o])); W <- cw[length(cw)]
+  below <- cw[findInterval(b, a, left.open = TRUE) + 1L]
+  above <- W - cw[findInterval(b, a) + 1L]
+  sum(wb * (below - above)) / (W * sum(wb))
+}
+
 #' Per (cluster, subcluster, marker, study): how far is this study from reference
 #'
 #' The figure shows the shift; this makes it sortable. Reports BOTH deviation
@@ -1520,6 +1558,15 @@ stats_subcluster_shifts <- function(cells, markers, subcluster, group_col = "coh
     r <- rank(c(a, b)); (2 * (sum(r[seq_along(a)]) - length(a) * (length(a) + 1) / 2) /
                           (length(a) * length(b))) - 1
   }
+  # Under --subsample rare the cells were drawn by inverse density, and every
+  # share, median and delta below is weighted back by sampling_weight
+  # (Horvitz-Thompson); a uniform draw carries no weights and is unchanged.
+  w <- if ("sampling_weight" %in% names(cells) &&
+           all(is.finite(cells$sampling_weight))) cells$sampling_weight else NULL
+  wmed <- function(x, wx) {
+    o <- order(x); cw <- cumsum(wx[o]) / sum(wx)
+    x[o][which(cw >= 0.5)[1]]
+  }
   out <- list()
   for (pp in sort(unique(as.character(cells$population_label[ok])))) {
     inp <- ok & cells$population_label == pp
@@ -1530,22 +1577,29 @@ stats_subcluster_shifts <- function(cells, markers, subcluster, group_col = "coh
         a <- sel & grp == reference; b <- sel & grp == g
         if (sum(a) < min_cells || sum(b) < min_cells) next
         # occupancy: share of THIS study's cells in the cluster that land here
-        occ_r <- sum(a) / max(1L, sum(inp & grp == reference)) * 100
-        occ_g <- sum(b) / max(1L, sum(inp & grp == g)) * 100
+        tot <- function(m) if (is.null(w)) sum(m) else sum(w[m])
+        occ_r <- tot(a) / max(1e-12, tot(inp & grp == reference)) * 100
+        occ_g <- tot(b) / max(1e-12, tot(inp & grp == g)) * 100
         for (mk in markers) {
-          xa <- as.numeric(cells[[mk]][a]); xa <- xa[is.finite(xa)]
-          xb <- as.numeric(cells[[mk]][b]); xb <- xb[is.finite(xb)]
+          xa <- as.numeric(cells[[mk]][a]); fa <- is.finite(xa); xa <- xa[fa]
+          xb <- as.numeric(cells[[mk]][b]); fb <- is.finite(xb); xb <- xb[fb]
           if (length(xa) < min_cells || length(xb) < min_cells) next
+          if (is.null(w)) {
+            ma <- stats::median(xa); mb <- stats::median(xb); cd <- cliff(xb, xa)
+          } else {
+            wa <- w[a][fa]; wb <- w[b][fb]
+            ma <- wmed(xa, wa); mb <- wmed(xb, wb); cd <- weighted_cliff(xa, xb, wa, wb)
+          }
           out[[length(out) + 1L]] <- data.frame(
             population = pp, subcluster = letters[pmin(as.integer(sb), 26L)],
             marker = mk, study = g,
             n_reference = length(xa), n_study = length(xb),
             occupancy_pct_reference = round(occ_r, 3), occupancy_pct_study = round(occ_g, 3),
             occupancy_pct_delta = round(occ_g - occ_r, 3),
-            median_reference = round(stats::median(xa), 4),
-            median_study = round(stats::median(xb), 4),
-            median_delta = round(stats::median(xb) - stats::median(xa), 4),
-            cliffs_delta = round(cliff(xb, xa), 4), stringsAsFactors = FALSE)
+            median_reference = round(ma, 4),
+            median_study = round(mb, 4),
+            median_delta = round(mb - ma, 4),
+            cliffs_delta = round(cd, 4), stringsAsFactors = FALSE)
         }
       }
     }
@@ -1598,10 +1652,14 @@ stats_subcluster_shifts <- function(cells, markers, subcluster, group_col = "coh
 #' @param subcluster Integer vector of subcluster assignments, one per cell.
 #' @param reference The group every other group is compared against.
 #' @param colors Named list of colours; defaults to the package palette. See [fcs_colors()]. Default `fcs_colors()`.
+#' @param scale_label Name of the scale the intensities are on, the run's
+#'   `transform$label` ("asinh intensity", "logicle intensity"). Default
+#'   `"asinh intensity"`.
 #' @export
 fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort",
                                    min_cells = 20L, panel_label = "", dpi = 200,
-                                   subcluster = NULL, reference = NULL, colors = fcs_colors()) {
+                                   subcluster = NULL, reference = NULL, colors = fcs_colors(),
+                                   scale_label = "asinh intensity") {
   if (!group_col %in% names(cells) || !"population_label" %in% names(cells))
     return(invisible(NULL))
   markers <- intersect(markers, names(cells))
@@ -1633,9 +1691,18 @@ fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort"
       rng <- range(xs)
       if (!all(is.finite(rng)) || diff(rng) <= 0) next
       for (g in groups) {
-        x <- as.numeric(cells[[mk]][in_pop & grp == g]); x <- x[is.finite(x)]
+        x <- as.numeric(cells[[mk]][in_pop & grp == g])
+        # Under --subsample rare each embedded cell carries its inverse
+        # inclusion probability, and the curve is of the cells weighted back.
+        wx <- if ("sampling_weight" %in% names(cells))
+          cells$sampling_weight[in_pop & grp == g] else NULL
+        fin <- is.finite(x)
+        if (!is.null(wx)) fin <- fin & is.finite(wx)
+        x <- x[fin]
         if (length(x) < min_cells) { n_skip <- n_skip + 1L; next }
-        dk <- stats::density(x, n = 256, from = rng[1], to = rng[2])
+        dk <- if (is.null(wx)) stats::density(x, n = 256, from = rng[1], to = rng[2])
+              else stats::density(x, n = 256, from = rng[1], to = rng[2],
+                                  weights = wx[fin] / sum(wx[fin]))
         pk <- max(dk$y)
         if (!is.finite(pk) || pk <= 0) next
         curves[[length(curves) + 1L]] <- data.frame(
@@ -1824,7 +1891,7 @@ fig_multigraph_overlay <- function(cells, outfile, markers, group_col = "cohort"
                           "cluster, scaled to its own mode (FlowJo \"Count (%)\");",
                           "read peak POSITION and SHAPE, not height, abundance is in",
                           "group_comparison.png"),
-         x = "asinh-transformed intensity", y = "% of mode") +
+         x = scale_label, y = "% of mode") +
     theme_cyto(9, colors = colors) +
     theme(legend.position = "right", legend.justification = "top",
           legend.direction = "vertical", legend.margin = margin(b = 2),

@@ -223,11 +223,11 @@ apply_gate_hierarchy <- function(rd, cofactor, cfg = list(), control_ref = NULL,
   tr <- transform %||% make_transform("arcsinh", cofactor = cofactor)
   tf <- function(m) tr$fn(ex[, mc[[m]]], m)           # transform one marker
 
-  # A --config thresholds: entry may be {threshold, source, needs_review}, as
-  # write_config() emits it, while resolve_threshold()'s cfg_value must be a
-  # bare number; cfg_threshold() unwraps it. Passing the list through unwrapped
-  # once crashed resolve_threshold's is.finite() check the moment anyone tried
-  # to override viability or CD45 from --config.
+  # A --config thresholds: entry may be a list ({threshold, tail, ...}), while
+  # resolve_threshold()'s cfg_value must be a bare number; cfg_threshold()
+  # unwraps it. Passing the list through unwrapped once crashed
+  # resolve_threshold's is.finite() check the moment anyone tried to override
+  # viability or CD45 from --config.
 
   # --- live gate -------------------------------------------------------------
   vmk <- detect_viability_marker(names(mc), viability_name)

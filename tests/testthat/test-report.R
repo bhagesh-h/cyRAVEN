@@ -350,7 +350,7 @@ test_that("a search bar indexes sections, figures, tables and table rows", {
                "function cyGo("))
     expect_match(txt, fn, fixed = TRUE)
   # The figure's one-line description is on the page, where search finds it.
-  expect_match(txt, "class='fignote'>The gate hierarchy", fixed = TRUE)
+  expect_match(txt, "class='fignote'>Every applied threshold on the distribution", fixed = TRUE)
 })
 
 test_that("each figure is stored once and decoded only when shown", {

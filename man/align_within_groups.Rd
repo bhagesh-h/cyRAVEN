@@ -30,11 +30,20 @@ goal distribution to the experimental design (Quintelier et al. 2025).
 }
 \details{
 WHAT IS DONE. Each study group is aligned separately: a batch's cells of
-group g are mapped onto group g's goal, the mean of its batches' quantiles
-(see \code{\link[=align_quantiles]{align_quantiles()}}).
-A batch effect common to the groups is removed in each of them, and the
-groups keep whatever separates them. A group measured in only one batch has
-nothing to align against and is left as it is. Cells with no group are
-aligned against the pooled distribution, as before.
+group g are mapped onto group g's goal, the mean of its quantiles over the
+batches EVERY group was measured in (see \code{\link[=common_batches]{common_batches()}} and
+\code{\link[=align_quantiles]{align_quantiles()}}). A batch effect common to the groups is removed in each
+of them, and the groups keep whatever separates them. Cells with no group
+are aligned towards the same batches.
+
+WHY THE GOAL USES ONLY THE SHARED BATCHES. Each group's goal carries the
+mean batch effect of the batches it is built from. Built from each group's
+own batches, two groups measured in different batches end on different
+scales: with batch 2 reading one unit high, a group measured in batch 1
+alone stayed where it was while a group spread over both moved half a unit
+up, so a correction meant to remove a batch effect put a 0.5 difference
+between groups of identical cells. Built from the same batches for every
+group, every goal carries the same batch effect. Where no batch holds every
+group there is no shared scale to align to, and nothing is moved.
 }
 \keyword{internal}

@@ -34,9 +34,24 @@ data.frame; rows with population = NA carry the covariate-vs-cohort
 balance test, the rest carry covariate-vs-outcome association
 }
 \description{
-WHY SPEARMAN / KRUSKAL / FISHER: the same reasoning as everywhere else here --
-small n, no free normality assumption. Numeric covariates get Spearman
-(monotone, rank-based). Categorical covariates get Kruskal-Wallis against the
-outcome and a Fisher exact test against cohort, which stays exact at the cell
-counts a 2x3 sex-by-cohort table produces where chi-squared does not.
+WHY RANK TESTS AND FISHER: the same reasoning as everywhere else here --
+small n, no free normality assumption. A Fisher exact test asks whether a
+categorical covariate is balanced across cohorts, which stays exact at the
+cell counts a 2x3 sex-by-cohort table produces where chi-squared does not; a
+numeric one gets Kruskal-Wallis.
+}
+\details{
+THE OUTCOME ASSOCIATION IS TAKEN WITHIN COHORTS. A confounder is associated
+with the exposure and with the outcome conditional on the exposure (Rothman,
+Greenland & Lash 2008, Modern Epidemiology, 3rd ed.). Tested across the
+pooled cohorts, a real group difference makes any unbalanced covariate track
+the outcome by itself: with two cohorts of ten, ages 30 and 55 and a group
+effect on the outcome with none of age, the pooled Spearman test called age a
+HIGH confounder risk in 199 of 200 simulated cohorts. So the association is a
+partial Spearman correlation controlling for cohort -- the ranks with each
+cohort's mean rank removed, tested on n - 2 - (k - 1) degrees of freedom, as
+ppcor does -- and, for a categorical covariate, a rank F test of the
+covariate after the cohort term. Where age and cohort barely overlap this has
+little power, which is the honest answer: the design cannot separate them, and
+the balance row already says the covariate is unbalanced.
 }

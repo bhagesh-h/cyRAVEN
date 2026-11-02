@@ -449,15 +449,21 @@ threshold are not invalid, but they carry no evidence of separation. A marker
 falling back across the majority of samples is not resolving in that panel, and
 no gating strategy will recover it.
 
-`threshold_scale_qc.csv` reports, per panel and marker, the median threshold
-across samples and the robust *z* of each deviation from it. Thresholds flagged
-here are the first candidates for manual review.
+Each threshold is compared with the median of the same marker's cuts in the
+other samples of its panel (controls and staining-QC failures are compared, not
+used as peers): `thresholds_used.csv` carries that `peer_median`, the robust *z*
+of the deviation and `scale_outlier` (*z* above 3.5). Where any cut is an
+outlier, `threshold_scale_qc.csv` summarises each panel and marker: the median,
+the range, and how many cuts are outliers or fallbacks. Flagged thresholds are
+the first candidates for manual review.
 
 #### 2.4 Precision
 
-`source` is a three-valued summary of how a threshold was obtained. It does not
-say how well determined the value is, and two cuts both recorded as `valley` can
-differ by an order of magnitude in that respect: one sitting in a wide, empty gap
+`source` records which rule placed a threshold: a density valley, a tail gate
+where the density showed none, a control tube, a peer median, a manual or
+configured value, or the quantile fallback. It does not say how well determined
+the value is, and two cuts both recorded as `valley` can differ by an order of
+magnitude in that respect: one sitting in a wide, empty gap
 between well-separated modes, the other on a shallow dip that a slightly
 different histogram would not have found.
 
@@ -556,7 +562,7 @@ analysis; the perturbation runs on copies.
 
 #### 2.5 Stability across runs
 
-The comparison in `threshold_scale_qc.csv` is against the other samples of the
+The scale check is against the other samples of the
 same run, which identifies one deviant tube among many sound ones. It is blind to
 a cohort that moved together, because the peer median moves with it.
 
@@ -1107,18 +1113,21 @@ Mount the data read-only (`:ro`) so a bug cannot alter raw acquisition files.
 
 Options fall into three classes, and the class fixes the default.
 
-**Additive.** Produces a new output and alters nothing existing. On by default,
-because an analysis that has to be requested is one that does not get run. The
-`--no-*` flags switch these off.
+**Additive.** Produces a new output and alters nothing existing. The diagnostics
+are on by default, because an analysis that has to be requested is one that does
+not get run, and the `--no-*` flags switch them off. Secondary or exploratory
+analyses (`--cluster`, `--explore`, `--edger`, `--rank-ancova`) and the exports
+are asked for.
 
 **Parametric.** Changes how an existing quantity is computed. Defaults are the
 values the pipeline was validated with; changing one changes results and is a
 decision to record.
 
 **Consequential.** Changes numbers a previous run reported, by design. Off by
-default without exception, and recorded in `run_manifest.txt` when used. There
-are five: `--transform`, `--correct-batch`, `--drop-unstable-events`,
-`--subsample rare` and `--calibration-beads`.
+default without exception, and recorded in `run_manifest.txt` when used. They
+are `--transform`, `--per-marker-cofactor`, `--adaptive-gates`, `--peer-cuts`
+(and `--auto-fix-gates`, which implies it), `--drop-unstable-events`,
+`--peacoqc`, `--subsample rare`, `--correct-batch` and `--calibration-beads`.
 
 #### 2.2 Choosing by situation
 
@@ -1204,8 +1213,10 @@ and group.
 
 **Read `batch_group_confounding.csv` before going further.** If *V* is high, the
 batches and the groups are the same partition, and correcting the batch removes
-the finding. cyRAVEN refuses correction above 0.6 for that reason. Where *V* is
-low and the drift is real, add correction:
+the finding. cyRAVEN refuses correction above Cohen's large association for the
+table's size, 0.5/√(k − 1) with k the smaller of the batch and group counts (0.5
+for two groups), for that reason. Where *V* is low and the drift is real, add
+correction:
 
 ```bash
 docker run --rm $D \
@@ -1246,8 +1257,9 @@ docker run --rm $D \
 ```
 
 No extra flag: the columns are recognised by their prefix. `absolute_counts_qc.png`
-compares the supplied counts against the frequencies cyRAVEN measured, which is
-how a transcription error or a name mismatch is caught. Where the counting
+draws every supplied count as one tile per sample and population on a log
+scale, which is how a transcription error (a tile decades off its column) or a
+name mismatch (a missing row) is caught. Where the counting
 instrument exports its own sheet and transcription is not worth it, use
 `--absolute-counts <file>` instead.
 
@@ -1420,7 +1432,7 @@ docker run --rm $D \
   --outdir /results
 ```
 
-Consequential, and the most far-reaching of the five: conversion happens before
+Consequential, and the most far-reaching of them: conversion happens before
 any threshold is derived, so every intensity in the run changes units. A channel
 whose fit falls below `--calibration-min-r2` is left in instrument units rather
 than converted on a fit that does not hold, and the log says which.
@@ -1536,17 +1548,21 @@ Read `results/explore/explore_report.html`, then curate
 `results/explore/explore_suggested_spec.yaml` into a real specification and run
 the supervised path with it. Full detail in [Explore mode](advanced.html#explore-mode-unsupervised-discovery).
 
-#### 2.3 The five that change reported numbers
+#### 2.3 The options that change reported numbers
 
 Turn these on only when you mean to, and say so when you report a result.
 
 | Option | What it changes | Read first |
 |---|---|---|
 | `--transform logicle` | Every threshold, and therefore every frequency | `gating_qc.png` |
+| `--per-marker-cofactor` | Every threshold on an arcsinh scale | `gating_qc.png` |
+| `--adaptive-gates` | Thresholds, wherever another rule scores a better gap | `thresholds_used.csv` (`source`), `gating_qc.png` |
+| `--peer-cuts`, `--auto-fix-gates` | The cuts and hierarchy gates they replace or skip | `gate_adjustments.csv` |
 | `--drop-unstable-events` | Every count in an affected file | `acquisition_qc_impact.csv` |
+| `--peacoqc` | Every count in a file PeacoQC flags | `peacoqc_summary.csv` |
 | `--subsample rare` | Which cells are embedded | `cells_umap.csv` gains `sampling_weight` |
 | `--correct-batch` | Marker values in the embedding and clustering | `batch_group_confounding.csv` |
-| `--calibration-beads` | The units every intensity is expressed in | `calibration_fit.csv` |
+| `--calibration-beads` | The units every intensity is expressed in | `calibration.csv` |
 
 #### 2.4 What not to change without cause
 
@@ -1592,11 +1608,11 @@ still work unchanged and are not deprecated, but cannot be combined with
 | `--write-samples` | none | Write a sheet template covering every input file, and exit |
 | `--check` | off | Validate the inputs from FCS headers alone and exit. Reports resolved markers, specification entries matching none of them, sheet coverage, group levels and sizes, batches and study variables. Seconds rather than the full run |
 | `--list-channels` | off | List every acquisition parameter and exit: index, `$PnN`, `$PnS`, and the symbol the run resolves it to, which is the name the specification must use. Also reports whether every file carries the same panel. Needs no sheet and no config, because it answers what to put in one |
-| `--ignore-channels` | none | Comma-separated marker names dropped before anything else, including before the panel fingerprint. Names match whole and case-insensitively; a name containing `*` is a glob. See [section 3.2a](#a-channel-that-splits-the-cohort) |
+| `--ignore-channels` | none | Comma-separated marker names dropped before anything else, including before the panel fingerprint. Names match whole and case-insensitively; a name containing `*` is a glob. See [A channel that splits the cohort](#a-channel-that-splits-the-cohort) |
 | `--reference-date` | today | `YYYY-MM-DD` used to derive age from date of birth and to place two-digit years. Set it to a fixed study date so ages do not change between runs |
 | `--group-column` | resolved `cohort` | Column defining the comparison groups. Enables the between-group figure and tests. Also settable as `samples: group_column:` in the config, which the flag overrides |
 | `--reference-group` | first alphabetically | The group every other is tested against. Drawn unfilled and leftmost |
-| `--write-config` | none | Derive everything, write the resulting YAML, and exit. Shows what the pipeline detected before time is spent. **Needs `--outdir` as well**: deriving the parameters means reading the files, so the early stages run and write their QC output alongside |
+| `--write-config` | none | Derive everything, write the resulting YAML, and exit. Shows what the pipeline detected before time is spent. The per-sample cuts are summarised under `thresholds_derived`, which no run reads; a value copied into `thresholds:` is applied to every sample. **Needs `--outdir` as well**: deriving the parameters means reading the files, so the early stages run and write their QC output alongside |
 
 The earlier three-file form:
 
@@ -1732,7 +1748,7 @@ has already applied that marker.
 
 | Option | Default | Effect |
 |---|---|---|
-| `--no-uncertainty` | on | Skip the gate placement uncertainty analysis. With it off the previous output is reproduced byte for byte |
+| `--no-uncertainty` | on | Skip the gate placement uncertainty analysis, and with it the detection limits (`lod_pct`, `loq_pct`, `detection`), which are computed in the same pass |
 | `--uncertainty-boot` | 100 | Bootstrap replicates per threshold. Below about 50 the standard uncertainty is itself noisy |
 | `--uncertainty-max-events` | 20000 | Events per replicate. The cut is a histogram feature and stops moving well before the whole parent gate is used |
 | `--lod-events` | 20 | Events below which a population is reported below the limit of detection |
@@ -1746,6 +1762,7 @@ has already applied that marker.
 | `--acquisition-bins` | 40 | Equal-width Time intervals per file. More bins resolve a shorter disturbance and make each interval's median noisier |
 | `--acquisition-mad-k` | 5 | Robust z above which an interval is flagged |
 | `--drop-unstable-events` | off | **Consequential**: exclude the flagged intervals, which changes every count, threshold and frequency in the affected files. Read `acquisition_qc_impact.csv` first |
+| `--peacoqc` | off | **Consequential**: remove the events PeacoQC (Emmaneel et al. 2022) flags, before any cofactor, threshold or frequency is derived. Its input is prepared as the PeacoQC vignette prescribes (logicle on the fluorescence channels) and its checks are run with `determine_good_cells = "all"`; PeacoQC runs the isolation tree only on 150 or more time bins, and `peacoqc_summary.csv` notes the files where it did not. Needs a Time channel and the PeacoQC package; replaces `--drop-unstable-events` when both are given. `acquisition_qc.csv` still describes the acquisition before removal. Writes `peacoqc_summary.csv` |
 | `--no-spreading` | on | Skip the spillover spreading report |
 | `--spreading-max-samples` | 8 | Samples contributing to the spreading ranking, which stabilises well before a whole cohort is used |
 
@@ -1799,8 +1816,9 @@ has already applied that marker.
 | `--p-adjust-display` | `raw` | Which p-value the figure brackets show, `raw` or `BH`. Both are always written to the CSV |
 | `--no-differential-state` | on | Skip the sample-level differential-state tests |
 | `--no-compositional` | on | Skip the centred log-ratio re-test and its concordance table |
+| `--edger` | off | Add a count-model abundance test beside the rank tests: edgeR's negative binomial GLM on each sample's exclusive-label counts, with diffcyt-DA-edgeR's defaults (populations with 3 or more cells in at least half the samples, no TMM normalisation, dispersion without a trend, a likelihood-ratio test of each group against the reference, BH). Writes `edger_abundance_stats.csv`. Needs the edgeR package |
 | `--no-confounding` | on | Skip the age and sex confounding diagnostic |
-| `--no-group-tests` | on | Keep the grouping but run no between-group test. Figures stay split and coloured by `--group-column` and every per-sample quantity is still reported; the abundance, functional-marker, ratio, absolute-count, marker-state and compositional comparisons are skipped. Diagnostics are unaffected |
+| `--no-group-tests` | on | Keep the grouping but run no between-group test. Figures stay split and coloured by `--group-column` and every per-sample quantity is still reported; the abundance (with its parametric, `--edger` and `--rank-ancova` forms), functional-marker, ratio, absolute-count, marker-state and compositional comparisons are skipped. Diagnostics are unaffected |
 | `--min-group-n` | 3 | Minimum samples in a group before it is tested. Groups below it appear in `design_feasibility.csv` instead of being tested |
 | `--no-parametric` | on | Skip `parametric_tests.csv` and `posthoc_tests.csv` |
 | `--read-threads` | 1 | Read this many FCS files at once. Reading is the slowest stage and each file is independent. Peak memory scales with it, and results do not change |
@@ -1835,7 +1853,7 @@ front of the list.
 | `--batch-column` | `$DATE` where it varies | Column identifying the acquisition batch. Enables iLISI, Cramér's *V*, per-marker distributional drift and the threshold test grouped by batch |
 | `--correct-batch` | off | **Consequential**: align each marker across batches by monotone quantile mapping. Applied to the embedding and clustering, not to per-sample thresholds, which are batch-local by construction |
 | `--batch-max-cramers-v` | Cohen's large | Refuse correction above this association between batch and group. The default is Cohen's large association, w = 0.5: *V* = 0.5 for two batches or groups, 0.35 for three. Above it, removing the batch and removing the finding are the same operation |
-| `--batch-pooled-goal` | off | Align every batch towards all cells pooled, as before. By default each study group is aligned towards the mean of its batches' quantiles, so a batch holding mostly one group does not pull it towards the other |
+| `--batch-pooled-goal` | off | Align every batch towards all cells pooled, as before. By default each study group is aligned towards the mean of its quantiles over the batches every group was measured in, so a batch holding mostly one group does not pull it towards the other and groups measured in different batches stay on one scale; nothing is corrected where no batch holds every group |
 | `--force-batch-correction` | off | Correct anyway. Recorded in the manifest, and the finding cannot then be attributed to biology |
 | `--batch-method` | `quantile` | How a correction is fitted, never whether one is defensible. `quantile` fits one map per marker over the whole file. `cluster` fits one per marker **per cell type**, which a whole-file map cannot do when a detector shift moves bright and dim populations by different amounts. `cytonorm` is accepted for `cluster`, with a note: it is not the CytoNorm package and uses no anchor samples |
 | `--batch-cluster-k` | 10 | Cell-type clusters to fit for `--batch-method cluster` |
