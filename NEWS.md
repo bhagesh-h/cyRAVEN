@@ -194,9 +194,10 @@ on a panel of more than 40 markers (the cofactor's marker subset) or under
   article's group-test example labelled all twelve samples one group and
   printed `NULL`, and its account of the threshold fallback left out the tail
   gate that comes before the quantile.
-- **`--subsample` and `--p-adjust-display` reject values they do not know.**
-  `--subsample Rare` ran the uniform draw while the manifest recorded "Rare";
-  both now stop the run and name the accepted values.
+- **`--subsample`, `--p-adjust-display` and `--transform` reject values they
+  do not know.** `--subsample Rare` ran the uniform draw while the manifest
+  recorded "Rare", and `--explore-only` read any `--transform` other than
+  `logicle` as arcsinh; all three now stop the run and name the accepted values.
 - **`--rank-ancova` is a group test like the others.** It ran inside the
   confounding diagnostic, so `--no-confounding` (or a failed diagnostic)
   skipped it, and `--no-group-tests` did not.

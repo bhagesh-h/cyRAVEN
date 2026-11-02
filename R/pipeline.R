@@ -152,7 +152,8 @@ run_cyraven_impl <- function(opt) {
   # Options with a fixed set of values are checked here rather than read with a
   # fallback: --subsample Rare silently ran the uniform draw.
   for (.ch in list(list("subsample", c("uniform", "rare")),
-                   list("p_adjust_display", c("raw", "BH")))) {
+                   list("p_adjust_display", c("raw", "BH")),
+                   list("transform", c("arcsinh", "logicle", "none")))) {
     .v <- opt[[.ch[[1]], exact = TRUE]]
     if (!is.null(.v) && !.v %in% .ch[[2]])
       stop("--", gsub("_", "-", .ch[[1]]), " must be one of ",
