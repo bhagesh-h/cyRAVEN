@@ -313,9 +313,11 @@ explore_mfi_composition <- function(cells, feats, prof, subs = NULL, tr = NULL,
           title = paste0("Explore: composition of the embedding", plab),
           subtitle = paste0(format(nrow(cells), big.mark = ","),
                             " cells after the cluster-level QC gate; markers are ",
-                            "each cluster's measured phenotype, not a definition; ",
-                            "on the right, the share of each cluster positive for ",
-                            "every marker"),
+                            "each cluster's measured phenotype, not a definition. ",
+                            "Every number is a percent of all embedded cells: the ",
+                            "group columns split each share by group, and on the ",
+                            "right each tile is the cells of that cluster positive ",
+                            "for the marker"),
           header = "Cluster and measured phenotype")))
       written <- c(written, basename(fz))
   }

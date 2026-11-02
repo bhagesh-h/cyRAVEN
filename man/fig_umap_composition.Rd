@@ -40,15 +40,18 @@ The plot, invisibly, or NULL when there was nothing to draw.
 }
 \description{
 Beside the map, one row per label: its colour, its name, its defining
-markers, a bar of its share of the embedded cells, and its share within each
-study group (up to four; the table carries any number). The catch-all is
-drawn in its own colour beneath everything else and listed last.
+markers, a bar of its share of the embedded cells, and that share split by
+study group (up to four; the table carries any number), with a total row.
+The catch-all is drawn in its own colour beneath everything else and listed
+last.
 }
 \details{
 To the right of that, where \code{comp} carries \verb{pct_pos_<marker>} columns, a grid
-of the percent of each cell type positive for each marker, on the same rows:
-the composition by cell type and, across the row, by marker. A cell type's
-defining markers read near 0 or 100 by construction; the others are what
-the figure adds.
+of the cells of each type positive for each marker. Every number in the
+figure is a percent of ALL embedded cells, so they add up: a row's group
+columns to its share, a group column to that group's share of the cells, a
+marker tile to at most its row's share, and a marker column to the share of
+the embedded cells positive for it. The within-group and within-type
+percentages are \verb{pct_<group>} and \verb{pct_pos_<marker>} in the table.
 }
 \keyword{internal}

@@ -1695,9 +1695,11 @@ run_cyraven_impl <- function(opt) {
           subtitle = paste0(format(nrow(.ac), big.mark = ","), " embedded cells, ",
                             "each under its most specific population, so the ",
                             "shares sum to 100%; defining markers from the ",
-                            "population specification; on the right, the share ",
-                            "of each population above its own sample's ",
-                            "threshold for every marker"))
+                            "population specification. Every number is a percent ",
+                            "of all embedded cells: the group columns split each ",
+                            "share by group, and on the right each tile is the ",
+                            "cells of that type above their own sample's ",
+                            "threshold for the marker"))
         if ("timepoint" %in% names(.ac)) {
           .tps <- sort(unique(stats::na.omit(as.character(.ac$timepoint))))
           .tps <- .tps[nzchar(.tps)]

@@ -194,6 +194,15 @@ on a panel of more than 40 markers (the cofactor's marker subset) or under
   article's group-test example labelled all twelve samples one group and
   printed `NULL`, and its account of the threshold fallback left out the tail
   gate that comes before the quantile.
+- **`umap_composition.png` adds up.** Its group columns were each
+  population's share within that group, which sum down a group and not across
+  to the population's share, and its marker grid was the percent of each cell
+  type positive (0 to 100 per row), a third unit. Every number is now a percent
+  of all embedded cells: the group columns split each share by group, a total
+  row gives each group's share of the cells, and each marker tile is the cells
+  of that type positive for the marker, with the marker's total beneath.
+  `population_composition.csv` gains `pct_of_embedded_<group>`; its
+  within-group `pct_<group>` and within-type `pct_pos_<marker>` are unchanged.
 - **HLA-DR+ NK cells are NK cells.** The shipped config's NK rule required
   HLA-DR below to keep CD16+ monocytes out, which also excluded activated
   HLA-DR+ NK cells; with Dendritic cells requiring CD56 below they were counted
