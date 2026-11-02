@@ -64,6 +64,11 @@ test_that("composition shares sum to 100 with the catch-all last", {
   expect_identical(comp$population_label[nrow(comp)], "Other CD45+")
   for (g in c("HC", "S1", "S2"))
     expect_equal(sum(comp[[paste0("pct_", g)]]), 100, tolerance = 1e-3)
+  # The same cells as a share of ALL embedded cells add up across a row to the
+  # population's share, and the group totals to 100: what the figure draws.
+  ge <- paste0("pct_of_embedded_", c("HC", "S1", "S2"))
+  expect_equal(rowSums(comp[ge]), comp$pct_of_embedded, tolerance = 2e-3)
+  expect_equal(sum(colSums(comp[ge])), 100, tolerance = 2e-3)
   expect_identical(sum(comp$cells), nrow(cells))
   # Weighted shares follow sampling_weight: doubling one label's weight
   # doubles its odds against the rest.

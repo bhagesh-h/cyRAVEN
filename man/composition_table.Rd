@@ -38,7 +38,11 @@ figures list the cell types in the same order as the pooled one.}
 of each label positive for each marker; appended as \verb{pct_pos_<marker>}.}
 }
 \value{
-data.frame, largest share first and the catch-all last.
+data.frame, largest share first and the catch-all last. With a
+group column, \verb{pct_<group>} is the label's share WITHIN that group (each
+such column sums to 100 down) and \verb{pct_of_embedded_<group>} is the same
+cells as a share of ALL embedded cells (summing across a row to
+\code{pct_of_embedded}).
 }
 \description{
 Each embedded cell carries ONE label, its most specific population (or its

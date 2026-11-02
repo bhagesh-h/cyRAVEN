@@ -412,7 +412,11 @@ fig_mfi_dotplot <- function(summ, outfile, label_col = "population",
 #'   figures list the cell types in the same order as the pooled one.
 #' @param marker_pct Optional numeric matrix, labels x markers, of the percent
 #'   of each label positive for each marker; appended as `pct_pos_<marker>`.
-#' @return data.frame, largest share first and the catch-all last.
+#' @return data.frame, largest share first and the catch-all last. With a
+#'   group column, `pct_<group>` is the label's share WITHIN that group (each
+#'   such column sums to 100 down) and `pct_of_embedded_<group>` is the same
+#'   cells as a share of ALL embedded cells (summing across a row to
+#'   `pct_of_embedded`).
 #' @keywords internal
 composition_table <- function(cells, label_col = "population_label",
                               phenotype = NULL, group_col = NULL,
@@ -451,11 +455,21 @@ composition_table <- function(cells, label_col = "population_label",
     g <- as.character(d[[group_col]])
     ok <- !is.na(g) & nzchar(g)
     gl <- sort(unique(g[ok]))
-    if (length(gl) > 1L) for (G in gl) {
-      i <- ok & g == G
-      tg <- tapply(w[i], factor(lab[i], levels = lv), sum)
-      tg[is.na(tg)] <- 0
-      out[[paste0("pct_", G)]] <- round(100 * as.numeric(tg) / sum(w[i]), 3)
+    if (length(gl) > 1L) {
+      for (G in gl) {
+        i <- ok & g == G
+        tg <- tapply(w[i], factor(lab[i], levels = lv), sum)
+        tg[is.na(tg)] <- 0
+        out[[paste0("pct_", G)]] <- round(100 * as.numeric(tg) / sum(w[i]), 3)
+      }
+      # The same cells as a part of ALL embedded cells: across a row these sum
+      # to pct_of_embedded, and down a column to the group's share of the cells.
+      for (G in gl) {
+        i <- ok & g == G
+        tg <- tapply(w[i], factor(lab[i], levels = lv), sum)
+        tg[is.na(tg)] <- 0
+        out[[paste0("pct_of_embedded_", G)]] <- round(100 * as.numeric(tg) / sum(w), 3)
+      }
     }
   }
   if (!is.null(marker_pct) && length(marker_pct)) {
@@ -529,15 +543,18 @@ cell_marker_positivity <- function(cells, pops, markers) {
 #' The shared embedding coloured by label, with a legend of composition
 #'
 #' Beside the map, one row per label: its colour, its name, its defining
-#' markers, a bar of its share of the embedded cells, and its share within each
-#' study group (up to four; the table carries any number). The catch-all is
-#' drawn in its own colour beneath everything else and listed last.
+#' markers, a bar of its share of the embedded cells, and that share split by
+#' study group (up to four; the table carries any number), with a total row.
+#' The catch-all is drawn in its own colour beneath everything else and listed
+#' last.
 #'
 #' To the right of that, where `comp` carries `pct_pos_<marker>` columns, a grid
-#' of the percent of each cell type positive for each marker, on the same rows:
-#' the composition by cell type and, across the row, by marker. A cell type's
-#' defining markers read near 0 or 100 by construction; the others are what
-#' the figure adds.
+#' of the cells of each type positive for each marker. Every number in the
+#' figure is a percent of ALL embedded cells, so they add up: a row's group
+#' columns to its share, a group column to that group's share of the cells, a
+#' marker tile to at most its row's share, and a marker column to the share of
+#' the embedded cells positive for it. The within-group and within-type
+#' percentages are `pct_<group>` and `pct_pos_<marker>` in the table.
 #'
 #' @param cells Embedded cell table with `umap_1`, `umap_2` and the label column.
 #' @param comp Output of [composition_table()], with a `colour` column.
@@ -588,9 +605,10 @@ fig_umap_composition <- function(cells, comp, outfile,
   ph <- if ("phenotype" %in% names(comp)) comp$phenotype else rep("", nr)
   ph[is.na(ph)] <- ""
   ph <- ifelse(nchar(ph) > 56, paste0(substr(ph, 1, 55), "..."), ph)
-  gcols <- grep("^pct_", setdiff(names(comp), c("pct_of_embedded",
-    "pct_median_per_sample", "pct_q1_per_sample", "pct_q3_per_sample")), value = TRUE)
-  gcols <- gcols[!startsWith(gcols, "pct_pos_")]
+  # Every number in the legend and the grid is a percent of ALL embedded cells,
+  # so they add up: a row's group columns to its share, a group column down to
+  # that group's share of the cells, and no marker tile above its row's share.
+  gcols <- grep("^pct_of_embedded_.", names(comp), value = TRUE)
   mcols <- grep("^pct_pos_", names(comp), value = TRUE)
   mcols <- mcols[vapply(mcols, function(k) any(is.finite(comp[[k]])), logical(1))]
   if (length(gcols) > 4L) gcols <- character(0)
@@ -600,16 +618,17 @@ fig_umap_composition <- function(cells, comp, outfile,
   # A group column is as wide as its name needs, wrapped onto two lines: study
   # groups are routinely called "GvHD grade 1" and "GvHD grade 3", and cut to a
   # fixed width the two headers read identically.
-  gname <- vapply(sub("^pct_", "", gcols), function(g)
+  gname <- vapply(sub("^pct_of_embedded_", "", gcols), function(g)
     paste(strwrap(g, width = max(8L, ceiling(nchar(g) / 2) + 2L)), collapse = "\n"),
     character(1))
   gw <- vapply(gname, function(g) max(7.5, max(nchar(strsplit(g, "\n")[[1]])) + 2),
                numeric(1))
   x_g <- x_pct + 7.5 + c(0, cumsum(gw))[seq_along(gcols)]
   W <- x_pct + 7.5 + sum(gw) + 0.5
-  rows <- data.frame(y = rev(seq_len(nr)), line1 = line1, ph = ph,
+  rows <- data.frame(y = rev(seq_len(nr)) + 1L, line1 = line1, ph = ph,
                      pct = comp$pct_of_embedded, col = unname(pal[comp[[label_col]]]),
                      stringsAsFactors = FALSE)
+  nr <- nr + 1L                         # a total row beneath the cell types
   mx <- max(rows$pct, 1e-9)
   pl <- ggplot(rows) +
     geom_point(aes(x = x_sw, y = y), shape = 15, size = 5.2, colour = rows$col) +
@@ -624,12 +643,25 @@ fig_umap_composition <- function(cells, comp, outfile,
     annotate("text", x = x_tx, y = nr + 0.7, label = header, hjust = 0,
              vjust = 0, size = 3, fontface = "bold", colour = "grey30") +
     annotate("text", x = x_bar, y = nr + 0.7, label = "Share of embedded cells",
-             hjust = 0, vjust = 0, size = 3, fontface = "bold", colour = "grey30")
+             hjust = 0, vjust = 0, size = 3, fontface = "bold", colour = "grey30") +
+    annotate("segment", x = x_tx, xend = W - 0.3, y = 1.55, yend = 1.55,
+             colour = "grey60", linewidth = 0.3) +
+    annotate("text", x = x_tx, y = 1, label = "All embedded cells", hjust = 0,
+             size = 3.2, fontface = "bold", colour = "grey10") +
+    annotate("text", x = x_pct, y = 1, label = sprintf("%.1f%%", sum(rows$pct)),
+             hjust = 0, size = 3, fontface = "bold", colour = "grey10")
+  if (length(gcols))
+    pl <- pl + annotate("text", x = min(x_g), y = nr + 0.7 + 0.62,
+                        label = "of which, by group (% of all embedded cells)",
+                        hjust = 0, vjust = 0, size = 2.8, fontface = "italic",
+                        colour = "grey35")
   for (k in seq_along(gcols)) {
     gv <- comp[[gcols[k]]]
     pl <- pl +
       annotate("text", x = x_g[k], y = rows$y, label = sprintf("%.1f%%", gv),
                hjust = 0, size = 2.8, colour = "grey20") +
+      annotate("text", x = x_g[k], y = 1, label = sprintf("%.1f%%", sum(gv, na.rm = TRUE)),
+               hjust = 0, size = 2.8, fontface = "bold", colour = "grey10") +
       annotate("text", x = x_g[k], y = nr + 0.7, label = gname[[k]], hjust = 0,
                vjust = 0, size = 3, fontface = "bold", colour = "grey30",
                lineheight = 0.9)
@@ -643,12 +675,22 @@ fig_umap_composition <- function(cells, comp, outfile,
     mk <- sub("^pct_pos_", "", mcols)
     cw <- 4.6
     x_m <- W + 1.2 + cw * (seq_along(mk) - 0.5)
-    hm <- data.frame(x = rep(x_m, each = nr), y = rep(rows$y, length(mk)),
-                     v = as.numeric(unlist(comp[mcols], use.names = FALSE)))
-    hm$txt <- ifelse(is.finite(hm$v), sprintf("%.0f", hm$v), "")
-    hm$ink <- ifelse(is.finite(hm$v) & hm$v > 55, "white", "grey15")
+    # Each tile is the share of ALL embedded cells that are this cell type and
+    # above their own sample's threshold for the marker: the row's share times
+    # the percent of the cell type positive. A column sums to the share of the
+    # embedded cells positive for that marker.
+    nct <- nrow(comp)
+    pp <- as.numeric(unlist(comp[mcols], use.names = FALSE))
+    hm <- data.frame(x = rep(x_m, each = nct), y = rep(rows$y, length(mk)),
+                     v = rep(comp$pct_of_embedded, length(mk)) * pp / 100)
+    hm$txt <- ifelse(!is.finite(hm$v), "",
+              ifelse(hm$v > 0 & hm$v < 0.05, "<0.1", sprintf("%.1f", hm$v)))
+    vmax <- max(hm$v, 1e-9, na.rm = TRUE)
+    hm$ink <- ifelse(is.finite(hm$v) & hm$v > 0.55 * vmax, "white", "grey15")
+    tot_m <- vapply(mcols, function(k) sum(comp$pct_of_embedded * comp[[k]] / 100,
+                                           na.rm = TRUE), numeric(1))
     hdr <- max(1.05, 0.16 * max(nchar(mk)) + 0.75)
-    mtitle <- "% of the cell type positive for each marker"
+    mtitle <- "% of all embedded cells that are the cell type and positive for the marker"
     pl <- pl +
       geom_tile(data = hm, aes(x = x, y = y, fill = v), width = cw * 0.94,
                 height = 0.84, colour = "white", linewidth = 0.3,
@@ -657,7 +699,9 @@ fig_umap_composition <- function(cells, comp, outfile,
                 size = 2.5, inherit.aes = FALSE) +
       scale_fill_gradientn(colours = c("#f3f5f8", "#c6dbef", "#6baed6",
                                        "#2171b5", "#08306b"),
-                           limits = c(0, 100), na.value = "white", guide = "none") +
+                           limits = c(0, vmax), na.value = "white", guide = "none") +
+      annotate("text", x = x_m, y = 1, label = sprintf("%.1f", tot_m), size = 2.5,
+               fontface = "bold", colour = "grey10") +
       annotate("text", x = x_m - cw * 0.3, y = nr + 0.7, label = mk, angle = 50,
                hjust = 0, vjust = 0, size = 2.8, fontface = "bold",
                colour = "grey30") +
