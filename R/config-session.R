@@ -3,12 +3,25 @@
 
 #' Write the derived values out as an editable YAML config
 #'
-#' Every threshold carries its source and a review flag. The config is an
-#' OVERRIDE mechanism: the script derives everything at runtime and runs without
-#' it. Values under `derived_from_batch` document what THIS batch produced --
-#' editing them changes future runs; deleting the file changes nothing.
+#' The config is an OVERRIDE mechanism: the script derives everything at
+#' runtime and runs without it. Values under `derived_from_batch` document what
+#' THIS batch produced -- editing them changes future runs; deleting the file
+#' changes nothing.
+#'
+#' THE DERIVED CUTS ARE DOCUMENTED, NOT DECLARED. A value under `thresholds:`
+#' is a fixed cut applied to every sample of the next run. The cuts this run
+#' derived are per sample, and this used to write each marker's cut from the
+#' first sample that had one there, so running with the written config
+#' replaced every sample's own cut by one sample's. They are now summarised
+#' under `thresholds_derived:` (median, range, sources, how many need review),
+#' which no run reads; copying a value into `thresholds:` is how an analyst
+#' fixes a cut. The transform is recorded as the one used, since every cut is
+#' on its scale.
 #' @param path File path.
-#' @param derived The derived.
+#' @param derived Per-marker summary of the derived cuts, written under
+#'   `thresholds_derived`.
+#' @param transform_method The transform the cuts are on (`"arcsinh"`,
+#'   `"logicle"`).
 #' @param cofactors The cofactors.
 #' @param spec Population specification mapping population name to marker directions. See [default_population_spec()]. Default `default_population_spec()`.
 #' @param blocks Functional-marker blocks. See [default_functional_blocks()]. Default `default_functional_blocks()`.
@@ -19,23 +32,25 @@
 write_config <- function(path, derived, cofactors, spec = default_population_spec(),
                          blocks = default_functional_blocks(),
                          colmap = default_column_map(), valmap = default_value_map(),
-                         colors = default_colors()) {
+                         colors = default_colors(), transform_method = "arcsinh") {
   cfg <- list(
     meta = list(
       written_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%S"),
       note = paste("Auto-generated from a derivation run. All values are OPTIONAL",
                    "overrides; the script derives them at runtime when absent.",
-                   "Thresholds are on the asinh scale using the cofactor below.")),
-    transform = list(method = "asinh",
+                   "thresholds_derived summarises the per-sample cuts on the",
+                   transform_method, "scale and is not read; a cut copied into",
+                   "thresholds: is applied to every sample.")),
+    transform = list(method = transform_method,
                      cofactor = list(mode = "auto",
                                      derived_from_batch = as.list(cofactors))),
     gating = list(
       scatter_gate = list(mode = "auto",
-                          note = "lower FSC bound = deepest log10 FSC-A density valley"),
+                          note = "lower FSC bound = lowest qualifying log10 FSC-A density valley"),
       singlet_band = list(mode = "auto", mad_k = 3,
                           note = "FSC-H/FSC-A above median - k*MAD within the scatter gate"),
       staining_qc = list(min_cd45_pct_of_live = 5)),
-    thresholds = derived,
+    thresholds_derived = derived,
     populations = spec,
     functional_blocks = blocks,
     metadata = list(column_map = colmap, value_translations = valmap),

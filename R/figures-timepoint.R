@@ -90,8 +90,9 @@ fig_timepoint_trajectories <- function(freq, smap, outfile,
                        "timepoint -- so read the direction of each line, not",
                        "the spread between them"),
       caption = paste("Descriptive only: no test is drawn. The timepoints are",
-                      "the same patients, and there are too few complete",
-                      "triplets for a paired test to be meaningful."),
+                      "the same patients, so the test is a paired one,",
+                      "paired_comparison_stats.csv under --paired-column.",
+                      if (log_scale) "Values of 0 cannot sit on the log axis and are left out."),
       x = NULL, y = value_col, colour = "patient") +
     theme_cyto() + theme_panel_borders()
   if (log_scale)
@@ -182,8 +183,12 @@ fig_subset_balance <- function(freq, smap, outfile,
 #' @param outfile Destination PNG.
 #' @param max_pops Population cap, largest first. `Inf` by default, for the
 #'   reason given in [fig_timepoint_trajectories()].
+#' @param scale_label Name of the scale the intensities are on, the run's
+#'   `transform$label` ("asinh intensity", "logicle intensity"). Default
+#'   `"asinh intensity"`.
 #' @keywords internal
-fig_marker_by_timepoint <- function(mfi, smap, outfile, max_pops = Inf) {
+fig_marker_by_timepoint <- function(mfi, smap, outfile, max_pops = Inf,
+                                    scale_label = "asinh intensity") {
   if (is.null(mfi) || !nrow(mfi) || !"median_asinh" %in% names(mfi))
     return(invisible(NULL))
   if (is.null(smap) || !"timepoint" %in% names(smap)) return(invisible(NULL))
@@ -226,7 +231,7 @@ fig_marker_by_timepoint <- function(mfi, smap, outfile, max_pops = Inf) {
                                    "intensity; split by timepoint rather than",
                                    "pooled, so a shift shared by every patient",
                                    "is visible"),
-                  x = NULL, y = NULL, fill = "median\n(asinh)",
+                  x = NULL, y = NULL, fill = paste0("median\n", scale_label),
                   caption = paste0("n = patients sampled at that visit (",
                                    paste(sprintf("%s: %d", npt$timepoint, npt$n),
                                          collapse = "; "), ")")) +

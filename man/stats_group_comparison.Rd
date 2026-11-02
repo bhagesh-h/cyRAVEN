@@ -41,12 +41,16 @@ WHY THESE TESTS: group sizes in this design are single-digit to low-double-digit
 and cell-abundance distributions are right-skewed with outliers, so normality is
 not a safe assumption and a t-test's nominal p-value would be unreliable.
 Wilcoxon rank-sum (Mann-Whitney) assumes only independence and ordinal
-comparability. Kruskal-Wallis is its multi-group extension. Both are exact-rank
-based, so they behave sensibly at n = 6.
+comparability. Its p-value is computed exactly, ties included (see
+\code{\link[=rank_sum_p]{rank_sum_p()}}), so it behaves sensibly at n = 6. Kruskal-Wallis is its
+multi-group extension; its p-value is R's chi-squared approximation, which is
+rough at a handful of donors per group, and it is read as an omnibus screen
+before the pairwise columns.
 
 WHY BOTH RAW AND ADJUSTED p: testing 12 populations x 2 groups is 24 tests, at
-which ~1 in 5 chance of a spurious p < 0.05 somewhere is expected under the
-null. Reporting only raw p invites reading noise as signal; reporting only
+which, under the null and taking the tests as independent, about one
+p < 0.05 (1.2) is expected and the chance of at least one is
+1 - 0.95^24 = 71\%. Reporting only raw p invites reading noise as signal; reporting only
 adjusted p hides a real trend in an underpowered study. Both are written, with
 Benjamini-Hochberg FDR (not Bonferroni) because these tests are correlated and
 the goal is a ranked shortlist, not a single confirmatory decision.

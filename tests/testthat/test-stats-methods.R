@@ -87,3 +87,34 @@ test_that("the CLR composition is the exclusive labels, which partition CD45+", 
   expect_equal(setNames(fx$count, fx$population),
                c(`CD4 T` = 40L, `Other CD45+` = 40L, T = 20L))
 })
+
+test_that("the catalogue lists as used exactly what the run wrote", {
+  # The parametric tests are written by default beside the rank tests; the
+  # catalogue once listed them as not used, contradicting the run's own files.
+  two <- cyRAVEN:::statistical_methods_table(
+    n_groups = 2L, ran = list(group_tests = TRUE, parametric = TRUE))
+  role <- function(tb, m) tb$role[tb$method == m]
+  expect_equal(role(two, "Student's t-test"), "used")
+  expect_equal(role(two, "Welch's t-test"), "used")
+  expect_equal(role(two, "One-way ANOVA with Tukey"), "not used")
+
+  three <- cyRAVEN:::statistical_methods_table(
+    n_groups = 3L, ran = list(group_tests = TRUE, parametric = TRUE))
+  expect_equal(role(three, "One-way ANOVA with Tukey"), "used")
+  expect_equal(role(three, "Dunn's test"), "used")
+
+  off <- cyRAVEN:::statistical_methods_table(
+    n_groups = 2L, ran = list(group_tests = TRUE, parametric = FALSE))
+  expect_equal(role(off, "Welch's t-test"), "not used")
+  expect_match(off$rationale[off$method == "Welch's t-test"], "--no-parametric")
+
+  none <- cyRAVEN:::statistical_methods_table(
+    n_groups = 2L, ran = list(group_tests = FALSE))
+  expect_equal(role(none, "Wilcoxon rank-sum (Mann-Whitney U)"), "not used")
+  expect_equal(role(none, "Cliff's delta"), "not used")
+
+  # --external-labels turns labels into gates; it never ran diffcyt.
+  expect_false(any(grepl("external-labels", two$rationale, fixed = TRUE)))
+  expect_equal(role(cyRAVEN:::statistical_methods_table(n_groups = 2L, paired = TRUE),
+                    "Wilcoxon signed-rank"), "used")
+})

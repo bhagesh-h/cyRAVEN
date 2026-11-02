@@ -240,9 +240,13 @@ write_gating_ml <- function(polygons, path, transform, id_col = "label",
                                           xml_escape(tid(m)), '"') else "", '>')
 
   n_gates <- 0L
+  incomplete <- character(0)
   for (id in unique(polygons[[id_col]])) {
     d <- polygons[polygons[[id_col]] == id, , drop = FALSE]
-    prev <- NULL
+    # A strategy is exported whole or not at all. Skipping one level would
+    # leave the next parented on the level above it, a gate that selects a
+    # different population on the instrument than the one scored here.
+    lvls <- list(); whole <- TRUE
     for (dp in sort(unique(d$depth))) {
       v <- d[d$depth == dp, , drop = FALSE]
       v <- v[order(v$vertex), , drop = FALSE]
@@ -254,7 +258,13 @@ write_gating_ml <- function(polygons, path, transform, id_col = "label",
       } else tryCatch(polygon_to_linear(cbind(v[[x_col]], v[[y_col]]),
                                         transform, mx, my, n_per_edge),
                       error = function(e) NULL)
-      if (is.null(lin)) next
+      if (is.null(lin)) { whole <- FALSE; break }
+      lvls[[length(lvls) + 1L]] <- list(dp = dp, mx = mx, my = my, lin = lin)
+    }
+    if (!whole) { incomplete <- c(incomplete, as.character(id)); next }
+    prev <- NULL
+    for (lv in lvls) {
+      dp <- lv$dp; mx <- lv$mx; my <- lv$my; lin <- lv$lin
       gid <- paste0(safe_id(id), "_L", dp)
       L <- c(L, paste0('  <gating:PolygonGate gating:id="', xml_escape(gid), '"',
                        if (!is.null(prev))
@@ -278,11 +288,16 @@ write_gating_ml <- function(polygons, path, transform, id_col = "label",
       n_gates <- n_gates + 1L
     }
   }
+  if (length(incomplete))
+    log_msg("  WARNING ", basename(path), ": ", length(incomplete),
+            " strategy/strategies not exported, a level could not be expressed ",
+            "on the instrument's scale: ", paste(incomplete, collapse = ", "))
   if (!n_gates) return(invisible(NULL))
   L <- c(L, '</gating:Gating-ML>')
   writeLines(L, path)
   log_msg("wrote ", basename(path), " (", n_gates, " polygon gate(s) in ",
-          length(unique(polygons[[id_col]])), " strategy/strategies, Gating-ML 2.0)")
+          length(unique(polygons[[id_col]])) - length(incomplete),
+          " strategy/strategies, Gating-ML 2.0)")
   invisible(path)
 }
 
@@ -332,9 +347,11 @@ polygons_linear_table <- function(polygons, transform, id_col = "label",
                                   x_col = "x_transformed", y_col = "y_transformed",
                                   n_per_edge = 24L) {
   if (is.null(polygons) || !nrow(polygons)) return(NULL)
-  rows <- list()
+  rows <- list(); incomplete <- character(0)
   for (id in unique(polygons[[id_col]])) {
     d <- polygons[polygons[[id_col]] == id, , drop = FALSE]
+    # Whole strategies only, for the reason given in write_gating_ml().
+    srows <- list()
     for (dp in sort(unique(d$depth))) {
       v <- d[d$depth == dp, , drop = FALSE]
       v <- v[order(v$vertex), , drop = FALSE]
@@ -342,14 +359,20 @@ polygons_linear_table <- function(polygons, transform, id_col = "label",
       lin <- tryCatch(polygon_to_linear(cbind(v[[x_col]], v[[y_col]]),
                                         transform, mx, my, n_per_edge),
                       error = function(e) NULL)
-      if (is.null(lin)) next
-      rows[[length(rows) + 1L]] <- data.frame(
+      if (is.null(lin)) { srows <- NULL; break }
+      srows[[length(srows) + 1L]] <- data.frame(
         strategy = as.character(id), depth = dp, marker_x = mx, marker_y = my,
         vertex = seq_len(nrow(lin)),
         x_linear = round(lin[, 1L], 4), y_linear = round(lin[, 2L], 4),
         row.names = NULL, stringsAsFactors = FALSE)
     }
+    if (is.null(srows)) incomplete <- c(incomplete, as.character(id))
+    else rows <- c(rows, srows)
   }
+  if (length(incomplete))
+    log_msg("  WARNING linear vertex table: ", length(incomplete),
+            " strategy/strategies left out, a level could not be expressed in ",
+            "instrument units: ", paste(incomplete, collapse = ", "))
   if (!length(rows)) return(NULL)
   do.call(rbind, rows)
 }

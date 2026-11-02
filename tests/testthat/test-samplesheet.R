@@ -183,3 +183,13 @@ test_that("the config template is written once and never overwritten", {
   # A second call must refuse rather than clobber an edited config.
   expect_error(write_config_template(f), "already exists")
 })
+
+test_that("counts are read in the sheet's own number locale", {
+  # Spreadsheets export what a cell displays; "1,500" and "1.500" are 1500 in
+  # their own conventions, and both used to read as 1.5.
+  expect_equal(parse_sheet_number(c("1,500", "2,345.5", "6,5", "800"), ","),
+               c(1500, 2345.5, 6.5, 800))
+  expect_equal(parse_sheet_number(c("1.500", "2.345,5", "6,5", "800"), ";"),
+               c(1500, 2345.5, 6.5, 800))
+  expect_true(is.na(parse_sheet_number("n/a", ",")))
+})

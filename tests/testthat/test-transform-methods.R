@@ -99,10 +99,17 @@ test_that("batch correction refuses when batch is confounded with group", {
   expect_match(r$reason, "^refused")
   expect_equal(r$cramers_v, 1, tolerance = 1e-8)
 
-  # Overridable, and the override is recorded rather than silent.
+  # Overridable, and the override is recorded rather than silent. Under the
+  # default group goal there is still nothing to align: each group's only batch
+  # would be mapped onto itself, so it says so instead of reporting a
+  # correction it did not make. The pooled goal does align, and is forced.
   f <- suppressMessages(correct_batch(tm, batch, group, force = TRUE))
-  expect_true(f$corrected)
-  expect_match(f$reason, "FORCED")
+  expect_false(f$corrected)
+  expect_match(f$reason, "no batch holds cells of every group")
+  fp <- suppressMessages(correct_batch(tm, batch, group, force = TRUE,
+                                       goal = "pooled"))
+  expect_true(fp$corrected)
+  expect_match(fp$reason, "FORCED")
 })
 
 test_that("batch correction proceeds when batch and group are separable", {
@@ -150,4 +157,26 @@ test_that("each group is aligned to its own distribution, so a group difference 
   # the batch shift is gone within each group
   within <- tapply(g$tmat[grp == "ctrl", "CD3"], bat[grp == "ctrl"], stats::median)
   expect_lt(abs(diff(within)), 0.15)
+})
+
+test_that("groups measured in different batches stay on one scale", {
+  # Identical cells in every group, batch 2 one unit high; group A was measured
+  # in batch 1 only. Aligned to their own batches, B and C moved half a unit
+  # away from A.
+  set.seed(3)
+  mk <- function(g, b, n = 2000) data.frame(x = rnorm(n, 2, 0.5) + (b == "b2"),
+                                            group = g, batch = b)
+  d <- rbind(mk("A", "b1"), mk("A", "b1"), mk("B", "b1"), mk("B", "b2"),
+             mk("C", "b1"), mk("C", "b2"))
+  y <- align_within_groups(d$x, d$batch, d$group)
+  med <- tapply(y, d$group, stats::median)
+  expect_lt(max(med) - min(med), 0.05)
+  expect_equal(common_batches(d$batch, d$group), "b1")
+
+  # No batch holding every group: nothing is corrected, and it says why.
+  d3 <- rbind(mk("A", "b1"), mk("B", "b2"))
+  r <- suppressMessages(correct_batch(cbind(M = d3$x), d3$batch, d3$group,
+                                      force = TRUE))
+  expect_false(r$corrected)
+  expect_match(r$reason, "no batch holds cells of every group")
 })

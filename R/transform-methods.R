@@ -250,3 +250,20 @@ make_transform <- function(method = c("arcsinh", "logicle", "none"),
          g(y)
        })
 }
+
+#' Rebuild a transform from its stored method and parameters
+#'
+#' The inverse of keeping `list(method, params)` from a [make_transform()]
+#' object, which is what a baseline and a saved UMAP model store so a later
+#' run can carry its values onto their scale.
+#' @param tr list with `method` and `params`, or NULL.
+#' @return a transform object, or NULL when it cannot be rebuilt.
+#' @keywords internal
+rebuild_transform <- function(tr) {
+  if (is.null(tr) || is.null(tr$method)) return(NULL)
+  tryCatch(switch(tr$method,
+    arcsinh = make_transform("arcsinh", cofactor = tr$params$cofactor,
+                             per_marker = tr$params$per_marker),
+    logicle = make_transform("logicle", logicle = tr$params),
+    none = make_transform("none"), NULL), error = function(e) NULL)
+}

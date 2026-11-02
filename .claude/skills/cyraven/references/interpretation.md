@@ -24,7 +24,8 @@ clog, a spike a bubble, a step a settings change.
 **Nothing is removed.** Read `pct_delta_if_cleaned` in the impact table against
 `u_pct_points` for the same population: a visible anomaly that moves no
 population by more than its own gate uncertainty does not need re-acquiring.
-`--drop-unstable-events` performs the exclusion and changes every count.
+`--drop-unstable-events` performs the exclusion and changes every count;
+`--peacoqc` removes PeacoQC's flagged events instead (`peacoqc_summary.csv`).
 
 A file with no Time channel is reported as such, not as stable.
 
@@ -245,7 +246,7 @@ not cells.
 
 Read the columns in this order:
 
-1. **`p_adj`** (Benjamini-Hochberg, within test family). Not `p_value`.
+1. **`p_adj_BH`** (Benjamini-Hochberg, within test family). Not `p_value`.
 2. **`cliffs_delta`**: how large the difference is relative to between-donor
    spread.
 3. **`difference_over_gate_u`**: how many multiples of the gate's own
@@ -435,9 +436,12 @@ only quantity that isolates their relative change.
 **`confounding_diagnostics.csv`**
 
 A variable confounds only when it **both** differs between groups **and**
-associates with the outcome. Either alone is inert, and flagging either alone
-would raise an alarm on any study with unequal age distributions. Both conditions
-are reported, with a `confounder_risk` verdict.
+associates with the outcome **within** the groups. Either alone is inert, and
+flagging either alone would raise an alarm on any study with unequal age
+distributions. Both conditions are reported, with a `confounder_risk` verdict.
+The outcome association is a partial Spearman correlation with group held fixed
+(a rank *F* test for a categorical covariate): tested across pooled groups, a
+real group difference would make any unbalanced covariate look associated.
 
 Adjustment is opt-in and deliberately separate. At single-digit *n* per group a
 model carrying group with age and sex spends most residual degrees of freedom on
@@ -525,7 +529,9 @@ Cramér's *V* is high, in which case neither separates a reagent lot from biolog
 `--correct-batch` aligns each marker across batches by monotone quantile mapping;
 monotonicity means within-batch cell ordering cannot change, so location and
 scale move without structure being invented. Each study group is aligned
-towards the mean of its batches' quantiles, so a group difference survives.
+towards the mean of its quantiles over the batches every group was measured
+in, so a group difference survives and groups measured in different batches
+stay on one scale; where no batch holds every group nothing is corrected.
 **Above `--batch-max-cramers-v` (default: Cohen's large association, 0.5 for two
 levels) correction is refused**, because at that level of confounding
 removing the batch effect and removing the biological effect are the same
@@ -542,7 +548,8 @@ computed across all samples.
 
 **`specification_conformance.csv`**: requires `--baseline`.
 
-Every check above is internal to one run. `threshold_scale_qc.csv` compares each
+Every check above is internal to one run. The scale check (`scale_outlier` in
+`thresholds_used.csv`, summarised in `threshold_scale_qc.csv`) compares each
 threshold against the other samples of the same panel, which finds a single
 deviant tube. It cannot find a cohort that moved as a whole, because the
 leave-one-out peer median moves with it. After a laser service, a reagent lot
@@ -557,9 +564,11 @@ A failure is not a statement that the run is bad. It says the two runs no longer
 place their cuts in the same place, so their frequencies are not the same
 measurement and should not be pooled until someone has looked.
 
-Two verdicts are withdrawals rather than measurements: a transform differing from
-the baseline's puts thresholds on a different scale, and a redefined population is
-a different population. Both read `not comparable`.
+Cuts are compared in instrument units, carried through this run's transform and
+the baseline's, because cofactors and logicle widths are re-derived per run.
+Two verdicts are withdrawals rather than measurements: a cut whose transforms
+differ and cannot both be rebuilt, and a redefined population, which is a
+different population. Both read `not comparable`.
 
 The baseline holds summaries and the specification text (no event-level or
 patient data), so it belongs in version control beside the config it describes.

@@ -153,9 +153,10 @@ gap, the other on a shallow dip a slightly different histogram would have missed
 `threshold_uncertainty.csv` supplies that quantity. See
 `interpretation.md` §3.
 
-`threshold_scale_qc.csv` reports, per panel and marker, the median threshold
-across samples and the robust *z* of each deviation. Flagged rows are the first
-candidates for review. This check is **within run**: it finds one deviant tube
+`thresholds_used.csv` carries, per sample and marker, the leave-one-out
+`peer_median`, the robust *z* of the deviation from it and `scale_outlier`
+(*z* > 3.5); where any cut is an outlier, `threshold_scale_qc.csv` summarises
+each panel and marker. Flagged rows are the first candidates for review. This check is **within run**: it finds one deviant tube
 among sound ones and is blind to a cohort that moved together, because the
 leave-one-out peer median moves with it. For that case use `--write-baseline` and
 `--baseline`.

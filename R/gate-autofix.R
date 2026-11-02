@@ -198,3 +198,15 @@ peer_cut_replacements <- function(thr, z_max = 3.5, min_peers = 3L,
   }
   if (length(out)) do.call(rbind, out) else NULL
 }
+
+#' Position of each sample and marker in the per-sample threshold rows
+#'
+#' @param thr_rows list of one-row data frames carrying `sample_id` and
+#'   `marker`, as the pipeline collects them.
+#' @return integer positions named "<sample_id>\\r<marker>".
+#' @keywords internal
+thr_row_index <- function(thr_rows) {
+  if (!length(thr_rows)) return(integer(0))
+  setNames(seq_along(thr_rows), vapply(thr_rows, function(r)
+    paste(r$sample_id[1], r$marker[1], sep = "\r"), character(1)))
+}

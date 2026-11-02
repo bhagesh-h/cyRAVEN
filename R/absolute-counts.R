@@ -175,8 +175,16 @@ match_absolute_counts_samples <- function(ac, smap) {
   strip <- function(x) norm_id(sub("\\s+copy$", "", sub("[.](fcs|FCS)$", "", trimws(x))))
   key <- strip(ac$sample_raw)
 
-  by_patient <- if ("patient_id" %in% names(smap))
-    setNames(smap$sample_id, strip(smap$patient_id)) else NULL
+  # A patient key names a sample only where the patient has one: with several
+  # acquisitions (timepoints) the lookup returned the first of them, so a count
+  # was attached to whichever visit came first in the sheet. Such keys go on to
+  # the file-name match and, failing that, are reported unmatched, as
+  # --total-counts reports an ambiguous patient.
+  by_patient <- if ("patient_id" %in% names(smap)) {
+    pk <- strip(smap$patient_id)
+    one <- !pk %in% pk[duplicated(pk)]
+    setNames(smap$sample_id[one], pk[one])
+  } else NULL
 
   # File match is a SUFFIX match, not exact: real acquisition filenames carry
   # a batch/folder prefix the counts sheet's row label never repeats (e.g.

@@ -16,7 +16,9 @@ stats_clinical_association(
 \arguments{
 \item{freq}{population_frequencies table.}
 
-\item{mfi}{population_marker_mfi table, optional.}
+\item{mfi}{per-sample marker medians by population, with \code{sample_id},
+\code{population}, \code{marker} and \code{median_asinh} (functional_markers.csv or
+population_marker_mfi.csv), optional.}
 
 \item{clin}{named list of clinical variables, sample_id -> value.}
 
@@ -32,5 +34,14 @@ rather than of the acquisition. NULL treats every row as its own subject.}
 list(populations, markers)
 }
 \description{
-Clinical variables against population frequencies and marker intensities
+MARKER INTENSITY IS TESTED WITHIN A POPULATION. A marker's level is a
+property of a defined cell population, which is how a differential-state
+test asks it (diffcyt-DS, Weber et al. 2019; \code{\link[=stats_marker_state]{stats_marker_state()}} here),
+so each population and marker pair is one test, keyed \code{"<population>, <marker>"}. This used to take, per sample and marker, the median of the
+declared populations' medians: populations nest and the list is the
+specification's, so that value followed whichever population type the
+specification listed most (for HLA-DR, the T-cell subsets) and described
+no set of cells. The pipeline passes functional_markers.csv, whose pairs are
+the ones the gating document scopes as interpretable, and
+population_marker_mfi.csv only where no functional block resolved.
 }

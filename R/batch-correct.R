@@ -89,20 +89,24 @@ cramers_v <- function(a, b) {
 #' @param batch batch label per cell
 #' @param probs quantile grid used to build the map
 #' @param goal "batch_mean" (default) or "cells"; see above.
+#' @param goal_batches batches the goal is built from, or NULL for every
+#'   batch; see [align_within_groups()] for why it is restricted.
 #' @return numeric vector, corrected
 #' @keywords internal
 align_quantiles <- function(x, batch, probs = seq(0, 1, length.out = 101),
-                            goal = c("batch_mean", "cells")) {
+                            goal = c("batch_mean", "cells"), goal_batches = NULL) {
   goal <- match.arg(goal)
   ok <- is.finite(x) & !is.na(batch)
   if (sum(ok) < 10L) return(x)
-  qb <- lapply(unique(batch[ok]), function(b) {
-    i <- ok & batch == b
+  in_goal <- ok & (is.null(goal_batches) | batch %in% goal_batches)
+  qb <- lapply(unique(batch[in_goal]), function(b) {
+    i <- in_goal & batch == b
     if (sum(i) < 10L) NULL else stats::quantile(x[i], probs, names = FALSE)
   })
   qb <- qb[!vapply(qb, is.null, logical(1))]
   ref <- if (identical(goal, "cells") || !length(qb))
-    stats::quantile(x[ok], probs, na.rm = TRUE, names = FALSE)
+    stats::quantile(x[if (any(in_goal)) in_goal else ok], probs, na.rm = TRUE,
+                    names = FALSE)
   else rowMeans(do.call(cbind, qb))
   out <- x
   for (b in unique(batch[ok])) {
@@ -133,12 +137,21 @@ align_quantiles <- function(x, batch, probs = seq(0, 1, length.out = 101),
 #' goal distribution to the experimental design (Quintelier et al. 2025).
 #'
 #' WHAT IS DONE. Each study group is aligned separately: a batch's cells of
-#' group g are mapped onto group g's goal, the mean of its batches' quantiles
-#' (see [align_quantiles()]).
-#' A batch effect common to the groups is removed in each of them, and the
-#' groups keep whatever separates them. A group measured in only one batch has
-#' nothing to align against and is left as it is. Cells with no group are
-#' aligned against the pooled distribution, as before.
+#' group g are mapped onto group g's goal, the mean of its quantiles over the
+#' batches EVERY group was measured in (see [common_batches()] and
+#' [align_quantiles()]). A batch effect common to the groups is removed in each
+#' of them, and the groups keep whatever separates them. Cells with no group
+#' are aligned towards the same batches.
+#'
+#' WHY THE GOAL USES ONLY THE SHARED BATCHES. Each group's goal carries the
+#' mean batch effect of the batches it is built from. Built from each group's
+#' own batches, two groups measured in different batches end on different
+#' scales: with batch 2 reading one unit high, a group measured in batch 1
+#' alone stayed where it was while a group spread over both moved half a unit
+#' up, so a correction meant to remove a batch effect put a 0.5 difference
+#' between groups of identical cells. Built from the same batches for every
+#' group, every goal carries the same batch effect. Where no batch holds every
+#' group there is no shared scale to align to, and nothing is moved.
 #'
 #' @param x numeric vector for one marker.
 #' @param batch batch label per cell.
@@ -149,14 +162,33 @@ align_quantiles <- function(x, batch, probs = seq(0, 1, length.out = 101),
 align_within_groups <- function(x, batch, group = NULL, goal = "batch_mean") {
   if (is.null(group) || length(unique(group[!is.na(group)])) < 2L)
     return(align_quantiles(x, batch, goal = goal))
+  shared <- common_batches(batch[is.finite(x)], group[is.finite(x)])
+  if (!length(shared)) return(x)
   out <- x
   for (g in unique(group[!is.na(group)])) {
     i <- which(!is.na(group) & group == g)
-    out[i] <- align_quantiles(x[i], batch[i], goal = goal)
+    out[i] <- align_quantiles(x[i], batch[i], goal = goal, goal_batches = shared)
   }
   na <- which(is.na(group))
-  if (length(na)) out[na] <- align_quantiles(x[na], batch[na], goal = goal)
+  if (length(na)) out[na] <- align_quantiles(x[na], batch[na], goal = goal,
+                                             goal_batches = shared)
   out
+}
+
+#' Batches holding cells of every study group
+#'
+#' @param batch batch label per cell.
+#' @param group study group per cell.
+#' @param min_cells cells of a group a batch must hold to count, the size
+#'   [align_quantiles()] needs to build a batch's quantiles.
+#' @return character vector of batch labels, possibly empty.
+#' @keywords internal
+common_batches <- function(batch, group, min_cells = 10L) {
+  ok <- !is.na(batch) & !is.na(group)
+  per <- lapply(split(as.character(batch[ok]), as.character(group[ok])),
+                function(b) { tb <- table(b); names(tb)[tb >= min_cells] })
+  if (!length(per)) return(character(0))
+  Reduce(intersect, per)
 }
 
 #' The Cramer's V above which batch correction is refused
@@ -281,8 +313,9 @@ align_quantiles_by_cluster <- function(tmat, batch, markers, k = 10L,
 #' claimed otherwise.
 #'
 #' THE GOAL. With `group` supplied and `goal = "group"`, the default, each study
-#' group is aligned towards its own pooled distribution; see
-#' [align_within_groups()]. `goal = "pooled"` aligns every batch towards all
+#' group is aligned towards the mean of its quantiles over the batches every
+#' group was measured in, and nothing is corrected where no batch holds every
+#' group; see [align_within_groups()]. `goal = "pooled"` aligns every batch towards all
 #' samples together, which assumes the batches hold the same biology.
 #'
 #' THE METHOD IS CHOSEN AFTER THE REFUSAL, NEVER BEFORE IT. A better alignment
@@ -355,6 +388,15 @@ correct_batch <- function(tmat, batch, group = NULL, markers = NULL,
 
   gg <- if (identical(goal, "group")) group else NULL
   qgoal <- if (identical(goal, "group")) "batch_mean" else "cells"
+  if (!is.null(gg) && length(unique(gg[!is.na(gg)])) > 1L &&
+      !length(common_batches(batch, gg))) {
+    log_msg("  batch correction NOT APPLIED: no batch holds cells of every ",
+            "group, so the groups have no shared batch to be aligned towards ",
+            "and any goal would carry a different batch effect for each")
+    return(list(tmat = tmat, cramers_v = v, corrected = FALSE,
+                markers = character(0), method = method, max_cramers_v = max_cramers_v,
+                reason = "not applied: no batch holds cells of every group"))
+  }
   how <- "whole-file, one map per marker"
   if (identical(method, "cluster")) {
     cres <- align_quantiles_by_cluster(tmat, batch, markers, k = cluster_k,
@@ -365,7 +407,8 @@ correct_batch <- function(tmat, batch, group = NULL, markers = NULL,
     for (m in markers) tmat[, m] <- align_within_groups(tmat[, m], batch, gg, qgoal)
   }
   how <- paste0(how, if (!is.null(gg) && length(unique(gg[!is.na(gg)])) > 1L)
-                       "; each group aligned to the mean of its batches' quantiles"
+                       paste0("; each group aligned to the mean of its quantiles over the ",
+                              length(common_batches(batch, gg)), " batch(es) holding every group")
                      else if (identical(qgoal, "cells")) "; aligned to every cell pooled"
                      else "; aligned to the mean of the batches' quantiles")
   reason <- if (!is.na(v) && v > max_cramers_v)

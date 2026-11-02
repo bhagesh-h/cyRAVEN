@@ -122,6 +122,8 @@ spreading_pairs <- function(tmat, thr, parent = NULL, min_cells = 200L) {
 #' @param gates per-sample gate objects
 #' @param thr_all the thresholds table, used for the fallback rate per marker
 #' @param panel_of named character vector mapping sample to panel
+#' @param exclude sample ids kept out: declared controls and staining-QC
+#'   failures, which are not samples of the cohort.
 #' @param max_samples cap on samples contributing, since the ranking stabilises
 #'   long before every sample is used
 #' @param flag_ratio spreading ratio at or above which a pair is called
@@ -136,10 +138,15 @@ spreading_pairs <- function(tmat, thr, parent = NULL, min_cells = 200L) {
 #' @export
 run_spreading_report <- function(pops, gates, thr_all = NULL, panel_of = NULL,
                                  max_samples = 8L, flag_ratio = 1.25,
-                                 trend_flag = 0.3) {
+                                 trend_flag = 0.3, exclude = character(0)) {
   if (is.null(pops) || !length(pops)) return(NULL)
-  sids <- names(pops)
-  if (length(sids) > max_samples) sids <- sids[seq_len(max_samples)]
+  # The cohort's samples only, as every other cohort-wide estimate: a declared
+  # control or a staining-QC failure is not one of the cohort. Evenly spaced
+  # rather than the first few, which were whichever files sorted first.
+  sids <- setdiff(names(pops), exclude)
+  if (!length(sids)) sids <- names(pops)
+  if (length(sids) > max_samples)
+    sids <- sids[unique(round(seq(1, length(sids), length.out = max_samples)))]
 
   rows <- list()
   for (s in sids) {
@@ -208,6 +215,7 @@ run_spreading_report <- function(pops, gates, thr_all = NULL, panel_of = NULL,
 
   rec$fallback_rate <- NA_real_
   if (!is.null(thr_all) && nrow(thr_all) && "source" %in% names(thr_all)) {
+    thr_all <- thr_all[!thr_all$sample_id %in% exclude, , drop = FALSE]
     fb <- do.call(rbind, lapply(
       split(thr_all, paste(thr_all$panel, thr_all$marker, sep = "\r")),
       function(d) data.frame(panel = d$panel[1], receiver = d$marker[1],

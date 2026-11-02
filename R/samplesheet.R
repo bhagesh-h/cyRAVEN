@@ -110,6 +110,34 @@ assert_subject_consistent <- function(df, key, cols) {
   invisible(TRUE)
 }
 
+#' Read a number written in a spreadsheet's own locale
+#'
+#' Spreadsheets export what a cell displays, thousands separators included,
+#' and a count in cells/uL is routinely above 1,000. Replacing every comma by a
+#' point read "1,500" as 1.5, and "1.500" is 1.5 to as.numeric(): a thousandfold
+#' error either way. The delimiter tells the conventions apart, as the export
+#' that wrote the file followed one: a semicolon-separated file is written with
+#' decimal commas and points between thousands, a comma-separated one with
+#' decimal points and commas between thousands. Only a separator in thousands
+#' position (groups of exactly three digits) is removed.
+#' @param x values as read.
+#' @param delim the sheet's delimiter.
+#' @return numeric vector.
+#' @keywords internal
+parse_sheet_number <- function(x, delim = ",") {
+  v <- trimws(as.character(x))
+  if (identical(delim, ";")) {
+    th <- grepl("^-?[0-9]{1,3}([.][0-9]{3})+(,[0-9]+)?$", v)
+    v[th] <- gsub(".", "", v[th], fixed = TRUE)
+    v <- sub(",", ".", v, fixed = TRUE)
+  } else {
+    th <- grepl("^-?[0-9]{1,3}(,[0-9]{3})+([.][0-9]+)?$", v)
+    v[th] <- gsub(",", "", v[th], fixed = TRUE)
+    v <- sub(",", ".", v, fixed = TRUE)
+  }
+  suppressWarnings(as.numeric(v))
+}
+
 #' Read the unified sample sheet
 #'
 #' One row per acquired file. Splits into the three structures the pipeline
@@ -234,8 +262,7 @@ read_samplesheet <- function(path, fcs_files, column_map = default_column_map(),
     scale_to_ul <- if (grepl("(?i)m[l]|milli", count_unit, perl = TRUE)) 1 / 1000 else 1
     rows <- lapply(cc, function(j) {
       pop <- sub(paste0("(?i)^", S$count_prefix), "", names(df)[j], perl = TRUE)
-      v <- suppressWarnings(as.numeric(gsub(",", ".",
-             trimws(as.character(df[[j]])))))
+      v <- parse_sheet_number(df[[j]], delim)
       ok <- !is.na(v)
       if (!any(ok)) return(NULL)
       data.frame(sample_id = sid[ok], sample_raw = sid[ok], population = pop,

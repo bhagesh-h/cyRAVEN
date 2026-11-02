@@ -268,6 +268,9 @@ explore_phenotype <- function(pos, hi = 0.65, lo = 0.20, max_markers = 6L) {
 #' @param sizes Cells per cluster.
 #' @param leukocyte,viability Channel names, or NULL.
 #' @param have_thresholds Whether `pos` was built from per-sample thresholds.
+#' @param low_from_pos Whether the leukocyte (debris) call reads `pos`; TRUE
+#'   with per-sample thresholds, or in blind mode with each file's CD45 debris
+#'   reference (the rest of `pos` then falls back to medians and is not read).
 #' @param drop_dead Whether to drop the dead call.
 #' @param sat_quantile,sat_min_fraction Saturation rule.
 #' @param seed Integer seed.
@@ -276,16 +279,17 @@ explore_phenotype <- function(pos, hi = 0.65, lo = 0.20, max_markers = 6L) {
 explore_qc_gate <- function(pos, med, sizes, leukocyte = NULL, viability = NULL,
                             have_thresholds = FALSE, drop_dead = TRUE,
                             sat_quantile = 0.99, sat_min_fraction = 0.7,
-                            seed = 42L) {
+                            seed = 42L, low_from_pos = have_thresholds) {
   ks <- rownames(pos)
   call <- rep("keep", length(ks))
   basis <- rep(NA_character_, length(ks))
 
   mark_low <- function(chan, label) {
     if (is.null(chan) || !chan %in% colnames(pos)) return(invisible(NULL))
-    if (have_thresholds) {
+    if (low_from_pos) {
       lowi <- which(pos[, chan] < 0.5)
-      why <- "below the sample's own threshold in most of its cells"
+      why <- if (have_thresholds) "below the sample's own threshold in most of its cells"
+             else "below its file's debris reference in most of its cells"
     } else {
       sp <- two_mode_split(med[, chan], seed = seed)
       if (is.null(sp)) return(invisible(NULL))

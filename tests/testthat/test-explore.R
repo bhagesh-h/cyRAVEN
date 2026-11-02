@@ -136,3 +136,14 @@ test_that("explore_write_spec emits a curatable YAML, never a silent adoption", 
   expect_equal(sum(got$masks[["k1"]]), 1L)
   expect_true(is.null(got$unavailable[["k1"]]))
 })
+
+test_that("blind explore's debris call reads the debris reference when given it", {
+  # low_from_pos: the CD45 fraction above each file's debris reference decides
+  # debris, not a 2-means split of node medians, which always splits.
+  pos <- matrix(c(0.95, 0.90, 0.10), ncol = 1, dimnames = list(c("n1", "n2", "n3"), "CD45"))
+  med <- matrix(c(4.5, 2.4, 0.0), ncol = 1, dimnames = list(c("n1", "n2", "n3"), "CD45"))
+  q <- explore_qc_gate(pos, med, c(100, 100, 100), leukocyte = "CD45",
+                       have_thresholds = FALSE, low_from_pos = TRUE)
+  expect_identical(q$call, c("keep", "keep", "debris"))
+  expect_match(q$basis[3], "debris reference")
+})

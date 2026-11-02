@@ -134,13 +134,23 @@ normality_report <- function(freq, group_of, value_col = "pct_of_cd45_pos") {
 #' literature, what this run did about it, and why. Written on every run so the
 #' reasoning travels with the numbers.
 #'
+#' WHAT "USED" MEANS. A method is listed as used only where this run wrote its
+#' result, which `ran` records from the files actually written. The parametric
+#' tests are written by default beside the rank tests (parametric_tests.csv,
+#' posthoc_tests.csv), so they are used, as secondary results; listing them as
+#' not used, as this table once did, contradicted the run's own outputs.
+#'
 #' @param n_groups Number of group levels compared, or NA.
-#' @param paired Whether a paired design was detected.
+#' @param paired Whether a paired comparison was written.
 #' @param n_tests Number of tests corrected together, or NA.
+#' @param ran Named list of logicals saying which analyses wrote output:
+#'   `group_tests`, `parametric`, `compositional`, `uncertainty`, `normality`,
+#'   `batch`, `confounding`, `rank_ancova`, `edger`. An absent entry takes the value a
+#'   grouped run with the default options has.
 #' @return data.frame.
 #' @keywords internal
 statistical_methods_table <- function(n_groups = NA_integer_, paired = FALSE,
-                                      n_tests = NA_integer_) {
+                                      n_tests = NA_integer_, ran = list()) {
   used <- function(what, applied, why) data.frame(
     method = what, role = "used", applied_to = applied, rationale = why,
     stringsAsFactors = FALSE)
@@ -150,86 +160,147 @@ statistical_methods_table <- function(n_groups = NA_integer_, paired = FALSE,
 
   two <- is.finite(n_groups) && n_groups == 2L
   many <- is.finite(n_groups) && n_groups > 2L
+  did <- function(k, default) isTRUE(ran[[k]] %||% default)
+  tests <- did("group_tests", two || many)
+  parametric <- tests && did("parametric", TRUE)
+  no_test <- paste("No between-group test ran in this run: fewer than two",
+                   "groups, or --no-group-tests.")
+  no_par <- "--no-parametric was set, so no parametric test was written."
 
   rows <- list(
-    used("Wilcoxon rank-sum (Mann-Whitney U)",
+    if (tests) used("Wilcoxon rank-sum (Mann-Whitney U)",
          "each group against the reference, per population",
          paste("Rank based, so it assumes neither normality nor equal variance.",
                "At 4 to 10 donors per group normality cannot be verified, which",
-               "is what rules out the parametric alternatives.")),
-    if (many) used("Kruskal-Wallis",
+               "is why it is the primary test and the parametric ones are",
+               "secondary."))
+    else not("Wilcoxon rank-sum (Mann-Whitney U)", no_test),
+    if (many && tests) used("Kruskal-Wallis",
          "omnibus across all groups, per population",
          "Asks whether any group differs before the pairwise tests are read.")
     else not("Kruskal-Wallis",
-         "Needs three or more groups; this run compares fewer."),
+         if (tests) "Needs three or more groups; this run compares fewer." else no_test),
     if (isTRUE(paired)) used("Wilcoxon signed-rank",
-         "paired samples, per population",
+         "paired samples, per population (Friedman across three or more conditions)",
          "The paired counterpart of the rank-sum test.")
     else not("Wilcoxon signed-rank / paired t-test",
          "No paired design was declared. Requires repeated samples per donor."),
-    used("Cliff's delta",
-         "reported beside every p-value",
+    if (tests) used("Cliff's delta",
+         "reported beside every rank-sum p-value",
          paste("Effect size. A p-value states how surprising a difference is,",
                "never how large. Delta is the probability a random donor from",
-               "one group exceeds one from the other, minus the reverse.")),
+               "one group exceeds one from the other, minus the reverse."))
+    else not("Cliff's delta", no_test),
     used("Benjamini-Hochberg",
          if (is.finite(n_tests)) paste(n_tests, "tests corrected together")
          else "every test in the family",
          paste("Controls the false discovery rate. Twenty tests at p < 0.05",
                "produce about one false positive by chance alone, so the raw",
                "p-value is not the number to read.")),
-    used("Shapiro-Wilk",
+    if (did("normality", tests)) used("Shapiro-Wilk",
          "per population per group, in normality_tests.csv",
          paste("The evidence for choosing a rank test. Reported so the choice",
-               "can be checked rather than taken on trust.")),
-    used("Brown-Forsythe",
+               "can be checked rather than taken on trust."))
+    else not("Shapiro-Wilk", "No grouping, so there were no groups to test."),
+    if (did("normality", tests)) used("Brown-Forsythe",
          "per population across groups, in normality_tests.csv",
          paste("Equality of variances, the second assumption behind a t-test",
-               "or ANOVA. Median-centred, which survives skew.")),
-    used("Wilson score interval",
+               "or ANOVA. Median-centred, which survives skew."))
+    else not("Brown-Forsythe", "No grouping, so there were no groups to test."),
+    if (did("uncertainty", TRUE)) used("Wilson score interval",
          "counting uncertainty on every frequency",
          paste("Confidence interval for a proportion that stays sensible near",
                "0% and 100% and at small counts, where the textbook normal",
-               "approximation does not.")),
-    used("Cramer's V",
-         "batch against group, in batch_group_confounding.csv",
-         paste("Association between two categorical variables. Above a set",
-               "value, batch correction is refused rather than attempted.")),
-    used("Permutation null (iLISI)",
+               "approximation does not."))
+    else not("Wilson score interval",
+             "--no-uncertainty was set, so no counting interval was computed."),
+    if (did("batch", FALSE)) used("Cramer's V",
+         "batch against each design variable, in batch_group_confounding.csv",
+         paste("Association between two categorical variables. Above Cohen's",
+               "large association, batch correction is refused rather than",
+               "attempted."))
+    else not("Cramer's V", "No batch diagnostic was written in this run."),
+    if (did("batch", FALSE)) used("Permutation null (iLISI)",
          "batch mixing on the embedding",
-         "Gives the score expected under no batch structure, by shuffling labels."),
-    used("Centred log-ratio",
+         "Gives the score expected under no batch structure, by shuffling labels.")
+    else not("Permutation null (iLISI)", "No batch diagnostic was written in this run."),
+    if (tests && did("compositional", TRUE)) used("Centred log-ratio",
          "compositional re-test of every abundance finding",
          paste("Frequencies of a whole sum to 100%, so one population rising",
-               "forces others down. The CLR removes that constraint.")),
+               "forces others down. The CLR removes that constraint."))
+    else not("Centred log-ratio",
+         if (tests) "--no-compositional was set, so the CLR re-test was not run."
+         else no_test),
 
-    not("Student's t-test",
-        paste("Assumes normality and equal variances. Neither can be verified",
-              "at these group sizes - see normality_tests.csv - and the rank",
-              "test costs little power while assuming neither.")),
-    not("Welch's t-test",
-        paste("Drops the equal-variance assumption but keeps normality.",
-              "Same objection.")),
-    not("One-way ANOVA with Tukey",
-        if (many) paste("The parametric counterpart of Kruskal-Wallis with",
-                        "Dunn, which this run reports instead, for the reason",
-                        "given against Student's t-test.")
-        else "Needs three or more groups."),
+    if (parametric && two) used("Student's t-test",
+         "p_student_t in parametric_tests.csv, on logit percentages",
+         paste("Secondary, written because papers report it. Assumes normality",
+               "and equal variances; read it only where assumptions_met is",
+               "TRUE, and the rank test otherwise."))
+    else not("Student's t-test",
+         if (!tests) no_test else if (!parametric) no_par
+         else "Compares two groups; this run compares more."),
+    if (parametric && two) used("Welch's t-test",
+         "primary_test in parametric_tests.csv, on logit percentages",
+         paste("Secondary. Drops the equal-variance assumption but keeps",
+               "normality, which cannot be verified at these group sizes; see",
+               "residuals_normal."))
+    else not("Welch's t-test",
+         if (!tests) no_test else if (!parametric) no_par
+         else "Compares two groups; this run compares more."),
+    if (parametric && many) used("One-way ANOVA with Tukey",
+         "p_student_t in parametric_tests.csv; Tukey HSD in posthoc_tests.csv",
+         paste("Secondary. The parametric counterpart of Kruskal-Wallis with",
+               "Dunn; valid where both assumption columns hold."))
+    else not("One-way ANOVA with Tukey",
+         if (!tests) no_test else if (!parametric) no_par
+         else "Needs three or more groups."),
+    if (parametric && many) used("Welch's ANOVA with Games-Howell",
+         "primary_test in parametric_tests.csv; Games-Howell in posthoc_tests.csv",
+         paste("Secondary. The unequal-variance form of the ANOVA and its",
+               "post-hoc test."))
+    else not("Welch's ANOVA with Games-Howell",
+         if (!tests) no_test else if (!parametric) no_par
+         else "Needs three or more groups."),
+    if (parametric && many) used("Dunn's test",
+         "pairwise after Kruskal-Wallis, in posthoc_tests.csv",
+         paste("Compares mean ranks computed over all groups, with a tie",
+               "correction, which is the follow-up the omnibus rank test",
+               "calls for."))
+    else not("Dunn's test",
+         if (!tests) no_test else if (!parametric) no_par
+         else "Needs three or more groups."),
+    if (did("rank_ancova", FALSE)) used("Rank ANCOVA (Conover-Iman)",
+         "group effect adjusted for covariates, in covariate_adjusted_stats.csv",
+         paste("Exploratory, requested with --rank-ancova: a linear model on",
+               "ranks with the covariates as terms, refused below the minimum",
+               "residual degrees of freedom."))
+    else NULL,
     not("Two-way / repeated-measures ANOVA",
-        paste("For factorial or within-donor designs. cyRAVEN diagnoses",
-              "covariates rather than modelling them; see",
-              "confounding_diagnostics.csv.")),
-    not("diffcyt: edgeR, limma-voom, GLMM",
+        paste("For factorial or within-donor designs. Covariates are diagnosed",
+              "in confounding_diagnostics.csv and adjusted only on request",
+              "(--rank-ancova); repeated measures are tested within donor",
+              "with --paired-column.")),
+    if (did("edger", FALSE)) used("edgeR negative binomial GLM (diffcyt-DA-edgeR)",
+         "exclusive-label cell counts per population, in edger_abundance_stats.csv (--edger)",
+         paste("A count model with each sample's total as the offset, run as",
+               "diffcyt runs it; secondary to the rank tests on percentages,",
+               "and on a dozen declared populations its shared dispersion has",
+               "little to borrow from."))
+    else not("diffcyt: edgeR, limma-voom, GLMM",
         paste("Cluster-level cytometry methods that borrow strength across",
               "clusters via an empirical Bayes prior. That prior pays off at",
               "mass-cytometry marker counts and many clusters; on a declared",
-              "panel of about a dozen populations there is little to borrow,",
-              "and the moderation is harder to explain than it is worth.",
-              "Available through --external-labels if wanted.")),
-    not("Chi-squared / Fisher's exact",
+              "panel of about a dozen populations there is little to borrow.",
+              "The edgeR form is available with --edger.")),
+    if (did("confounding", FALSE)) used("Fisher's exact",
+         "a categorical covariate against the groups, in confounding_diagnostics.csv",
+         paste("Counts of donors in categories, such as sex by group, at cell",
+               "counts where the chi-squared approximation does not hold;",
+               "p-value simulated."))
+    else not("Chi-squared / Fisher's exact",
         paste("For counts of donors in categories, not for per-donor",
-              "frequencies. Cramer's V above is the chi-squared based",
-              "association actually used.")),
+              "frequencies. No categorical covariate was tested in this run.")),
     not("Pearson correlation",
         "Assumes linearity and normality; Spearman is used where rank correlation is needed."),
     not("Bonferroni",

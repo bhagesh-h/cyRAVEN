@@ -253,12 +253,16 @@ stats_marker_state <- function(mfi, group_of, reference = NULL,
 #'   Default `400L`.
 #' @param dpi Resolution in dots per inch. May be reduced automatically to respect the raster ceiling; see [safe_ggsave()]. Default `300`.
 #' @param colors Named list of colours; defaults to the package palette. See [fcs_colors()]. Default `fcs_colors()`.
+#' @param scale_label Name of the scale the intensities are on, the run's
+#'   `transform$label` ("asinh intensity", "logicle intensity"). Default
+#'   `"asinh intensity"`.
 #' @export
 fig_marker_state <- function(mfi, outfile, group_of = NULL, stats = NULL,
                              reference = NULL, p_source = c("raw", "BH"),
                              min_cells = 20L, ncol = NULL, panel_label = "",
                              max_panels = 400L,
-                             dpi = 300, colors = fcs_colors()) {
+                             dpi = 300, colors = fcs_colors(),
+                             scale_label = "asinh intensity") {
   p_source <- match.arg(p_source)
   if (is.null(mfi) || !nrow(mfi) || !"pct_positive" %in% names(mfi))
     return(invisible(NULL))
@@ -342,7 +346,7 @@ fig_marker_state <- function(mfi, outfile, group_of = NULL, stats = NULL,
       "PER-SAMPLE values (n = donors, not cells). Positivity is the fraction of",
       "the population above that sample's own gating threshold;",
       sprintf("populations with fewer than %d cells in a sample are omitted.", min_cells),
-      "Intensity shifts (median arcsinh) are tested in marker_state_stats.csv",
+      paste0("Intensity shifts (median ", scale_label, ") are tested in marker_state_stats.csv"),
       "and drawn in population_marker_heatmap.png."),
     # Panels grouped by cell type. This figure's panel name is
     # "<population>, <marker>", and ordering it by positivity alone put every
@@ -474,11 +478,15 @@ contrast_text_colour <- function(values, limits, option = "D", dark = "grey10") 
 #' @param panel_label Marker-panel name added to the figure title; empty for none. Default `""`.
 #' @param dpi Resolution in dots per inch. May be reduced automatically to respect the raster ceiling; see [safe_ggsave()]. Default `300`.
 #' @param colors Named list of colours; defaults to the package palette. See [fcs_colors()]. Default `fcs_colors()`.
+#' @param scale_label Name of the scale the intensities are on, the run's
+#'   `transform$label` ("asinh intensity", "logicle intensity"). Default
+#'   `"asinh intensity"`.
 #' @export
 fig_population_marker_heatmap <- function(mfi, outfile, scale_by = c("marker", "none"),
                                           min_cells = 20L, annotate_expected = NULL,
                                           panel_label = "", dpi = 300,
-                                          colors = fcs_colors()) {
+                                          colors = fcs_colors(),
+                                          scale_label = "asinh intensity") {
   scale_by <- match.arg(scale_by)
   if (is.null(mfi) || !nrow(mfi)) return(invisible(NULL))
   d <- qc_pass_rows(mfi)
@@ -500,7 +508,7 @@ fig_population_marker_heatmap <- function(mfi, outfile, scale_by = c("marker", "
   agg <- merge(agg, n_s, by = c("population", "marker"), all.x = TRUE)
 
   agg$value <- agg$median_asinh
-  legend_lab <- "median arcsinh"
+  legend_lab <- paste("median", scale_label)
   if (scale_by == "marker") {
     agg$value <- unsplit(lapply(split(agg$median_asinh, agg$marker), function(v) {
       s <- stats::sd(v)
@@ -558,7 +566,7 @@ fig_population_marker_heatmap <- function(mfi, outfile, scale_by = c("marker", "
          title = paste0("Population phenotype",
                         if (nzchar(panel_label)) paste0(", ", panel_label) else ""),
          subtitle = wrap_plot_text(paste0(
-           "Median of per-sample median arcsinh intensity",
+           "Median of per-sample median ", scale_label,
            if (scale_by == "marker")
              ", z-scored within each marker row across populations" else "",
            ".",
@@ -633,6 +641,14 @@ fig_cohort_confusion <- function(cells, outfile, group_col = "cohort",
   ok <- !is.na(g) & nzchar(trimws(g)) & !is.na(p) & nzchar(trimws(p))
   if (!any(ok)) return(invisible(NULL))
   tb <- table(p[ok], g[ok])
+  # Under --subsample rare the embedded cells carry their inverse inclusion
+  # probability, and the shares are of the cells weighted back by it.
+  if ("sampling_weight" %in% names(cells) && all(is.finite(cells$sampling_weight[ok]))) {
+    ws <- tapply(cells$sampling_weight[ok], list(factor(p[ok], levels = rownames(tb)),
+                                                 factor(g[ok], levels = colnames(tb))), sum)
+    ws[is.na(ws)] <- 0
+    tb[] <- ws
+  }
   if (nrow(tb) < 1L || ncol(tb) < 2L) {
     log_msg("[fig] fewer than 2 cohorts with labelled cells, confusion heatmap skipped")
     return(invisible(NULL))

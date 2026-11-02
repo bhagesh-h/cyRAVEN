@@ -48,7 +48,10 @@
 derive_cofactor <- function(ex, marker_cols, target_iqr = 0.5,
                             lo = 1, hi = 5000, max_markers = 40L, rows = NULL) {
   mk <- names(marker_cols)
-  if (length(mk) > max_markers) mk <- sample(mk, max_markers)
+  # Evenly spaced, not sample(): a random draw made the cofactor depend on the
+  # RNG state and took draws from the stream the UMAP cell selection reads.
+  if (length(mk) > max_markers)
+    mk <- mk[unique(round(seq(1, length(mk), length.out = max_markers)))]
   col <- function(m) {
     x <- ex[, marker_cols[[m]]]
     if (is.null(rows)) x else x[rows]

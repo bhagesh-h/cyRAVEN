@@ -29,10 +29,8 @@ synth_run <- function(n = 20000L, clog = NULL, drift = NULL, seed = 5) {
   list(time = time[keep], mat = mat[keep, , drop = FALSE])
 }
 
-#' A read-shaped fixture. Marker values are raised to instrument scale, because
-#' acquisition_qc_one() applies log10 to raw channels: synthetic values around 2
-#' would be crushed to a constant by pmax(x, 1) and test nothing that a real file
-#' exercises.
+#' A read-shaped fixture. Marker values are raised to instrument scale, as a
+#' real file stores them, because acquisition_qc_one() judges the stored values.
 fake_rd <- function(n = 20000L, with_time = TRUE, seed = 5) {
   s <- synth_run(n = n, seed = seed)
   ex <- cbind(10^(s$mat + 2), Time = s$time)
@@ -157,4 +155,46 @@ test_that("the detector consumes no randomness", {
   invisible(detect_time_anomalies(s$time, s$mat))
   expect_identical(.Random.seed, before)
   expect_identical(stats::runif(5), expected)
+})
+
+test_that("a compensated channel centred on zero is judged without a kink", {
+  # log10(max(x, 1)) pinned every value at or below 1 to 0, where the median
+  # of a mostly negative compensated channel sits; the stored values have no
+  # such kink.
+  set.seed(5)
+  n <- 40000L; time <- sort(stats::runif(n, 0, 1000))
+  x <- c(stats::rnorm(n * 0.9, 0, 100), stats::rnorm(n * 0.1, 3000, 600))[sample(n)]
+  rd <- function(v) list(exprs = cbind(M = v, Time = time), marker_cols = c(M = 1L),
+                         channel_names = c("M", "Time"), n_events = n,
+                         sample_id = "S", file = "S.fcs")
+  expect_identical(acquisition_qc_one(rd(x))$summary$n_bins_flagged, 0L)
+  w <- time > 600 & time < 700
+  b <- acquisition_qc_one(rd(x + 80 * w))$bins
+  hit <- b[b$flagged, ]
+  expect_gt(nrow(hit), 0L)
+  expect_true(all(hit$time_to > 600 & hit$time_from < 700))
+})
+
+test_that("PeacoQC removes a disturbed stretch of the acquisition", {
+  skip_if_not_installed("PeacoQC")
+  # A stable acquisition with a 10% stretch where every channel shifts up.
+  withr::local_seed(21)
+  n <- 30000L
+  time <- seq(0, 300, length.out = n)
+  mk <- function(m) c(stats::rnorm(n * 0.7, 0, 150), stats::rnorm(n * 0.3, m, m / 5))[sample(n)]
+  ex <- cbind(`FSC-A` = stats::rnorm(n, 80000, 8000), `SSC-A` = stats::rnorm(n, 30000, 5000),
+              CD3 = mk(5000), CD4 = mk(3000), CD8 = mk(4000), Time = time)
+  bad <- time > 150 & time < 180
+  ex[bad, c("CD3", "CD4", "CD8")] <- ex[bad, c("CD3", "CD4", "CD8")] + 3000
+  rd <- list(exprs = ex, marker_cols = c(CD3 = 3L, CD4 = 4L, CD8 = 5L),
+             scatter_cols = c(`FSC-A` = 1L, `SSC-A` = 2L),
+             channel_names = colnames(ex), sample_id = "S1", file = "S1.fcs",
+             n_events = n)
+  r <- suppressMessages(peacoqc_one(rd))
+  expect_length(r$good, n)
+  expect_gt(mean(!r$good[bad]), 0.5)          # most of the disturbance removed
+  expect_lt(mean(!r$good[!bad]), 0.2)         # most of the rest kept
+  # PeacoQC skips its isolation tree below 150 time bins with a warning that
+  # is suppressed; the skip has to be said in the summary instead.
+  if (is.na(r$pct_it)) expect_match(r$reason, "isolation tree not run")
 })

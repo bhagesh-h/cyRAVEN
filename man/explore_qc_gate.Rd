@@ -14,7 +14,8 @@ explore_qc_gate(
   drop_dead = TRUE,
   sat_quantile = 0.99,
   sat_min_fraction = 0.7,
-  seed = 42L
+  seed = 42L,
+  low_from_pos = have_thresholds
 )
 }
 \arguments{
@@ -33,6 +34,10 @@ explore_qc_gate(
 \item{sat_quantile, sat_min_fraction}{Saturation rule.}
 
 \item{seed}{Integer seed.}
+
+\item{low_from_pos}{Whether the leukocyte (debris) call reads \code{pos}; TRUE
+with per-sample thresholds, or in blind mode with each file's CD45 debris
+reference (the rest of \code{pos} then falls back to medians and is not read).}
 }
 \value{
 data.frame with one row per cluster and a \code{call} column.

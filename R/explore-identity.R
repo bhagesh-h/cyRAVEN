@@ -114,7 +114,7 @@ cluster_identity_table <- function(ct) {
   # against NK -- the NK cells really are nearly all there -- and would be
   # called "confident NK cells" while most of the cluster is cells the
   # specification cannot name. The label is still the best available answer, but
-  # "confident" is not, so a cluster more than half remainder is capped at
+  # "confident" is not, so a cluster half or more remainder is capped at
   # partial.
   out$call[out$pct_catch_all >= 50 & out$call == "confident"] <- "partial"
   out$identity[out$call == "undescribed by the specification"] <- "undescribed"

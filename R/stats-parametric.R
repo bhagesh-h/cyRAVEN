@@ -358,8 +358,13 @@ posthoc_group_tests <- function(freq, group_of, value_col = NULL, min_n = 3L,
     tk <- tryCatch({
       fit <- stats::aov(val ~ factor(g))
       th <- stats::TukeyHSD(fit)[[1]]
-      pr <- do.call(rbind, strsplit(rownames(th), "-", fixed = TRUE))
-      data.frame(group_a = pr[, 2], group_b = pr[, 1],
+      # TukeyHSD names each row "<b>-<a>". Splitting that on "-" breaks on a
+      # group name holding a hyphen ("Non-pulmonary"), so the pairs are rebuilt
+      # from the levels and matched to the row names whole.
+      cb <- utils::combn(levels(factor(g)), 2L)
+      pr <- match(rownames(th), paste(cb[2L, ], cb[1L, ], sep = "-"))
+      if (anyNA(pr)) stop("Tukey HSD rows do not match the group levels")
+      data.frame(group_a = cb[1L, pr], group_b = cb[2L, pr],
                  n_a = NA_integer_, n_b = NA_integer_,
                  mean_a = NA_real_, mean_b = NA_real_,
                  difference = unname(th[, "diff"]), df = NA_real_,
@@ -377,6 +382,11 @@ posthoc_group_tests <- function(freq, group_of, value_col = NULL, min_n = 3L,
   if (!length(out)) return(NULL)
   cols <- Reduce(intersect, lapply(out, names))
   res <- do.call(rbind, lapply(out, function(x) x[, cols, drop = FALSE]))
+  # p_value means different things by test: Tukey HSD and Games-Howell refer
+  # the statistic to the studentized range, which already controls the error
+  # over a population's pairs; Dunn's is the unadjusted pairwise p. Said in a
+  # column so the three are not read as the same quantity.
+  res$p_value_adjusted_over_pairs <- res$test %in% c("Tukey HSD", "Games-Howell")
   # Adjusted within each test family, because the three are alternatives rather
   # than one set of comparisons.
   res$p_adjusted_BH <- stats::ave(res$p_value, res$test,

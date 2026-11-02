@@ -28,7 +28,8 @@ single cells, per panel or per marker.
 viability and CD45 gates per sample; \code{\link[=density_valley]{density_valley()}} places each
 marker threshold at that sample's own bimodal split.
 \item \strong{Score} -- \code{\link[=score_populations]{score_populations()}} evaluates a declarative population
-specification (see the \code{config} vignette).
+specification (see "The gating specification" in
+\code{vignette("cyRAVEN", package = "cyRAVEN")}).
 \item \strong{Embed} -- \code{\link[=run_umap]{run_umap()}} builds one shared embedding per marker
 panel from a size-balanced subsample.
 \item \strong{Test} -- \code{\link[=stats_group_comparison]{stats_group_comparison()}} for abundance,
@@ -49,8 +50,8 @@ and never alters a scored population.
 
 Replicates are samples, never cells. Anything computed over pooled cells is
 labelled descriptive and carries no p-value, because the number of cells is a
-property of acquisition rather than of the design. See the
-\code{vignette("statistics", package = "cyRAVEN")}.
+property of acquisition rather than of the design. See "Statistics" in
+\code{vignette("advanced", package = "cyRAVEN")}.
 }
 
 \section{Options}{

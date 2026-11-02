@@ -157,7 +157,7 @@ write.csv(smap, file.path(OUT, "sample_map.csv"), row.names = FALSE)
 writeLines(c(
   "# Population specification for the GvHD myeloid panel (CD15, CD45, CD14,",
   "# CD33). Every population is a conjunction of marker directions evaluated",
-  "# within the CD45+ parent gate. See the Gating article for the syntax.",
+  "# within the CD45+ parent gate. See \"The gating specification\" in the Get started article for the syntax.",
   "#",
   "# These are conventional lineage definitions for a four-colour myeloid tube.",
   "# They are declared before the data are examined so that the phenotype,",

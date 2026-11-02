@@ -150,6 +150,26 @@ test_that("Gating-ML output is well formed and chains the levels", {
   expect_true(all(c("x_linear", "y_linear") %in% names(tab)))
 })
 
+test_that("a strategy with a level that cannot be expressed is left out whole", {
+  # Level 2 has two vertices, which polygon_to_linear() cannot express. Writing
+  # levels 1 and 3 alone parented level 3 on level 1: on the instrument that
+  # gate selects a larger population than the one scored.
+  tr <- make_transform("arcsinh", cofactor = 150)
+  sq <- function(lab, d, n = 4L) data.frame(
+    label = lab, depth = d, marker_x = "CD3", marker_y = "CD4", vertex = seq_len(n),
+    x_transformed = c(1, 4, 4, 1)[seq_len(n)] + d,
+    y_transformed = c(1, 1, 3, 3)[seq_len(n)], stringsAsFactors = FALSE)
+  polys <- rbind(sq("broken", 1), sq("broken", 2, 2L), sq("broken", 3), sq("ok", 1))
+  p <- withr::local_tempfile(fileext = ".xml")
+  suppressMessages(write_gating_ml(polys, p, transform = tr, n_per_edge = 2L,
+                                   space = "linear"))
+  x <- paste(readLines(p), collapse = "\n")
+  expect_false(grepl("broken_L", x, fixed = TRUE))
+  expect_match(x, 'gating:id="ok_L1"', fixed = TRUE)
+  tab <- suppressMessages(polygons_linear_table(polys, tr, n_per_edge = 2L))
+  expect_identical(unique(tab$strategy), "ok")
+})
+
 test_that("XML special characters in a label cannot break the document", {
   tr <- make_transform("arcsinh", cofactor = 150)
   polys <- data.frame(label = "CD4<T> & \"cells\"", depth = 1L,

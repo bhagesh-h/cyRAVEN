@@ -135,6 +135,18 @@ test_that("a threshold source tally is reported when the table is supplied", {
   expect_match(txt, "`quantile_fallback`: 1", fixed = TRUE)
 })
 
+test_that("event removal is stated only when it happened", {
+  spec <- list(P = list(CD3 = "above"))
+  # Asked for but not run (acquisition QC failed) must not read as removed.
+  f0 <- tempfile(fileext = ".md")
+  suppressMessages(write_miflowcyt(f0, fake_reads(2L), spec = spec,
+                                   opt = list(drop_unstable_events = TRUE)))
+  expect_no_match(paste(readLines(f0), collapse = " "), "removed before gating")
+  f1 <- tempfile(fileext = ".md")
+  suppressMessages(write_miflowcyt(f1, fake_reads(2L), spec = spec, removal = "peacoqc"))
+  expect_match(paste(readLines(f1), collapse = " "), "PeacoQC", fixed = TRUE)
+})
+
 test_that("no reads means no report rather than an empty one", {
   expect_null(write_miflowcyt(tempfile(), NULL))
   expect_null(write_miflowcyt(tempfile(), list()))

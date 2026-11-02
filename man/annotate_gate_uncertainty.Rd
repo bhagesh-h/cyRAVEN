@@ -4,12 +4,15 @@
 \alias{annotate_gate_uncertainty}
 \title{Compare a between-group difference against the gate uncertainty behind it}
 \usage{
-annotate_gate_uncertainty(gstats, ufreq)
+annotate_gate_uncertainty(gstats, ufreq, freq = NULL)
 }
 \arguments{
 \item{gstats}{a table from \code{\link[=stats_group_comparison]{stats_group_comparison()}}}
 
 \item{ufreq}{the \code{frequencies} element of \code{\link[=run_gate_uncertainty]{run_gate_uncertainty()}}}
+
+\item{freq}{the frequency table the comparison was run on, needed only when
+\code{gstats} compared something other than \code{pct_of_cd45_pos}.}
 }
 \value{
 \code{gstats} with \code{gate_u_pct_points}, \code{difference_over_gate_u},
@@ -36,4 +39,13 @@ and is the stricter of the two. They separate for a rare population, where the
 cut can be well placed and the frequency still be built on too few events: the
 first ratio passes and the second does not, and the second is the one to
 believe.
+
+THE RATIO IS TAKEN IN THE UNITS THE TEST COMPARED. The uncertainty is
+computed in percentage points of CD45+; when the comparison was made on
+cells/uL (\code{measure} is \code{cells_per_ul}), a difference in cells/uL divided by
+an uncertainty in percentage points is no ratio at all. Each sample's
+uncertainty is then carried into cells/uL by that sample's own factor,
+cells_per_ul / pct_of_cd45_pos (its WBC / 100), before the median is taken.
+The \verb{*_pct_points} columns stay in percentage points. Without \code{freq}, or for
+a measure with no such factor, the ratios are left NA.
 }

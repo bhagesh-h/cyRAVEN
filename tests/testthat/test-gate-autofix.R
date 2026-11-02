@@ -56,3 +56,15 @@ test_that("missing counts fall back to judging the source alone", {
   expect_false(gate_needs_autofix("valley", TRUE)$skip)
   expect_false(gate_needs_autofix("valley", TRUE, kept = 5, parent = 0)$skip)
 })
+
+test_that("a peer replacement is written to its own sample's threshold row", {
+  # The rows include the declared controls, which the peer pool leaves out; an
+  # index built from the pool shifted every row after a control.
+  rows <- list(
+    data.frame(sample_id = "CTRL", marker = "CD3", threshold = 1),
+    data.frame(sample_id = "S1", marker = "CD3", threshold = 2),
+    data.frame(sample_id = "S2", marker = "CD3", threshold = 3))
+  ix <- thr_row_index(rows)
+  expect_equal(unname(ix[paste("S2", "CD3", sep = "\r")]), 3L)
+  expect_equal(rows[[ix[[paste("S1", "CD3", sep = "\r")]]]]$sample_id, "S1")
+})

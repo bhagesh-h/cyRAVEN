@@ -337,7 +337,9 @@ conclude.
    screening, and `wbc_per_ul` for absolute concentrations.
 
 `--write-config` derives everything and writes the resulting YAML without running
-the analysis, which shows what the pipeline detected before time is spent. It
+the analysis, which shows what the pipeline detected before time is spent. The
+per-sample cuts are summarised under `thresholds_derived`, which no run reads;
+copying a value into `thresholds:` fixes that cut for every sample. It
 needs `--outdir` as well as the output path: deriving the parameters means
 reading the files, so the early stages run and write their QC output beside it.
 Without `--outdir` it stops with `cannot open the connection`.
@@ -371,6 +373,7 @@ number are opt-in. That rule is deliberate and worth preserving in any change.
 --lod-events 20            # events below which a population is not detected
 --loq-events 50            # events below which it is detected but not quantified
 --drop-unstable-events     # exclude flagged acquisition intervals; changes counts
+--peacoqc                  # remove PeacoQC's flagged events instead; changes counts
 --subsample rare           # inverse-density draw; changes every UMAP
 --calibration-beads b.fcs  # convert to MESF/ERF; changes every intensity
 --no-uncertainty           # skip the gate uncertainty analysis
@@ -394,6 +397,7 @@ number are opt-in. That rule is deliberate and worth preserving in any change.
 --clinical-columns sofa    # measurements to associate, not variables to group by
 --paired-column patient_id # pair the test within subject
 --min-group-n 3            # groups below this are not tested
+--edger                    # add diffcyt-DA-edgeR on the counts, beside the rank tests
 --p-adjust-display raw     # show unadjusted p beside the adjusted one
 --explore-k 30             # FlowSOM cluster count; explore is TOLD this number
 --explore-cells-per-sample N  # bounds explore's peak memory, not just its output
@@ -405,12 +409,15 @@ embedding; there is no embedding-only form. Under it `qc_status` reads `pass`
 for all samples and only the `verdict` column still records that the sample had
 no usable parent gate. Say both things whenever you use it.
 
-Four of these change numbers the previous run reported and default to off:
-`--drop-unstable-events` changes every count in an affected file,
-`--subsample rare` changes which cells are embedded, `--calibration-beads`
-changes the units every intensity is expressed in, and `--auto-fix-gates`
-changes every count in a file whose hierarchy gate it skips. Say so when you use
-them.
+These change numbers the previous run reported and default to off:
+`--transform logicle` moves every threshold, `--adaptive-gates` moves thresholds
+where another rule scores a better gap, `--correct-batch` changes the marker
+values the embedding and clustering see, `--drop-unstable-events` changes every
+count in an affected file, `--peacoqc` every count in a file PeacoQC flags
+(`peacoqc_summary.csv`), `--subsample rare` changes which cells are embedded,
+`--calibration-beads` changes the units every intensity is expressed in, and
+`--auto-fix-gates` changes every count in a file whose hierarchy gate it skips
+(and implies `--peer-cuts`, which replaces cuts). Say so when you use them.
 
 ### `--adaptive-gates`
 
@@ -534,7 +541,8 @@ merely records a collection date.
 `--group-column`. On a repeated-measures study the timepoint is often the primary
 comparison, and a cohort whose small batches each fall at one visit is confounded
 exactly where it matters. `batch_group_confounding.csv` carries one row per
-variable, worst first, and the log warns from Cramer's V >= 0.3.
+variable, worst first, and the log warns from Cohen's medium association for
+the table's size (Cramer's V >= 0.3 with two levels, 0.3/√(k − 1) in general).
 
 ## Absolute counts, and the constraint they lift
 
@@ -601,7 +609,9 @@ Three things to get right when explaining it:
   guessed from a heatmap; and explore lends the declared run `spec_gaps.csv`,
   naming populations that span several clusters and clusters nothing covers.
   Without it the two are computed in complete isolation, which is the right
-  default: a check on the specification has to be independent of it.
+  default: a check on the specification has to be independent of it. Blind
+  explore then names clusters against cuts it places on each sample's own cells
+  by the same density rule, reading none of the declared run's cuts.
 - **A cluster is not a population.** Explore is a hypothesis generator. The
   intended path is: explore finds something → curate
   `explore_suggested_spec.yaml` into a real specification → run the supervised
@@ -629,7 +639,7 @@ disagreement is legible (after Weber & Robinson, Cytometry A 2016;89:1084-1096).
 ### Immune subsets, and why there is no `--add-subsets`
 
 `explore_cluster_subsets.csv` names each cluster from its own marker profile --
-activated, exhausted and homing T cell subsets, NK CD56 bright/dim, HLA-DR low
+activated, PD-1+/TIM-3+/LAG-3+ and homing T cell subsets, NK CD56 bright/dim, HLA-DR low
 and CD38+ monocytes, and whatever else the panel can express. Which subsets are
 definable is a property of the **panel**, not of immunology, so only definitions
 whose every marker is present are proposed, and the canonical groups the panel
@@ -671,8 +681,8 @@ from an immunophenotyping paper asks first: *where is my t-test?*
 
 - `statistical_methods.csv` names every commonly reported method, Student's and
   Welch's *t*, one-way and two-way ANOVA with Tukey, Mann-Whitney,
-  Kruskal-Wallis with Dunn, chi-squared, Bonferroni, diffcyt's edgeR/voom/GLMM,
-  and says whether this run computed it and why.
+  Kruskal-Wallis with Dunn, chi-squared, Bonferroni, diffcyt's edgeR/voom/GLMM
+  (edgeR runs with `--edger`), and says whether this run computed it and why.
 - `normality_tests.csv` is the evidence: Shapiro-Wilk per population per group,
   Brown-Forsythe across groups.
 

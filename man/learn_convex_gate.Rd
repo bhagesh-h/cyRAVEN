@@ -31,7 +31,9 @@ runtime. It is left available for a dataset where the fit does get stuck}
 
 \item{lambda_grid}{tightness values to search}
 
-\item{holdout}{fraction of cells reserved for evaluation, stratified by label}
+\item{holdout}{fraction of cells reserved for evaluation, stratified by
+label; half of them choose the penalty and the other half give the
+reported held-out metrics}
 
 \item{n_target_total}{recall denominator; defaults to the targets supplied}
 

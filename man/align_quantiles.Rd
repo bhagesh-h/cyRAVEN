@@ -8,7 +8,8 @@ align_quantiles(
   x,
   batch,
   probs = seq(0, 1, length.out = 101),
-  goal = c("batch_mean", "cells")
+  goal = c("batch_mean", "cells"),
+  goal_batches = NULL
 )
 }
 \arguments{
@@ -19,6 +20,9 @@ align_quantiles(
 \item{probs}{quantile grid used to build the map}
 
 \item{goal}{"batch_mean" (default) or "cells"; see above.}
+
+\item{goal_batches}{batches the goal is built from, or NULL for every
+batch; see \code{\link[=align_within_groups]{align_within_groups()}} for why it is restricted.}
 }
 \value{
 numeric vector, corrected

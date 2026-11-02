@@ -349,3 +349,37 @@ test_that("the comparison gains a stricter ratio without disturbing the first", 
   # borrowing the gate value.
   expect_true(all(is.na(old$difference_over_total_u)))
 })
+
+test_that("the gate-uncertainty ratio is taken in the units the test compared", {
+  # A comparison on cells/uL divided by an uncertainty in percentage points is
+  # no ratio. Each sample's uncertainty is carried into cells/uL by its own
+  # cells_per_ul / pct_of_cd45_pos.
+  gs <- data.frame(population = "P", measure = "cells_per_ul",
+                   median_reference = 100, median_comparison = 400,
+                   stringsAsFactors = FALSE)
+  uf <- data.frame(sample_id = c("a", "b"), population = "P",
+                   u_pct_points = c(1, 1), u_total_pct_points = c(2, 2),
+                   qc_status = "pass", stringsAsFactors = FALSE)
+  fq <- data.frame(sample_id = c("a", "b"), population = "P",
+                   pct_of_cd45_pos = c(10, 10), cells_per_ul = c(500, 500))
+  out <- annotate_gate_uncertainty(gs, uf, freq = fq)
+  # 1 point at WBC 5,000/uL is 50 cells/uL: 300 / 50 = 6, not 300 / 1.
+  expect_equal(out$difference_over_gate_u, 6)
+  expect_equal(out$difference_over_total_u, 3)
+  expect_equal(out$gate_u_pct_points, 1)
+  # Without the factor there is no ratio to report.
+  expect_true(is.na(annotate_gate_uncertainty(gs, uf)$difference_over_gate_u))
+  # On percentages nothing changes.
+  gs$measure <- "pct_of_cd45_pos"
+  expect_equal(annotate_gate_uncertainty(gs, uf)$difference_over_gate_u, 300)
+})
+
+test_that("a floored tail cut is resampled under the same floor", {
+  # A negative population ending below zero signal: the tail rule lands below
+  # the floor, so the reported cut is the floor in every replicate.
+  set.seed(9)
+  x <- rnorm(5000, -3, 0.3)
+  tu <- threshold_uncertainty(x, source = "tailgate", B = 30L, floor = 0)
+  expect_equal(tu$u_sampling, 0)
+  expect_equal(tu$u_method, 0)
+})

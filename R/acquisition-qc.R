@@ -145,22 +145,25 @@ detect_time_anomalies <- function(time, mat, n_bins = 40L, mad_k = 5,
 
 #' Acquisition-time QC for one sample
 #'
-#' Runs before gating, so it uses log10 of the marker channels rather than the
-#' fitted analysis transform. The test is a robust z on per-bin medians and both
-#' scales are monotone, so the detection is equivalent; log10 needs no cofactor
-#' and is therefore available at the point where a decision about the events is
-#' still possible.
+#' Runs before gating, so it judges the marker channels as stored, compensated
+#' and linear, rather than on the fitted analysis transform, which does not
+#' exist yet. The test is a robust z on per-bin medians, each scaled by its own
+#' channel's spread, so a smooth monotone rescaling barely changes it where bin
+#' medians vary little; what matters is that the scale has no kink. log10 of
+#' max(x, 1), used before, pinned every value at or below 1 to 0, and the
+#' median of a mostly negative compensated channel sits on that kink: simulated
+#' with negatives centred on zero it flagged 0.22 stable bins per channel and
+#' found a +80 drift in 1.9 of 3 bins, against 0 and 3.1 on the stored values.
 #'
 #' @param rd a list from [read_fcs_resolved()]
-#' @param tmat transformed marker matrix for the same events. When NULL, log10 of
-#'   the marker columns is used.
+#' @param tmat transformed marker matrix for the same events. When NULL, the
+#'   marker columns as stored are used.
 #' @param n_bins,mad_k passed to [detect_time_anomalies()]
 #' @return list(summary = one-row data.frame, bins, flagged)
 #' @keywords internal
 acquisition_qc_one <- function(rd, tmat = NULL, n_bins = 40L, mad_k = 5) {
   if (is.null(tmat) && length(rd$marker_cols %||% integer(0))) {
-    tmat <- vapply(rd$marker_cols, function(j) log10(pmax(rd$exprs[, j], 1)),
-                   numeric(nrow(rd$exprs)))
+    tmat <- rd$exprs[, unname(rd$marker_cols), drop = FALSE]
     colnames(tmat) <- names(rd$marker_cols)
   }
   tcol <- find_time_column(rd)
@@ -209,8 +212,8 @@ run_acquisition_qc <- function(reads, pops = NULL, n_bins = 40L, mad_k = 5) {
   for (s in names(reads)) {
     rd <- reads[[s]]
     # The fitted transform is used when a scored run supplies it; otherwise
-    # acquisition_qc_one() falls back to log10, which is what makes this runnable
-    # before gating.
+    # acquisition_qc_one() falls back to the stored values, which is what makes
+    # this runnable before gating.
     tm <- pops[[s]]$tmat
     if (!is.null(tm) && nrow(tm) != nrow(rd$exprs)) tm <- NULL
     r <- tryCatch(acquisition_qc_one(rd, tm, n_bins = n_bins, mad_k = mad_k),
@@ -259,4 +262,65 @@ frequency_delta_if_cleaned <- function(tmat, thr, parent, spec, keep, scoped = N
              pct_if_cleaned = round(unname(b[pops]), 4),
              pct_delta_if_cleaned = round(unname(b[pops] - a[pops]), 4),
              row.names = NULL, stringsAsFactors = FALSE)
+}
+
+# =============================================================================
+# PeacoQC, opt-in (--peacoqc)
+# =============================================================================
+#
+# The detector above reports unstable intervals and removes them only on
+# request, because a home-made rule should not change every count by default.
+# PeacoQC (Emmaneel et al. 2022, Cytometry A 101:325) is a published, validated
+# method for the same job, and under --peacoqc the events it flags are removed
+# before any gate is derived. Its input is prepared as its vignette prescribes:
+# margins removed before compensation (done at reading here), compensated, and
+# logicle-transformed with flowCore's estimateLogicle() on the fluorescence
+# channels; it then judges the scatter and fluorescence channels together,
+# with both its isolation-tree and MAD criteria ("all"). The transform is only
+# PeacoQC's input; the analysis transform is derived later as usual.
+
+#' Run PeacoQC on one read, prepared as its vignette prescribes
+#'
+#' @param rd a list from [read_fcs_resolved()], compensated.
+#' @return list(good = logical per event or NULL, pct_removed, pct_it, pct_mad,
+#'   pct_consecutive, reason).
+#' @keywords internal
+peacoqc_one <- function(rd) {
+  none <- function(reason) list(good = NULL, pct_removed = NA_real_, pct_it = NA_real_,
+                                pct_mad = NA_real_, pct_consecutive = NA_real_,
+                                reason = reason)
+  if (!requireNamespace("PeacoQC", quietly = TRUE))
+    stop("--peacoqc needs the Bioconductor package PeacoQC", call. = FALSE)
+  tcol <- find_time_column(rd)
+  if (is.na(tcol)) return(none("no Time channel"))
+  ex <- rd$exprs
+  cn <- colnames(ex)
+  fl <- cn[unname(rd$marker_cols)]
+  sc <- cn[unname(rd$scatter_cols[intersect(c("FSC-A", "SSC-A"), names(rd$scatter_cols))])]
+  if (!length(fl)) return(none("no fluorescence channel"))
+  ff <- flowCore::flowFrame(ex)
+  tl <- tryCatch(flowCore::estimateLogicle(ff, fl), error = function(e) NULL)
+  if (is.null(tl)) return(none("estimateLogicle failed on this file"))
+  ff <- flowCore::transform(ff, tl)
+  out <- tempfile("peacoqc_")
+  on.exit(unlink(out, recursive = TRUE), add = TRUE)
+  # PeacoQC draws a text progress bar on stdout; captured so it stays out of
+  # the run log.
+  res <- NULL
+  utils::capture.output(res <- tryCatch(suppressMessages(suppressWarnings(
+    PeacoQC::PeacoQC(ff, channels = unique(c(sc, fl)), determine_good_cells = "all",
+                     plot = FALSE, save_fcs = FALSE, report = FALSE,
+                     output_directory = out, time_channel_parameter = cn[tcol]))),
+    error = function(e) e), type = "output")
+  if (inherits(res, "error"))
+    return(none(paste("PeacoQC failed:", conditionMessage(res))))
+  # PeacoQC runs its isolation tree only on 150 or more time bins (force_IT)
+  # and otherwise warns, which is suppressed above, so the skip is said here.
+  pct_it <- res$ITPercentage %||% NA_real_
+  list(good = as.logical(res$GoodCells), pct_removed = res$PercentageRemoved,
+       pct_it = pct_it, pct_mad = res$MADPercentage %||% NA_real_,
+       pct_consecutive = res$ConsecutiveCellsPercentage %||% NA_real_,
+       reason = if (is.na(pct_it))
+         "isolation tree not run: fewer than 150 time bins (PeacoQC's minimum)"
+       else NA_character_)
 }

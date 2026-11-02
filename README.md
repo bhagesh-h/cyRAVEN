@@ -241,7 +241,9 @@ citation("cyRAVEN")
 
 If you use the clustering, also cite FlowSOM (Van Gassen et al., 2015,
 *Cytometry A* 87:636). For the differential state tests, also cite diffcyt
-(Weber et al., 2019, *Commun Biol* 2:183).
+(Weber et al., 2019, *Commun Biol* 2:183). With `--edger`, also cite diffcyt
+and edgeR (Robinson et al., 2010, *Bioinformatics* 26:139); with `--peacoqc`,
+PeacoQC (Emmaneel et al., 2022, *Cytometry A* 101:325).
 
 ## How parts of this were written
 

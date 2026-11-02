@@ -11,7 +11,8 @@ specification_conformance(
   baseline,
   transform = "arcsinh",
   z_qualify = 3.5,
-  z_fail = 6
+  z_fail = 6,
+  transforms = NULL
 )
 }
 \arguments{
@@ -28,6 +29,9 @@ specification_conformance(
 \item{z_qualify}{robust z above which a marker is qualified}
 
 \item{z_fail}{robust z above which a marker fails}
+
+\item{transforms}{this run's per-panel transforms from \code{\link[=make_transform]{make_transform()}},
+or NULL to compare on the analysis scale only when it is unchanged.}
 }
 \value{
 list(markers, populations, spec_changes, summary)
@@ -43,7 +47,16 @@ THE SCALE IS FLOORED, for the reason it is floored in the within-run check: a
 marker whose baseline samples happened to agree closely would otherwise divide
 by near zero and fail on a difference of no consequence.
 
-A CHANGED TRANSFORM INVALIDATES EVERY THRESHOLD COMPARISON, because thresholds
-are expressed on the analysis scale. That case is reported as its own verdict
-rather than as dozens of drifted markers.
+THE CUTS ARE COMPARED IN INSTRUMENT UNITS, on the baseline's scale.
+Thresholds are expressed on the analysis scale, and that scale is re-derived
+from each run's data: the arcsinh cofactor of the same 30 files moved from
+261 to 403 between two versions of this package, which moves every cut on
+the transformed axis without moving it on the instrument's. Comparing the
+transformed values across runs therefore measured the change of ruler. Each
+marker's median cut is carried back to instrument units by this run's
+transform and forward by the baseline's, then compared there against the
+baseline's spread. A baseline written before transforms were stored is
+rebuilt from its arcsinh cofactor; where either transform cannot be
+rebuilt, a changed transform makes the comparison "not comparable", as
+before.
 }

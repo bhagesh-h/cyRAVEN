@@ -278,8 +278,9 @@ normalise_patient_columns <- function(out, value_map = default_value_map(),
     if ("age_years" %in% names(out)) {
       a <- suppressWarnings(as.numeric(out$age_years))
       # An age of 0 is legitimate for a neonate, so it is only rejected when the
-      # date of birth is also absent -- i.e. nothing corroborates it. Where a DOB
-      # exists it is authoritative and the age is recomputed from it.
+      # date of birth is also absent -- i.e. nothing corroborates it. A missing
+      # or non-positive age is derived from the date of birth; a given age is
+      # kept.
       bogus <- !is.na(a) & a <= 0 & is.na(d)
       if (any(bogus)) {
         log_msg("  age_years: ", sum(bogus), " value(s) <= 0 with no date of ",
@@ -291,7 +292,13 @@ normalise_patient_columns <- function(out, value_map = default_value_map(),
       if (any(derive)) {
         out$age_years[derive] <- as.numeric(
           floor(as.numeric(difftime(reference_date, d[derive], units = "days")) / 365.25))
-        log_msg("  derived age for ", sum(derive), " row(s) from date of birth")
+        # Against the reference date, the day of the run unless --reference-date
+        # sets it: the sheet carries no sampling date, so by default this is age
+        # at analysis, not at the draw, and it moves with the day the run is
+        # made. Said so it can be read.
+        log_msg("  derived age for ", sum(derive), " row(s) from date of birth, ",
+                "as of ", format(reference_date, "%Y-%m-%d"), " (--reference-date; ",
+                "not the sampling date unless set to it, or give age_years)")
       }
     }
   }

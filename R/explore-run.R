@@ -156,6 +156,7 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
                               total_cap = opt$explore_max_cells %||% 150000L)
     n_reread <- 0L
     rows <- list()
+    neg_ref <- list()
     for (s in sids) {
       # planned[s], not planned[[s]]: a sample with no events is absent from the
       # plan, and `[[` on a named vector errors on an absent name where `[`
@@ -167,6 +168,18 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
         next
       }
       if (is.null(reads[[s]]$exprs)) n_reread <- n_reread + 1L
+      # CD45-NEGATIVE, AS THE DECLARED GATE DEFINES IT: the 99.5th percentile
+      # of CD45 on the events well below the scatter gate's FSC boundary, the
+      # debris core, measured in this file (cd45_negative_reference()). Read
+      # from the file's own events, so blind explore stays blind.
+      if ("CD45" %in% names(rd$marker_cols) && !is.null(tr)) {
+        .sg <- tryCatch(suppressWarnings(derive_scatter_gate(rd$exprs, rd$scatter_cols)),
+                        error = function(e) NULL)
+        if (!is.null(.sg))
+          neg_ref[[s]] <- cd45_negative_reference(
+            tr$fn(rd$exprs[, rd$marker_cols[["CD45"]]], "CD45"),
+            !(.sg$fsc_log10 < .sg$fsc_lo - 0.15))
+      }
       pool <- .cells_of(s, rd)
       pool <- if (is.null(pool)) seq_len(nrow(rd$exprs)) else which(pool)
       n <- length(pool)
@@ -224,12 +237,45 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
       }
     }
     have_thr <- length(thr_by_sample) > 0L
+    # NAMING CUTS FOR BLIND EXPLORE. With no declared cuts to read, a marker
+    # was called against its pooled median, which calls half of all cells
+    # positive by construction: a marker on 5% of cells read about 50%
+    # positive in clusters that do not carry it, and the phenotypes and subset
+    # names followed. Each sample's cut is now placed on that sample's own
+    # explore cells by the declared run's rule (a valley, else a tail gate
+    # above the dominant mode, else the flagged quantile; CD45 its lowest
+    # valley), from the transform explore already has. Nothing from the
+    # declared run is read. The cluster QC does not use these cuts (see the
+    # debris reference below). Scatter channels have no positivity cut and
+    # keep the median.
+    name_thr <- thr_by_sample
+    if (!have_thr && !is.null(tr)) {
+      .sc <- unique(unlist(lapply(sids, function(s) names(reads[[s]]$scatter_cols))))
+      .fl <- setdiff(fcols, .sc)
+      for (s in unique(cells$sample_id)) {
+        i <- cells$sample_id == s
+        v <- vapply(.fl, function(f) {
+          r <- tryCatch(resolve_threshold(f, cells[[f]][i], floor = tr$fn(0, f),
+                                          prefer = if (identical(f, "CD45")) "lowest"
+                                                   else "deepest"),
+                        error = function(e) NULL)
+          if (is.null(r)) NA_real_ else as.numeric(r$threshold)
+        }, numeric(1))
+        if (any(is.finite(v))) name_thr[[s]] <- v[is.finite(v)]
+      }
+    }
+    dens_names <- !have_thr && length(name_thr) > 0L
     note("positivity_basis",
-         if (have_thr) "per-sample thresholds" else "pooled per-feature medians",
+         if (have_thr) "per-sample thresholds"
+         else if (dens_names) "per-sample density cuts" else "pooled per-feature medians",
          if (have_thr)
            sprintf("thresholds for %d of %d sample(s); a call is against that sample's own cut",
                    length(thr_by_sample), length(sids))
-         else "no declared pipeline ran; this is what a standalone clusterer has")
+         else if (dens_names)
+           sprintf(paste("no declared run; names use a cut placed on each of %d",
+                         "sample(s)' own cells by the declared run's rule"),
+                   length(name_thr))
+         else "no transform to place cuts on; the pooled median of each feature")
 
     leuko <- if ("CD45" %in% fcols) "CD45" else NULL
     viab <- NULL
@@ -266,8 +312,18 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
         ulab <- if (!all(is.na(cc$node))) "n" else "k"
         Xm <- as.matrix(cells[, fcols, drop = FALSE])
         uk <- sort(unique(unit))
+        # Blind: the CD45 debris call uses each file's debris reference where
+        # every sample has one; the 2-means split of node medians otherwise.
+        # It cut through a CD45-dim population on PBMC (a node at CD45 2.42
+        # called debris beside nodes at 2.71 kept), where few events are
+        # debris and the low group is not CD45-negative.
+        .use_ref <- !have_thr && !is.null(leuko) &&
+          all(vapply(unique(cells$sample_id), function(s)
+            is.finite(neg_ref[[s]] %||% NA_real_), logical(1)))
+        qc_thr <- if (have_thr) thr_by_sample else if (.use_ref)
+          lapply(neg_ref, function(v) stats::setNames(v, leuko)) else list()
         pos0 <- explore_positivity(Xm, paste0(ulab, unit), cells$sample_id,
-                                   thr_by_sample)
+                                   qc_thr)
         med0 <- t(vapply(uk, function(k)
           apply(Xm[unit == k, , drop = FALSE], 2, stats::median, na.rm = TRUE),
           numeric(length(fcols))))
@@ -276,6 +332,7 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
         sizes0 <- as.integer(table(unit)[as.character(uk)])
         qc_tab <- explore_qc_gate(pos0, med0, sizes0, leukocyte = leuko,
                                   viability = viab, have_thresholds = have_thr,
+                                  low_from_pos = have_thr || .use_ref,
                                   drop_dead = !isTRUE(opt$explore_keep_dead),
                                   seed = seed)
         merged <- tapply(cl0, unit, function(x) x[1])
@@ -298,6 +355,9 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
                                 nrow(cells), 100 * frac),
              if (have_thr)
                "whole SOM nodes judged against each sample's own thresholds"
+             else if (.use_ref)
+               paste("whole SOM nodes: CD45 against each file's debris reference,",
+                     "viability by 2-means on per-node medians")
              else "whole SOM nodes judged by 2-means on per-node medians")
 
         min_frac <- opt$explore_min_retained %||% 0.05
@@ -378,7 +438,7 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
     Xk <- as.matrix(cells[, fcols, drop = FALSE])
     kv <- cells$cluster
     ks <- sort(unique(kv))
-    pos <- explore_positivity(Xk, kv, cells$sample_id, thr_by_sample)
+    pos <- explore_positivity(Xk, kv, cells$sample_id, name_thr)
     med <- t(vapply(ks, function(k)
       apply(Xk[kv == k, , drop = FALSE], 2, stats::median, na.rm = TRUE),
       numeric(length(fcols))))
@@ -390,6 +450,7 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
                        pct_of_gated = round(100 * nk / length(kv), 3),
                        phenotype = unname(pheno[ks]),
                        phenotype_basis = if (have_thr) "per-sample thresholds"
+                                         else if (dens_names) "per-sample density cuts"
                                          else "pooled medians",
                        stringsAsFactors = FALSE)
     fp <- as.data.frame(round(pos[ks, , drop = FALSE], 4), check.names = FALSE)
@@ -473,6 +534,9 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
       st <- try(stats_group_comparison(ab, group_of,
                                        reference = opt$reference_group,
                                        value_col = "pct_of_gated"), silent = TRUE)
+      if (inherits(st, "try-error"))
+        log_msg("  WARNING explore group tests failed: ",
+                conditionMessage(attr(st, "condition")))
       if (!inherits(st, "try-error") && !is.null(st) && nrow(st)) {
         st$phenotype <- prof$phenotype[match(st$population, prof$cluster)]
         # The confounding verdict travels WITH the statistics. Without it a
@@ -506,6 +570,9 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
         sa <- try(stats_group_comparison(ab, group_of,
                                          reference = opt$reference_group,
                                          value_col = "cells_absolute"), silent = TRUE)
+        if (inherits(sa, "try-error"))
+          log_msg("  WARNING explore absolute-count tests failed: ",
+                  conditionMessage(attr(sa, "condition")))
         if (!inherits(sa, "try-error") && !is.null(sa) && nrow(sa)) {
           sa$phenotype <- prof$phenotype[match(sa$population, prof$cluster)]
           sa$count_basis <- "dual-platform: share x external total"
@@ -772,20 +839,29 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
         # that, minus the leading underscore, so the panel reaches the image and
         # not only the filename.
         plab <- if (nzchar(tag)) sub("^_", "", tag) else ""
+        # try() returns a "try-error" object, not NULL, on failure; a failed
+        # figure must not be listed as written.
+        drawn <- function(r) {
+          if (inherits(r, "try-error")) {
+            log_msg("  WARNING explore figure failed: ", conditionMessage(attr(r, "condition")))
+            return(FALSE)
+          }
+          !is.null(r)
+        }
         fq <- file.path(ex_dir, sprintf("explore_total_counts_qc%s.png", tag))
         if (nrow(tc_panel) &&
-            !is.null(try(fig_total_counts_qc(tc_panel, fq, group_of = group_of,
-                                             all_samples = sids,
-                                             panel_label = plab), silent = TRUE)))
+            drawn(try(fig_total_counts_qc(tc_panel, fq, group_of = group_of,
+                                          all_samples = sids,
+                                          panel_label = plab), silent = TRUE)))
           written <<- c(written, basename(fq))
         if ("cells_absolute" %in% names(ab) && any(is.finite(ab$cells_absolute))) {
           fa <- file.path(ex_dir, sprintf("explore_absolute_vs_share%s.png", tag))
           # Explore draws unsupervised clusters, often thirty or more, so the
           # largest twelve are shown. A declared run shows every population.
-          if (!is.null(try(fig_absolute_vs_share(ab, fa, group_of = group_of,
-                                                 panel_label = plab,
-                                                 max_clusters = 12L),
-                           silent = TRUE)))
+          if (drawn(try(fig_absolute_vs_share(ab, fa, group_of = group_of,
+                                              panel_label = plab,
+                                              max_clusters = 12L),
+                        silent = TRUE)))
             written <<- c(written, basename(fa))
         }
       })
@@ -797,6 +873,9 @@ run_explore <- function(reads, fpr, opt, outdir, transforms = NULL, gates = NULL
   # Its own report, not a section in report.html. See R/explore-report.R for
   # why: report.html is a declared deliverable and --explore must not change it.
   rp <- try(write_explore_report(ex_dir, opt), silent = TRUE)
+  if (inherits(rp, "try-error"))
+    log_msg("  WARNING explore_report.html not written: ",
+            conditionMessage(attr(rp, "condition")))
   if (!inherits(rp, "try-error") && !is.null(rp))
     written <- c(written, basename(rp))
 

@@ -220,13 +220,84 @@ compositional_concordance <- function(raw_stats, clr_stats, alpha = 0.05,
 #      exploratory in the output itself.
 # A confounder you can see is worth more than an adjustment you cannot trust.
 
+#' Spearman correlation of two variables with a grouping held fixed
+#'
+#' The partial Spearman correlation controlling for group membership: both
+#' variables are ranked, each group's mean rank is removed, and the residuals
+#' are correlated, which is the partial correlation of the ranks on the group
+#' indicators. Tested with t on n - 2 - (k - 1) degrees of freedom for k
+#' groups, the inference ppcor uses for a partial correlation.
+#' @param x,y numeric vectors.
+#' @param g grouping, the same length.
+#' @return list(rho, p), NA where it cannot be estimated.
+#' @keywords internal
+partial_spearman_within <- function(x, y, g) {
+  na <- list(rho = NA_real_, p = NA_real_)
+  g <- factor(g)
+  rx <- rank(x); ry <- rank(y)
+  if (nlevels(g) > 1L) {
+    rx <- rx - stats::ave(rx, g); ry <- ry - stats::ave(ry, g)
+  }
+  df <- length(x) - 2L - (max(nlevels(g), 1L) - 1L)
+  if (df < 1L || stats::sd(rx) <= 0 || stats::sd(ry) <= 0) return(na)
+  rho <- stats::cor(rx, ry)
+  if (!is.finite(rho)) return(na)
+  if (abs(rho) >= 1) return(list(rho = rho, p = 0))
+  t <- rho * sqrt(df / (1 - rho^2))
+  list(rho = rho, p = 2 * stats::pt(-abs(t), df))
+}
+
+#' Rank F test of a categorical covariate after a grouping term
+#'
+#' `lm(rank(y) ~ g + f)` against `lm(rank(y) ~ g)`: the rank-transform test
+#' (Conover & Iman 1981) of whether `f` explains the outcome once the groups
+#' are accounted for.
+#' @param y numeric outcome.
+#' @param f categorical covariate.
+#' @param g grouping.
+#' @return the p-value, or NA where the model cannot be fitted.
+#' @keywords internal
+rank_f_within <- function(y, f, g) {
+  d <- data.frame(.y = rank(y), f = factor(f), g = factor(g))
+  if (nlevels(d$f) < 2L) return(NA_real_)
+  base <- if (nlevels(d$g) > 1L) ".y ~ g" else ".y ~ 1"
+  r <- try({
+    m0 <- stats::lm(stats::as.formula(base), data = d)
+    m1 <- stats::lm(stats::as.formula(paste(base, "+ f")), data = d)
+    df1 <- stats::df.residual(m0) - stats::df.residual(m1)
+    df2 <- stats::df.residual(m1)
+    rss0 <- sum(stats::residuals(m0)^2); rss1 <- sum(stats::residuals(m1)^2)
+    # A covariate that explains nothing leaves the sums of squares equal to
+    # rounding, where anova() reports no p-value; the answer there is 1.
+    if (df1 < 1L || df2 < 1L || rss1 <= 0) NA_real_
+    else if (rss0 - rss1 <= 1e-10 * rss0) 1
+    else stats::pf(((rss0 - rss1) / df1) / (rss1 / df2), df1, df2,
+                   lower.tail = FALSE)
+  }, silent = TRUE)
+  if (inherits(r, "try-error") || !length(r)) NA_real_ else as.numeric(r)
+}
+
 #' Is a covariate confounded with cohort, and does it track the outcome?
 #'
-#' WHY SPEARMAN / KRUSKAL / FISHER: the same reasoning as everywhere else here --
-#' small n, no free normality assumption. Numeric covariates get Spearman
-#' (monotone, rank-based). Categorical covariates get Kruskal-Wallis against the
-#' outcome and a Fisher exact test against cohort, which stays exact at the cell
-#' counts a 2x3 sex-by-cohort table produces where chi-squared does not.
+#' WHY RANK TESTS AND FISHER: the same reasoning as everywhere else here --
+#' small n, no free normality assumption. A Fisher exact test asks whether a
+#' categorical covariate is balanced across cohorts, which stays exact at the
+#' cell counts a 2x3 sex-by-cohort table produces where chi-squared does not; a
+#' numeric one gets Kruskal-Wallis.
+#'
+#' THE OUTCOME ASSOCIATION IS TAKEN WITHIN COHORTS. A confounder is associated
+#' with the exposure and with the outcome conditional on the exposure (Rothman,
+#' Greenland & Lash 2008, Modern Epidemiology, 3rd ed.). Tested across the
+#' pooled cohorts, a real group difference makes any unbalanced covariate track
+#' the outcome by itself: with two cohorts of ten, ages 30 and 55 and a group
+#' effect on the outcome with none of age, the pooled Spearman test called age a
+#' HIGH confounder risk in 199 of 200 simulated cohorts. So the association is a
+#' partial Spearman correlation controlling for cohort -- the ranks with each
+#' cohort's mean rank removed, tested on n - 2 - (k - 1) degrees of freedom, as
+#' ppcor does -- and, for a categorical covariate, a rank F test of the
+#' covariate after the cohort term. Where age and cohort barely overlap this has
+#' little power, which is the honest answer: the design cannot separate them, and
+#' the balance row already says the covariate is unbalanced.
 #'
 #' @param freq population_frequencies table
 #' @param patients patient table (patient_id + the covariates)
@@ -323,23 +394,24 @@ stats_confounding <- function(freq, patients, smap, group_of,
         cn <- suppressWarnings(as.numeric(as.character(dp$cov)))
         keep <- is.finite(cn) & is.finite(dp[[value_col]])
         if (sum(keep) < 2L * min_n) next
-        ct <- try(stats::cor.test(cn[keep], dp[[value_col]][keep],
-                                  method = "spearman", exact = FALSE), silent = TRUE)
-        if (inherits(ct, "try-error")) next
+        pc <- partial_spearman_within(cn[keep], dp[[value_col]][keep],
+                                      dp$group[keep])
+        if (!is.finite(pc$p)) next
         rows[[length(rows) + 1L]] <- data.frame(
           covariate = cv, population = pop, comparison = "covariate vs outcome",
-          test = "Spearman", rho = unname(round(ct$estimate, 3)),
-          p_value = ct$p.value, n = sum(keep),
-          note = paste0("outcome = ", value_col), stringsAsFactors = FALSE)
+          test = "partial Spearman, within cohort", rho = round(pc$rho, 3),
+          p_value = pc$p, n = sum(keep),
+          note = paste0("outcome = ", value_col, "; cohort held fixed"),
+          stringsAsFactors = FALSE)
       } else {
         f <- factor(as.character(dp$cov))
         if (nlevels(f) < 2L || min(table(f)) < min_n) next
-        kw <- try(stats::kruskal.test(dp[[value_col]], f), silent = TRUE)
-        if (inherits(kw, "try-error")) next
+        p_f <- rank_f_within(dp[[value_col]], f, dp$group)
+        if (!is.finite(p_f)) next
         rows[[length(rows) + 1L]] <- data.frame(
           covariate = cv, population = pop, comparison = "covariate vs outcome",
-          test = "Kruskal-Wallis", rho = NA_real_, p_value = kw$p.value,
-          n = nrow(dp), note = paste0("outcome = ", value_col),
+          test = "rank F test, within cohort", rho = NA_real_, p_value = p_f,
+          n = nrow(dp), note = paste0("outcome = ", value_col, "; cohort held fixed"),
           stringsAsFactors = FALSE)
       }
     }
@@ -349,16 +421,17 @@ stats_confounding <- function(freq, patients, smap, group_of,
   out$p_adj_BH <- stats::p.adjust(out$p_value, method = "BH")
   # The verdict a reader actually wants. A covariate is a CONFOUNDER for a
   # population only when it is BOTH unbalanced across cohorts AND associated with
-  # that population's abundance. Either fact alone is harmless, and reporting
-  # either alone as a warning would cry wolf on every study with unequal ages.
+  # that population's abundance within cohorts. Either fact alone is harmless,
+  # and reporting either alone as a warning would cry wolf on every study with
+  # unequal ages.
   unbal_cov <- unique(out$covariate[out$comparison == "covariate vs cohort" &
                                     !is.na(out$p_value) & out$p_value < 0.05])
   out$confounder_risk <- ifelse(
     out$comparison == "covariate vs outcome" & out$covariate %in% unbal_cov &
       !is.na(out$p_value) & out$p_value < 0.05,
-    "HIGH - unbalanced across cohorts AND associated with this population",
+    "HIGH - unbalanced across cohorts AND associated with this population within cohorts",
     ifelse(out$comparison == "covariate vs outcome" & out$covariate %in% unbal_cov,
-           "covariate unbalanced across cohorts, but not associated here", ""))
+           "covariate unbalanced across cohorts, but not associated here within cohorts", ""))
   out[order(out$comparison, out$covariate, out$p_value), , drop = FALSE]
 }
 
@@ -469,6 +542,21 @@ stats_rank_ancova <- function(freq, patients, smap, group_of,
   out[order(out$p_group_adjusted), , drop = FALSE]
 }
 
+#' Matched-pairs rank-biserial correlation
+#'
+#' (R+ - R-) / (R+ + R-), with R+ and R- the sums of the ranks of |d| over the
+#' positive and negative differences, zero differences dropped as the
+#' signed-rank test drops them (Kerby 2014, Compr Psychol 3:11.IT.3.1).
+#' @param d paired differences.
+#' @return numeric in \code{[-1, 1]}, or NA when no difference is non-zero.
+#' @keywords internal
+matched_rank_biserial <- function(d) {
+  d <- d[is.finite(d) & d != 0]
+  if (!length(d)) return(NA_real_)
+  r <- rank(abs(d))
+  (sum(r[d > 0]) - sum(r[d < 0])) / sum(r)
+}
+
 #' Paired / repeated-measures abundance test
 #'
 #' WHAT: when samples pair up (pre/post, longitudinal, matched donors), compares
@@ -550,10 +638,13 @@ stats_paired_comparison <- function(freq, pair_of, cond_of, reference = NULL,
         n_pairs = sum(ok), n_incomplete_pairs_dropped = sum(xor(in_a, in_b)),
         median_reference = stats::median(a), median_comparison = stats::median(b),
         median_paired_difference = stats::median(b - a),
-        # Matched-pairs rank-biserial: the share of pairs moving up minus the
-        # share moving down. Bounded \code{[-1,1]} and reads directly as "how consistent
-        # is the DIRECTION of change", which is the paired question.
-        rank_biserial = round((sum(b > a) - sum(b < a)) / max(1L, sum(b != a)), 3),
+        # Matched-pairs rank-biserial, the effect size of the signed-rank test
+        # beside it (Kerby 2014): (R+ - R-) / (R+ + R-), the ranks of |b - a|
+        # over the non-zero differences. Bounded \code{[-1,1]}; +1 when every
+        # donor moved up. The share of pairs up minus the share down, which
+        # this column held before, is the sign test's effect and ignores how
+        # far each donor moved.
+        rank_biserial = round(matched_rank_biserial(b - a), 3),
         test = "Wilcoxon signed-rank (paired)",
         p_value = p_wt,
         p_omnibus_friedman = p_omni, stringsAsFactors = FALSE)

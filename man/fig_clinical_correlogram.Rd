@@ -25,7 +25,10 @@ finding reported twice. This figure is where that is visible.
 }
 \details{
 WHAT IS INCLUDED. Numeric variables, and two-level variables coded 0/1 -- for
-which Spearman is the rank-biserial correlation, a legitimate quantity.
+which Spearman is the point-biserial correlation of the ranks, a legitimate
+quantity. It is not the rank-biserial correlation: it is that times
+sqrt(3pq n^2 / (n^2 - 1)), so two perfectly separated groups of five give
+0.87 rather than 1, and its magnitude is not comparable with a Cliff's delta.
 Variables with three or more unordered levels are excluded and named in the
 caption: there is no ordering to correlate, and coding them 1/2/3 would invent
 one.

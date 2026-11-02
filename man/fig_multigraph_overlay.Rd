@@ -14,7 +14,8 @@ fig_multigraph_overlay(
   dpi = 200,
   subcluster = NULL,
   reference = NULL,
-  colors = fcs_colors()
+  colors = fcs_colors(),
+  scale_label = "asinh intensity"
 )
 }
 \arguments{
@@ -38,6 +39,10 @@ its curve is drawn; below it a KDE is noise shaped like a result.}
 \item{reference}{The group every other group is compared against.}
 
 \item{colors}{Named list of colours; defaults to the package palette. See \code{\link[=fcs_colors]{fcs_colors()}}. Default \code{fcs_colors()}.}
+
+\item{scale_label}{Name of the scale the intensities are on, the run's
+\code{transform$label} ("asinh intensity", "logicle intensity"). Default
+\code{"asinh intensity"}.}
 }
 \description{
 WHAT THIS IS: a port of FlowJo's Layout Editor "Make Multigraph Overlay ->

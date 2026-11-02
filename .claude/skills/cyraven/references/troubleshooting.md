@@ -185,9 +185,11 @@ percentile where even that could not be done. In order:
 Frequencies from a fallback are not invalid. They carry no evidence of
 separation, which is a different statement, and `source` is how the reader knows.
 
-### A threshold is flagged in `threshold_scale_qc.csv`
+### A threshold is flagged as a scale outlier
 
-Robust *z* against the panel-wide median. Thresholds are derived per sample **by
+`scale_outlier` in `thresholds_used.csv`: robust *z* above 3.5 against the
+median of the other samples' cuts (`peer_median`); `threshold_scale_qc.csv`
+counts the outliers per marker. Thresholds are derived per sample **by
 design**, so some spread is expected. Flagged rows are candidates for review, not
 errors.
 

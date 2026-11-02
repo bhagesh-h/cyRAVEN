@@ -12,7 +12,8 @@ fig_population_marker_heatmap(
   annotate_expected = NULL,
   panel_label = "",
   dpi = 300,
-  colors = fcs_colors()
+  colors = fcs_colors(),
+  scale_label = "asinh intensity"
 )
 }
 \arguments{
@@ -35,6 +36,10 @@ those cells, turning the figure into an explicit gate audit.}
 \item{dpi}{Resolution in dots per inch. May be reduced automatically to respect the raster ceiling; see \code{\link[=safe_ggsave]{safe_ggsave()}}. Default \code{300}.}
 
 \item{colors}{Named list of colours; defaults to the package palette. See \code{\link[=fcs_colors]{fcs_colors()}}. Default \code{fcs_colors()}.}
+
+\item{scale_label}{Name of the scale the intensities are on, the run's
+\code{transform$label} ("asinh intensity", "logicle intensity"). Default
+\code{"asinh intensity"}.}
 }
 \description{
 Population x marker phenotype heatmap

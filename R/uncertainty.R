@@ -162,10 +162,13 @@ threshold_uncertainty <- function(x, source = "valley", B = 100L, seed = 42L,
   tail_sd <- if (identical(source, "tailgate_lower")) "lower"
              else if (identical(source, "tailgate_upper")) "upper" else tail
 
+  # The tail and quantile cuts are clamped to the zero-signal floor as
+  # resolve_threshold() and tail_gate_cut() clamp the real one, so a replicate
+  # below zero signal counts where the rule would have put it.
   boot <- vapply(seq_len(as.integer(B)), function(i) {
     xb <- x[sample.int(length(x), n_draw, replace = TRUE)]
-    if (is_fb) as.numeric(quantile(xb, fallback_q, na.rm = TRUE))
-    else if (is_tail) tail_threshold(xb, side = tail_sd)
+    if (is_fb) max(as.numeric(quantile(xb, fallback_q, na.rm = TRUE)), floor)
+    else if (is_tail) max(tail_threshold(xb, side = tail_sd), floor)
     else density_valley(xb, floor = floor, prefer = prefer)
   }, numeric(1))
   ok <- is.finite(boot)
@@ -178,14 +181,14 @@ threshold_uncertainty <- function(x, source = "valley", B = 100L, seed = 42L,
   xs <- if (length(x) > max_events) x[sample.int(length(x), max_events)] else x
   if (is_fb) {
     qs <- c(0.85, 0.90, 0.95)
-    meth <- vapply(qs, function(q) as.numeric(quantile(xs, q, na.rm = TRUE)),
-                   numeric(1))
+    meth <- vapply(qs, function(q) max(as.numeric(quantile(xs, q, na.rm = TRUE)),
+                                       floor), numeric(1))
     out$basis <- "quantile bootstrap; sweep over the fallback quantile"
   } else if (is_tail) {
     # The tail rule's one setting is how many robust SDs above the mode it
     # cuts; 3.5 is the default, and the sweep says how much rides on it.
-    meth <- vapply(c(3, 3.5, 4), function(k) tail_threshold(xs, k = k, side = tail_sd),
-                   numeric(1))
+    meth <- vapply(c(3, 3.5, 4), function(k)
+      max(tail_threshold(xs, k = k, side = tail_sd), floor), numeric(1))
     out$basis <- "tail-rule bootstrap; sweep over the robust-SD multiple"
   } else {
     meth <- vapply(seq_len(nrow(grid)), function(i)
@@ -555,13 +558,24 @@ run_gate_uncertainty <- function(pops, gates, verdicts, panel_of, spec,
 #' first ratio passes and the second does not, and the second is the one to
 #' believe.
 #'
+#' THE RATIO IS TAKEN IN THE UNITS THE TEST COMPARED. The uncertainty is
+#' computed in percentage points of CD45+; when the comparison was made on
+#' cells/uL (`measure` is `cells_per_ul`), a difference in cells/uL divided by
+#' an uncertainty in percentage points is no ratio at all. Each sample's
+#' uncertainty is then carried into cells/uL by that sample's own factor,
+#' cells_per_ul / pct_of_cd45_pos (its WBC / 100), before the median is taken.
+#' The `*_pct_points` columns stay in percentage points. Without `freq`, or for
+#' a measure with no such factor, the ratios are left NA.
+#'
 #' @param gstats a table from [stats_group_comparison()]
 #' @param ufreq the `frequencies` element of [run_gate_uncertainty()]
+#' @param freq the frequency table the comparison was run on, needed only when
+#'   `gstats` compared something other than `pct_of_cd45_pos`.
 #' @return `gstats` with `gate_u_pct_points`, `difference_over_gate_u`,
 #'   `total_u_pct_points` and `difference_over_total_u` appended, unchanged if
 #'   the uncertainty table is missing
 #' @export
-annotate_gate_uncertainty <- function(gstats, ufreq) {
+annotate_gate_uncertainty <- function(gstats, ufreq, freq = NULL) {
   if (is.null(gstats) || !nrow(gstats)) return(gstats)
   gstats$gate_u_pct_points   <- NA_real_
   gstats$difference_over_gate_u <- NA_real_
@@ -571,25 +585,47 @@ annotate_gate_uncertainty <- function(gstats, ufreq) {
   pass <- (ufreq$qc_status %||% "pass") == "pass"
   d <- abs(gstats$median_comparison - gstats$median_reference)
 
-  keep <- ufreq[pass & is.finite(ufreq$u_pct_points), , drop = FALSE]
-  if (nrow(keep)) {
-    um <- tapply(keep$u_pct_points, keep$population, median, na.rm = TRUE)
-    u <- unname(um[gstats$population])
-    gstats$gate_u_pct_points <- round(u, 4)
-    gstats$difference_over_gate_u <-
-      ifelse(is.finite(u) & u > 0, round(d / u, 2), NA_real_)
+  # Per-sample factor from percentage points to the compared measure; 1 when
+  # the comparison was on pct_of_cd45_pos, NA where it cannot be formed.
+  meas <- unique(as.character(gstats$measure %||% "pct_of_cd45_pos"))
+  to_meas <- function(sid) rep(1, length(sid))
+  if (!identical(meas, "pct_of_cd45_pos")) {
+    f <- NULL
+    if (length(meas) == 1L && !is.null(freq) &&
+        all(c("sample_id", meas, "pct_of_cd45_pos") %in% names(freq))) {
+      ok <- is.finite(freq[[meas]]) & is.finite(freq$pct_of_cd45_pos) &
+        freq$pct_of_cd45_pos > 0
+      if (any(ok))
+        f <- tapply(freq[[meas]][ok] / freq$pct_of_cd45_pos[ok],
+                    freq$sample_id[ok], stats::median)
+    }
+    to_meas <- function(sid) if (is.null(f)) rep(NA_real_, length(sid))
+                             else unname(f[as.character(sid)])
+  }
+  ratio <- function(u_col) {
+    k <- ufreq[pass & is.finite(ufreq[[u_col]]), , drop = FALSE]
+    if (!nrow(k)) return(list(u = NULL, r = NULL))
+    um <- tapply(k[[u_col]], k$population, median, na.rm = TRUE)
+    uc <- k[[u_col]] * to_meas(k$sample_id)
+    um_meas <- if (any(is.finite(uc)))
+      tapply(uc, k$population, median, na.rm = TRUE) else um * NA_real_
+    u_m <- unname(um_meas[gstats$population])
+    list(u = round(unname(um[gstats$population]), 4),
+         r = ifelse(is.finite(u_m) & u_m > 0, round(d / u_m, 2), NA_real_))
   }
 
+  g <- ratio("u_pct_points")
+  if (!is.null(g$u)) {
+    gstats$gate_u_pct_points <- g$u
+    gstats$difference_over_gate_u <- g$r
+  }
   # Absent when the run predates the counting term, so guard on the column
   # rather than assuming the shape of the table handed in.
   if ("u_total_pct_points" %in% names(ufreq)) {
-    k2 <- ufreq[pass & is.finite(ufreq$u_total_pct_points), , drop = FALSE]
-    if (nrow(k2)) {
-      tm <- tapply(k2$u_total_pct_points, k2$population, median, na.rm = TRUE)
-      ut <- unname(tm[gstats$population])
-      gstats$total_u_pct_points <- round(ut, 4)
-      gstats$difference_over_total_u <-
-        ifelse(is.finite(ut) & ut > 0, round(d / ut, 2), NA_real_)
+    t <- ratio("u_total_pct_points")
+    if (!is.null(t$u)) {
+      gstats$total_u_pct_points <- t$u
+      gstats$difference_over_total_u <- t$r
     }
   }
   gstats

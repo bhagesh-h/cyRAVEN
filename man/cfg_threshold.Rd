@@ -13,7 +13,7 @@ cfg_threshold(v)
 a number, or NULL.
 }
 \description{
-An entry is a bare number, or a list as \code{write_config()} emits it
-(\code{threshold}, \code{source}, \code{needs_review}, and optionally \code{tail}).
+An entry is a bare number, or a list carrying \code{threshold} and optionally
+\code{tail} (other fields, such as \code{source}, are ignored).
 }
 \keyword{internal}

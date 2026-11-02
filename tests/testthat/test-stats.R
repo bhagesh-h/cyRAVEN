@@ -188,3 +188,88 @@ test_that("a comparison with too few samples returns NULL, not a fake number", {
   g <- synth_groups()[1:3]                            # one group, 3 samples
   expect_null(stats_group_comparison(freq[freq$sample_id %in% names(g), ], g))
 })
+
+test_that("the paired effect size is the matched-pairs rank-biserial", {
+  # Kerby 2014: (R+ - R-) / (R+ + R-) on the ranks of |d|. For d = 1, 2, 3, -4
+  # the ranks are 1..4, so (1 + 2 + 3 - 4) / 10 = 0.2; the share of pairs up
+  # minus down, which the column held before, would read 0.5.
+  expect_equal(matched_rank_biserial(c(1, 2, 3, -4)), 0.2)
+  expect_equal(matched_rank_biserial(c(0, 1, 2)), 1)
+  expect_true(is.na(matched_rank_biserial(c(0, 0))))
+})
+
+test_that("a group effect does not make an unbalanced covariate a confounder", {
+  # Two cohorts far apart in age, a real cohort difference in the outcome, and
+  # within each cohort no relation to age. Pooled, age tracks the outcome
+  # through the cohort alone; within cohorts it does not.
+  sid <- sprintf("S%02d", 1:20); grp <- rep(c("A", "B"), each = 10)
+  age <- c(21:30, 51:60)
+  within <- c(5, 1, 9, 3, 7, 2, 10, 4, 8, 6)          # unrelated to age order
+  y <- c(within, within + 20)
+  expect_lt(stats::cor.test(age, y, method = "spearman", exact = FALSE)$p.value, 0.05)
+  cf <- suppressMessages(stats_confounding(
+    data.frame(sample_id = sid, population = "P", pct_of_cd45_pos = y,
+               qc_status = "pass"),
+    data.frame(patient_id = sid, age = age),
+    data.frame(sample_id = sid, patient_id = sid), setNames(grp, sid),
+    covariates = "age"))
+  expect_false(any(grepl("^HIGH", cf$confounder_risk)))
+  out <- cf[cf$comparison == "covariate vs outcome", ]
+  expect_match(out$test, "within cohort")
+  expect_gt(out$p_value, 0.05)
+
+  # A real age effect inside each cohort is still a confounder.
+  y2 <- c(age[1:10] + within / 10, age[11:20] + within / 10)
+  cf2 <- suppressMessages(stats_confounding(
+    data.frame(sample_id = sid, population = "P", pct_of_cd45_pos = y2,
+               qc_status = "pass"),
+    data.frame(patient_id = sid, age = age),
+    data.frame(sample_id = sid, patient_id = sid), setNames(grp, sid),
+    covariates = "age"))
+  expect_true(any(grepl("^HIGH", cf2$confounder_risk)))
+})
+
+test_that("a covariate that explains nothing gets p = 1, not a missing row", {
+  # anova() leaves Pr(>F) empty when the sums of squares are equal to rounding.
+  # Ranks 1..4 split F = {1, 4}, M = {2, 3}: equal means, no sum of squares.
+  expect_equal(rank_f_within(c(1, 2, 3, 4), c("F", "M", "M", "F"), rep("A", 4)), 1)
+})
+
+test_that("clinical marker association is tested within each population", {
+  ids <- names(synth_groups())
+  # Monocyte HLA-DR rises with severity, T-cell HLA-DR does not: one test per
+  # population and marker keeps them apart, where a median over populations
+  # would have mixed them.
+  n <- length(ids)
+  mfi <- do.call(rbind, lapply(seq_along(ids), function(i) data.frame(
+    sample_id = ids[i], population = c("CD4 T cells", "Monocytes"),
+    marker = "HLA-DR", median_asinh = c((i * 7) %% n, i),
+    qc_status = "pass", stringsAsFactors = FALSE)))
+  clin <- list(severity = stats::setNames(seq_len(n), ids))
+  mk <- stats_clinical_association(NULL, mfi, clin)$markers
+  expect_setequal(mk$population_marker, c("CD4 T cells, HLA-DR", "Monocytes, HLA-DR"))
+  mono <- mk[mk$population == "Monocytes", ]
+  expect_equal(mono$marker, "HLA-DR")
+  expect_equal(mono$estimate, 1)
+  expect_lt(abs(mk$estimate[mk$population == "CD4 T cells"]), 1)
+})
+
+test_that("the edgeR count model finds a planted change and not the others", {
+  skip_if_not_installed("edgeR")
+  # Six samples per group, five exclusive labels; label C doubles in group B.
+  withr::local_seed(12)
+  sids <- sprintf("S%02d", 1:12); grp <- rep(c("A", "B"), each = 6)
+  base <- c(A = 4000, B = 2000, C = 300, D = 800, E = 2900)
+  rows <- do.call(rbind, lapply(seq_along(sids), function(i) {
+    mu <- base * stats::runif(1, 0.8, 1.2)
+    if (grp[i] == "B") mu["C"] <- mu["C"] * 2
+    data.frame(sample_id = sids[i], population = names(mu),
+               count = stats::rnbinom(5, mu = mu, size = 30), qc_status = "pass",
+               is_control = FALSE, stringsAsFactors = FALSE)
+  }))
+  er <- stats_edger_abundance(rows, setNames(grp, sids), reference = "A")
+  expect_setequal(er$population, names(base))
+  expect_true(er$significant_BH[er$population == "C"])
+  expect_gt(er$logFC[er$population == "C"], 0.7)
+  expect_lt(sum(er$significant_BH[er$population != "C"]), 2)
+})

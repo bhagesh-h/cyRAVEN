@@ -12,7 +12,8 @@ fig_threshold_drift(
   reference = NULL,
   panel_label = "",
   dpi = 200,
-  colors = fcs_colors()
+  colors = fcs_colors(),
+  y_label = "derived threshold (asinh intensity)"
 )
 }
 \arguments{
@@ -31,6 +32,9 @@ fig_threshold_drift(
 \item{dpi}{Resolution in dots per inch. May be reduced automatically to respect the raster ceiling; see \code{\link[=safe_ggsave]{safe_ggsave()}}. Default \code{200}.}
 
 \item{colors}{Named list of colours; defaults to the package palette. See \code{\link[=fcs_colors]{fcs_colors()}}. Default \code{fcs_colors()}.}
+
+\item{y_label}{Axis label naming the scale the cuts are on, e.g. the run's
+\code{transform$label}. Default \code{"derived threshold (asinh intensity)"}.}
 }
 \description{
 Threshold-drift figure: per-sample cut for every marker, coloured by cohort

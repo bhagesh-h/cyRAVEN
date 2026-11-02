@@ -303,6 +303,18 @@ cluster_gate_agreement <- function(cells, cluster,
   cl <- cluster[ok]; lb <- lab[ok]
   tb <- table(cl, lb)
   if (!nrow(tb)) return(NULL)
+  # Under --subsample rare the embedded cells were drawn by inverse density, so
+  # a sparse region is over-represented; every share below is taken on the
+  # cells weighted back by their sampling_weight (Horvitz-Thompson), and
+  # n_cells stays the count of embedded cells.
+  n_raw <- tb
+  if ("sampling_weight" %in% names(cells) && all(is.finite(cells$sampling_weight[ok]))) {
+    tb[] <- 0
+    wsum <- tapply(cells$sampling_weight[ok], list(factor(cl, levels = rownames(tb)),
+                                                   factor(lb, levels = colnames(tb))), sum)
+    wsum[is.na(wsum)] <- 0
+    tb[] <- wsum
+  }
 
   n_by_lab <- table(lb)
   per_cluster <- do.call(rbind, lapply(rownames(tb), function(k) {
@@ -313,7 +325,7 @@ cluster_gate_agreement <- function(cells, cluster,
     purity <- as.numeric(o[1]) / tot
     second <- if (length(o) > 1L) names(o)[2] else NA_character_
     data.frame(
-      cluster = as.integer(k), n_cells = as.integer(tot),
+      cluster = as.integer(k), n_cells = as.integer(sum(n_raw[k, ])),
       pct_of_all_cells = round(100 * tot / sum(tb), 2),
       dominant_gate_label = dom, purity_pct = round(100 * purity, 1),
       second_label = second,
@@ -343,11 +355,11 @@ cluster_gate_agreement <- function(cells, cluster,
     dom_cl <- as.integer(names(o)[1])
     dom_cl_size <- sum(tb[as.character(dom_cl), ])
     data.frame(
-      population = p, n_cells = as.integer(tot),
+      population = p, n_cells = as.integer(sum(n_raw[, p])),
       dominant_cluster = dom_cl,
       pct_in_dominant_cluster = round(100 * as.numeric(o[1]) / tot, 1),
       effective_n_clusters = round(eff, 2),
-      dominant_cluster_total_cells = as.integer(dom_cl_size),
+      dominant_cluster_total_cells = as.integer(sum(n_raw[as.character(dom_cl), ])),
       # The threshold-failure signal: the label holds a small share of a cluster
       # it nonetheless dominates, i.e. most of that cluster's cells failed the
       # Boolean rule while sitting in the same phenotypic neighbourhood.
@@ -483,10 +495,9 @@ fig_unsupervised_clusters <- function(cells, cluster, outfile, agreement = NULL,
 # HONEST LIMITS, because a "chosen" k invites more trust than a fixed one:
 # silhouette systematically favours small k and compact, roughly spherical
 # clusters, which is also what k-means favours -- so the criterion and the
-# algorithm share a bias. It is a better default than a hardcoded 3, not an
-# oracle. The chosen k and the full score curve are both written out so the
-# choice is inspectable rather than implicit, and --subcluster-k still overrides
-# it outright.
+# algorithm share a bias. It is a principled alternative to the fixed k = 3 used
+# without --auto-subcluster-k, not an oracle. The chosen k and the full score
+# curve are both written out so the choice is inspectable rather than implicit.
 
 #' Mean silhouette width for a k-means partition
 #'
@@ -610,12 +621,17 @@ choose_subcluster_k <- function(cells, markers, group_col = "cohort",
 #' @param scale_params Scaling constants that must accompany the model for a projection to land in the same space.
 #' @param features Character vector of feature names the model was trained on.
 #' @param meta Named list of metadata stored alongside the model. Default `list()`.
+#' @param transform the run's transform from [make_transform()], whose method
+#'   and parameters are stored so a projection can carry a later run onto it.
 #' @export
-save_umap_model <- function(model, path, scale_params, features, meta = list()) {
+save_umap_model <- function(model, path, scale_params, features, meta = list(),
+                            transform = NULL) {
   if (is.null(model)) return(invisible(NULL))
   dir.create(dirname(path), showWarnings = FALSE, recursive = TRUE)
   side <- paste0(path, ".meta.rds")
   saveRDS(list(scale_params = scale_params, features = features, meta = meta,
+               transform = if (!is.null(transform))
+                 list(method = transform$method, params = transform$params),
                uwot_version = as.character(utils::packageVersion("uwot")),
                saved_utc = format(Sys.time(), tz = "UTC", usetz = TRUE)), side)
   ok <- FALSE
@@ -654,7 +670,7 @@ load_umap_model <- function(path) {
     return(NULL)
   }
   list(model = m, scale_params = meta$scale_params, features = meta$features,
-       meta = meta$meta)
+       meta = meta$meta, transform = meta$transform)
 }
 
 #' Project new cells into a saved embedding
@@ -665,8 +681,10 @@ load_umap_model <- function(path) {
 #' @param saved A model loaded by [load_umap_model()].
 #' @param mat Numeric matrix, cells x features.
 #' @param n_threads Number of threads. Default `1L`.
+#' @param transform this run's transform; where it differs from the one the
+#'   model stored, each feature is carried onto the stored one first.
 #' @export
-project_umap <- function(saved, mat, n_threads = 1L) {
+project_umap <- function(saved, mat, n_threads = 1L, transform = NULL) {
   if (is.null(saved)) return(NULL)
   miss <- setdiff(saved$features, colnames(mat))
   if (length(miss)) {
@@ -675,6 +693,30 @@ project_umap <- function(saved, mat, n_threads = 1L) {
     return(NULL)
   }
   X <- mat[, saved$features, drop = FALSE]
+  # ONTO THE TRAINING RUN'S SCALE FIRST. The cofactor and logicle widths are
+  # re-derived from each run's data, so the same intensity is a different
+  # number here than in the run that trained the model, and the model would
+  # place it where that run's cells of another intensity sat. Each feature is
+  # carried back to instrument units by this run's transform and forward by
+  # the training run's before the training scaling is applied.
+  st <- rebuild_transform(saved$transform)
+  same <- !is.null(transform) && identical(saved$transform,
+    list(method = transform$method, params = transform$params))
+  if (!is.null(st) && !is.null(transform) && !same) {
+    for (f in colnames(X))
+      X[, f] <- tryCatch(st$fn(transform$inv(X[, f], f), f),
+                         error = function(e) rep(NA_real_, nrow(X)))
+    if (anyNA(X)) {
+      log_msg("  NOTE projection refused: a feature could not be carried onto ",
+              "the training run's scale. Embedding fresh.")
+      return(NULL)
+    }
+    log_msg("  features carried onto the training run's transform before projection")
+  } else if (is.null(saved$transform)) {
+    log_msg("  NOTE the saved model does not record its transform; the projection ",
+            "is comparable with its training run only if this run's transform ",
+            "(cofactor or logicle widths) is the same")
+  }
   sp <- saved$scale_params
   if (!is.null(sp) && !is.null(sp$center))
     X <- sweep(sweep(X, 2, sp$center, "-"), 2, sp$scale, "/")

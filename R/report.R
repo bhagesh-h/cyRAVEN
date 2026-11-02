@@ -110,8 +110,8 @@ json_table <- function(d) {
 #' reader who meets `compositional_concordance.csv` needs to be told that it
 #' classifies each result against both parameterisations, and no amount of
 #' inspecting its headers says that. The lines below are the same one-liners the
-#' `outputs` vignette carries, so the report and the documentation cannot drift
-#' into saying different things about the same file.
+#' output tables in the Advanced article carry, so the report and the
+#' documentation cannot drift into saying different things about the same file.
 #'
 #' A run with several marker panels writes `group_comparison_stats_<panel>.csv`,
 #' so a name that is not found is tried once more with its last underscore segment
@@ -129,25 +129,28 @@ report_table_note <- function(file) {
     "thresholds_within_parents.csv" = "Cuts a population declared with parent: derives on its parent's events, beside the CD45+ cut for the same marker.",
     "margin_events.csv" = "Per file: events at the top of a channel's range removed at reading, events below a channel's lower limit by flowAI's rule (counted, not removed), channels linearised from $PnE, and the compensation applied.",
     "spillover_spreading_matrix.csv" = "The published spillover spreading matrix, from the single-stain controls given to --single-stains.",
-    "threshold_scale_qc.csv" = "Per marker, the panel median threshold and each sample's robust z against it.",
+    "threshold_scale_qc.csv" = "Per panel and marker: the median threshold, its range, and how many cuts are scale outliers or fallbacks; the per-sample robust z is in thresholds_used.csv.",
     "acquisition_qc.csv" = "Per sample, whether the instrument behaved consistently through the acquisition, and which intervals were flagged.",
     "acquisition_qc_bins.csv" = "One row per time interval per sample: event rate and how far each channel departed from the run.",
     "acquisition_qc_impact.csv" = "How far each population's frequency would move if the flagged acquisition intervals were dropped.",
+    "peacoqc_summary.csv" = "Per file, the events PeacoQC removed before gating and the share each of its checks flagged, written by --peacoqc.",
     "fmo_agreement.csv" = "Each derived cut against its FMO-anchored equivalent, expressed in units of the cut's own uncertainty.",
+    "controls_refused.csv" = "Channels where a declared control could not anchor a cut, and why.",
     "spreading_pairs.csv" = "Per channel pair, how much wider the receiving channel's negative population becomes, overall and at a given source level, and trend_rho, a screen for compensation or unmixing error (trend_unresolved where spreading alone could produce the trend).",
     "spreading_receivers.csv" = "Per marker, the total spreading it receives and whether that explains a threshold fallback.",
     "calibration.csv" = "Bead calibration fit per channel, written by --calibration-beads.",
     "gate_counts.csv" = "Event counts surviving each level of the gate hierarchy, per sample.",
+    "gate_adjustments.csv" = "One row per hierarchy gate --auto-fix-gates skipped and per population cut it or --peer-cuts replaced, with the cut not applied, the share of the parent kept and the reason.",
     "populations_unavailable.csv" = "One row per sample and population the panel cannot score, with the reason it cannot.",
     # ---- uncertainty ----
     "threshold_uncertainty.csv" = "Per sample and marker: the sampling and method components of the threshold's uncertainty, their quadrature sum, and how well the valley resolved.",
     "uncertainty_budget.csv" = "How much each threshold contributes to each population's frequency uncertainty, per sample.",
     # ---- conformance ----
-    "specification_conformance.csv" = "This run's thresholds against an accepted baseline's, scaled by the baseline's own spread, with a verdict per marker.",
+    "specification_conformance.csv" = "This run's thresholds against an accepted baseline's, compared in instrument units on the baseline's scale and scaled by its spread, with a verdict per marker.",
     "specification_conformance_populations.csv" = "The same baseline comparison for population frequencies rather than thresholds.",
     "specification_changes.csv" = "Populations added, removed or redefined since the baseline run.",
     # ---- abundance ----
-    "population_frequencies.csv" = "The run's primary result: one row per sample and population, with the percentage of parent and the event count behind it.",
+    "population_frequencies.csv" = "The run's primary result: one row per sample and population, with its percentage of CD45+ cells, the event count behind it, its uncertainty and its detection class.",
     "population_marker_mfi.csv" = "Per sample, population and marker: the median intensity on the analysis scale (median_asinh, which keeps its name under --transform logicle and holds the logicle value there), the same median in instrument units (mfi), and the percent above that sample's threshold.",
     "population_mfi_summary.csv" = "Median fluorescence intensity per population and marker across donors, in instrument units with its interquartile range, overall and per study group, with the median percent positive.",
     "population_composition.csv" = "Each population's share of the embedded cells, under each cell's most specific label so the shares sum to 100, with its defining markers, its spread across donors, its share within each study group, and the percent of it positive for each marker (pct_pos_ columns).",
@@ -156,11 +159,14 @@ report_table_note <- function(file) {
     "population_ratios.csv" = "Derived population ratios, where the config declares any.",
     "absolute_counts.csv" = "Measured cells per microlitre per sample and population, from --absolute-counts.",
     "absolute_counts_raw.csv" = "The supplied counts workbook flattened exactly as read, before any header or name interpretation. Read this first when a count looks wrong.",
+    "total_counts.csv" = "The externally measured cell yields as parsed and matched, one row per acquisition that matched, from --total-counts.",
+    "total_counts_raw.csv" = "The yields sheet flattened exactly as read, before any header or block interpretation. Read this first when a number looks wrong.",
     "absolute_counts_stats.csv" = "Between-group tests on measured cells per microlitre rather than on percentages.",
     # ---- inference ----
     "group_comparison_stats.csv" = "Between-group abundance test per population: medians, Cliff's delta, raw and BH-adjusted p, and the uncertainty the difference is worth in.",
     "compositional_clr_stats.csv" = "The same abundance tests run on centred log-ratios, because percentages of one parent cannot all move independently.",
     "compositional_concordance.csv" = "Each population classified by whether the percentage and the log-ratio parameterisations agree about it.",
+    "edger_abundance_stats.csv" = "edgeR count-model test of each population's cell counts, each group against the reference, written by --edger beside the rank tests.",
     "marker_state_stats.csv" = "Differential marker state per population and marker, on per-sample medians.",
     "functional_markers_stats.csv" = "Between-group tests on functional marker positivity.",
     "population_ratios_stats.csv" = "Between-group tests on the declared population ratios.",
@@ -169,17 +175,17 @@ report_table_note <- function(file) {
     "subcluster_marker_shifts.csv" = "Marker shifts between compartments on pooled events. Descriptive, with effect sizes and no p-values.",
     "design_feasibility.csv" = "Which group comparisons this design can support and why the rest cannot. Read before any p-value.",
     "parametric_tests.csv" = "The t-test or ANOVA equivalent of each rank test, with the normality and equal-variance assumptions it needs recorded beside it.",
-    "posthoc_tests.csv" = "Pairwise comparisons by Games-Howell, Tukey HSD and Dunn, for three or more groups.",
+    "posthoc_tests.csv" = "Pairwise comparisons by Games-Howell, Tukey HSD and Dunn, for three or more groups; Tukey and Games-Howell p are already adjusted over a population's pairs, Dunn's is not (p_value_adjusted_over_pairs).",
     "normality_tests.csv" = "Shapiro-Wilk per population and group, and Brown-Forsythe across groups: the evidence for using rank tests.",
     "statistical_methods.csv" = "Every method commonly reported in this literature, whether this run computed it, and why.",
     # ---- clinical ----
     "clinical_association.csv" = "One row per population and clinical variable: the test, n, the effect with its bootstrap interval, raw and BH-adjusted p, and an underpowered flag.",
-    "clinical_association_markers.csv" = "The same clinical association against per-sample median marker intensity, collapsed across populations.",
+    "clinical_association_markers.csv" = "The same clinical association against each population's median marker intensity, one test per population and marker (the pairs in functional_markers.csv).",
     # ---- diagnostics ----
     "threshold_drift_stats.csv" = "Whether the thresholds themselves separate by group, which would make an abundance difference definitional rather than biological.",
-    "confounding_diagnostics.csv" = "Per covariate: whether it differs between groups, whether it associates with the outcome, and the verdict from both.",
+    "confounding_diagnostics.csv" = "Per covariate and population: whether the covariate differs between groups, whether it tracks the population within groups, and the verdict from both.",
     "batch_mixing_stats.csv" = "iLISI batch mixing in the embedding against a permutation null.",
-    "batch_group_confounding.csv" = "Cramer's V between batch and study group, and whether batch correction was allowed or refused on it.",
+    "batch_group_confounding.csv" = "Cramer's V between batch and each design variable (the study group, and the timepoint where the sheet has one), graded on Cohen's scale for the table's size; the substantial grade is where --correct-batch refuses.",
     "marker_batch_drift.csv" = "Earth Mover's distance between batches per marker, in analysis units and scaled by the marker's own MAD.",
     "threshold_batch_drift.csv" = "The threshold drift test grouped by acquisition batch instead of by study group.",
     "batch_correction.csv" = "Whether a batch correction ran, which method fitted it, and the reason. Written on a refusal too.",
@@ -198,8 +204,11 @@ report_table_note <- function(file) {
     # ---- explore ----
     "explore_cluster_profile.csv" = "Per cluster: size, phenotype string, fraction positive and median per channel.",
     "explore_qc_clusters.csv" = "The QC gate: the call for each SOM node, the merged cluster it belongs to, and the basis for the call.",
-    "explore_cluster_abundance.csv" = "Per donor and cluster, with counting uncertainty and the limits of detection and quantification.",
+    "explore_cluster_abundance.csv" = "Per donor and cluster: count, share of gated cells, counting uncertainty and a detection class against the limits of detection and quantification.",
     "explore_cluster_stats.csv" = "Donor-level group tests on cluster abundance, carrying the batch and group confounding verdict.",
+    "explore_cluster_subsets.csv" = "The immune subset each cluster's own marker profile matches, with the markers that decided it and the margin over the runner-up.",
+    "explore_cluster_stats_absolute.csv" = "The same donor-level tests on cells per cluster (share times the external total), kept apart from the share tests.",
+    "explore_cluster_count_concordance.csv" = "Per cluster, whether the share and the absolute-count tests agree: both, absolute only (the compartment changed size), share only (a redistribution), or neither.",
     "explore_cells.csv" = "One row per cell: sample, event index, cluster and UMAP coordinates.",
     "explore_vs_populations.csv" = "Cross-tabulation of unsupervised clusters against the declared population labels.",
     "explore_cluster_identity.csv" = "One row per cluster: the declared population it best corresponds to, the precision and recall behind that match and their harmonic mean (F1), the runner-up, and the share of the cluster that is the catch-all. A cluster at or above 70% catch-all is reported as undescribed -- a gap in the specification, not a property of the cluster.",
@@ -213,7 +222,7 @@ report_table_note <- function(file) {
     "patient_metadata_english.csv" = "The patient table after column mapping and value translation, as the pipeline read it.",
     "population_codes.csv" = "Numeric codes for populations, samples and cohorts, for writing back into FCS keywords.",
     "sample_map_template.csv" = "A sample map skeleton for this directory, written by --write-sample-map.",
-    "cells_umap.csv" = "One row per cell: embedding coordinates with sample, population and panel.")
+    "cells_umap.csv" = "One row per embedded cell: coordinates, marker values on the analysis scale, sample, population, panel and the sheet's covariates (and sampling_weight under --subsample rare).")
   f <- basename(file)
   if (f %in% names(d)) return(unname(d[f]))
   # Panel suffix: group_comparison_stats_panel2.csv -> group_comparison_stats.csv.
@@ -240,15 +249,15 @@ report_table_note <- function(file) {
 #' @keywords internal
 report_figure_note <- function(file) {
   d <- c(
-    "recon_diagnostics.png" = "Per sample, the scatter gate and every marker threshold drawn on the density it was derived from: a cut in a trough is data-driven, a cut on a flank is a quantile fallback.",
-    "gating_qc.png" = "The gate hierarchy for each sample, panel by panel, with the events kept at each step.",
+    "recon_diagnostics.png" = "Per sample: scatter occupancy with the derived leukocyte gate, CD45 against SSC with the CD45 cut, and the lineage-marker densities within CD45+. It shows debris gated as leukocytes, a misplaced CD45 cut and a failed stain.",
+    "gating_qc.png" = "Every applied threshold on the distribution it was derived from, one row per sample and one column per marker, labelled with its source; red marks a cut flagged for review. One page per sample is in gating_qc/.",
     "acquisition_qc.png" = "Event rate and channel medians over acquisition time per file; troughs, spikes and steps mark clogs, bubbles and settings changes.",
     "population_marker_heatmap.png" = "Median marker intensity across the declared populations, z-scored over the run; a population lacking the markers its definition requires falsifies its gate.",
     "cohort_composition_heatmap.png" = "Each study group's share of every population after normalising the groups to a common cell count.",
     "population_mfi_heatmap.png" = "Median fluorescence intensity per population and marker in instrument units, printed in each tile; colour scaled per marker, bars give each population's share.",
     "population_mfi_heatmap_by_group.png" = "The MFI heatmap split by study group on one colour scale, so a tile darker in one group is brighter there.",
     "population_mfi_dotplot.png" = "Per population and marker: dot size is the percent above the sample's own threshold, colour the scaled median intensity.",
-    "frequency_uncertainty.png" = "Each frequency with its gate uncertainty and its counting uncertainty, drawn separately.",
+    "frequency_uncertainty.png" = "Each sample's frequency with a bar of its gate-placement uncertainty, one row per population: where the bars are as wide as the spread between samples, the variation is the cut moving.",
     "uncertainty_budget.png" = "How much each threshold contributes to each population's frequency uncertainty.",
     "detection_limits.png" = "Every population classified against the limits of detection and quantification of its own parent gate.",
     "population_frequencies.png" = "Percent of CD45+ cells per population and sample: the run's primary result.",
@@ -258,21 +267,22 @@ report_figure_note <- function(file) {
     "umap_overview_by_group.png" = "The shared embedding pooled, then split by study group on the same axes.",
     "umap_markers.png" = "The shared embedding coloured by each marker's intensity, one small panel per marker.",
     "umap_density.png" = "Cell density over the shared embedding, per sample.",
-    "umap_density_by_group.png" = "Cell density over the shared embedding, per study group, at equal cells per sample.",
-    "umap_multigraph_overlay.png" = "The embedding with its neighbour graph overlaid, showing which islands are connected.",
+    "umap_density_by_group.png" = "Cell density over the shared embedding, per study group, from the embedded cells (at most --cells-per-sample from each sample; weighted back under --subsample rare).",
+    "umap_multigraph_overlay.png" = "A multigraph overlay: each marker's distribution within each cluster, one mode-normalised curve per study group, so a shift in expression shows where abundance figures cannot.",
     "unsupervised_clusters.png" = "The unsupervised clustering beside the gated labels on the same embedding.",
-    "group_differences.png" = "Every population's between-group difference on one pair of axes: effect size against adjusted p.",
+    "group_differences.png" = "Every population's between-group difference on one pair of axes: Cliff's delta against -log10 raw p, coloured by whether it survives BH, with the smallest p the design can produce drawn as a line.",
     "group_comparison.png" = "Per-sample population frequencies by study group, with the adjusted p-value of each test.",
     "marker_state.png" = "Per-sample median marker intensity by study group, per population and marker.",
     "functional_markers.png" = "Percent positive for the declared functional marker blocks, by study group.",
     "population_ratios.png" = "The declared population ratios, by study group.",
+    "population_ratios_by_cell_type_by_timepoint.png" = "Each population as a share of CD45+ leukocytes, one panel per cell type, the visits on the x axis; descriptive, no test, since the visits are the same patients.",
     "absolute_counts.png" = "Measured cells per microlitre per population, by study group.",
-    "absolute_counts_qc.png" = "The supplied absolute counts against this run's own frequencies, to catch unit and matching errors.",
+    "absolute_counts_qc.png" = "The supplied absolute counts as a log10 cells-per-microlitre tile per matched sample and population, controls and QC failures labelled: a unit or transcription error shows as an outlying tile, an unmatched sample as a missing row.",
     "absolute_vs_share.png" = "Cells per microlitre against share of CD45+: whether a compartment changed size or only its composition.",
     "population_trajectories.png" = "Population frequencies per donor across repeated measures.",
     "clinical_variables_correlation.png" = "How strongly the clinical variables correlate with each other; two correlated variables are one question asked twice.",
     "clinical_association.png" = "Association of every population with every clinical variable, as a heatmap of effects.",
-    "clinical_association_markers.png" = "Association of per-sample median marker intensity with every clinical variable.",
+    "clinical_association_markers.png" = "Association of each population's median marker intensity with every clinical variable.",
     "clinical_landscape.png" = "Every sample's population profile beside its clinical variables.",
     "timepoint_subset_balance.png" = "Two subsets of one compartment against each other across visits.",
     "timepoint_marker_intensity.png" = "Per-patient median marker intensity across visits.",
@@ -292,12 +302,16 @@ report_figure_note <- function(file) {
     "explore_umap_by_group.png" = "The explore clusters split by study group on one embedding.",
     "explore_absolute_vs_share.png" = "Cluster cell numbers against cluster shares, from the supplied total counts.",
     "explore_total_counts_qc.png" = "The externally supplied total cell counts used by explore mode.")
+  if (grepl("(^|/)gating_qc/[^/]+[.]png$", file))
+    return(paste("gating_qc.png for this sample alone: each applied cut on its",
+                 "distribution, with its source and value."))
   f <- basename(file)
   if (f %in% names(d)) return(unname(d[f]))
   pat <- c(
     "^umap_(.+)_by_(.+)[.]png$" = "The shared embedding coloured by %s, split by %s.",
     "^explore_umap_(.+)_by_group.*[.]png$" = "The explore embedding coloured by %s, split by study group.",
     "^clinical_effects_(.+)[.]png$" = "Effect sizes with bootstrap intervals for %s, per population.",
+    "^clinical_(.+)[.]png$" = "The data behind one column of the clinical heatmap, %s: one point per sample, one panel per population.",
     "^timepoint_trajectories_(.+)[.]png$" = "One line per patient across visits for %s, cohort median drawn over.",
     "^cluster_gate_strategy_(.+)[.]png$" = "The learned two-marker gate for cluster %s.",
     "^external_label_strategy_(.+)[.]png$" = "The learned gating strategy for external label %s.",
@@ -1681,7 +1695,8 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
 
     report_section(outdir, "s8b", "Clinical variables",
       paste("A severity score, a laboratory value or an outcome flag against",
-            "every population and every marker. Numeric variables are tested",
+            "every population, and against each marker within the populations",
+            "functional_markers.csv scopes it to. Numeric variables are tested",
             "with Spearman's rho, two-level variables with Wilcoxon and Cliff's",
             "delta, more levels with Kruskal-Wallis, and p-values are adjusted",
             "within each variable rather than across all of them: each variable",
@@ -1749,8 +1764,9 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
 
     report_section(outdir, "s9", "Confounding and batch structure",
       paste("A variable confounds only when it both differs between the groups",
-            "and associates with the outcome, and the two conditions are reported",
-            "separately rather than combined into one verdict. threshold_drift",
+            "and associates with the outcome within the groups, and the two",
+            "conditions are reported separately rather than combined into one",
+            "verdict. threshold_drift",
             "asks whether the cuts themselves track the study group, which would",
             "make a difference definitional. batch_group_confounding.csv reports",
             "Cramer's V between batch and group: correction is refused above the",
@@ -1917,7 +1933,8 @@ write_run_report <- function(outdir, opt = NULL, verdicts = NULL,
   secs <- c(secs, list(report_section(outdir, "s11", "Further outputs",
     paste("Everything else this run wrote, in no particular order. These files",
           "are produced by optional flags or by stages the sections above do not",
-          "cover; each is documented in the Output article."),
+          "cover; each is documented under \"Every output file\" in the Advanced",
+          "article."),
     figures = rest_fig, tables = rest_tab,
     body = if (length(other_html)) paste0(
       "<p>This run also wrote ",

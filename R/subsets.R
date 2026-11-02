@@ -87,7 +87,10 @@ immune_subset_spec <- function(markers, parent = "CD45") {
   if (has("CD3")) add("T cells", list(CD3 = "above"))
   if (has("CD3", "CD19")) add("B cells", list(CD3 = "below", CD19 = "above"))
   if (has("CD3", "CD56")) add("NK cells", list(CD3 = "below", CD56 = "above"))
-  if (has("CD3", "CD56")) add("NKT cells", list(CD3 = "above", CD56 = "above"))
+  # CD3+ CD56+ is NKT-LIKE: most such cells in blood are conventional T cells
+  # carrying CD56, not invariant NKT cells (Peralbo et al. 2007), as the
+  # template names them.
+  if (has("CD3", "CD56")) add("NKT-like cells", list(CD3 = "above", CD56 = "above"))
   if (has("CD3", "CD14")) add("Monocytes", list(CD3 = "below", CD14 = "above"))
   if (has("CD3", "CD4", "CD25", "CD127"))
     add("Regulatory T cells", list(CD3 = "above", CD4 = "above",
@@ -102,7 +105,7 @@ immune_subset_spec <- function(markers, parent = "CD45") {
     add("CD4 T cells CD38+ HLA-DR+ (activated)",
         c(base4, list(CD38 = "above", `HLA-DR` = "above")))
     add("CD4 T cells CD69+ (early activated)", c(base4, list(CD69 = "above")))
-    add("CD4 T cells PD-1+ (exhausted)",       c(base4, list(`PD-1` = "above")))
+    add("CD4 T cells PD-1+",                   c(base4, list(`PD-1` = "above")))
     add("CD4 T cells TIM-3+",                  c(base4, list(`TIM-3` = "above")))
     add("CD4 T cells LAG-3+",                  c(base4, list(`LAG-3` = "above")))
     add("CD4 T cells CTLA-4+",                 c(base4, list(`CTLA-4` = "above")))
@@ -118,7 +121,7 @@ immune_subset_spec <- function(markers, parent = "CD45") {
     add("CD8 T cells CD38+ HLA-DR+ (activated)",
         c(base8, list(CD38 = "above", `HLA-DR` = "above")))
     add("CD8 T cells CD69+ (early activated)", c(base8, list(CD69 = "above")))
-    add("CD8 T cells PD-1+ (exhausted)",       c(base8, list(`PD-1` = "above")))
+    add("CD8 T cells PD-1+",                   c(base8, list(`PD-1` = "above")))
     add("CD8 T cells TIM-3+",                  c(base8, list(`TIM-3` = "above")))
     add("CD8 T cells LAG-3+",                  c(base8, list(`LAG-3` = "above")))
     # CD57 WITHOUT CD28 IS NOT "SENESCENT". Named for the marker.
@@ -144,7 +147,7 @@ immune_subset_spec <- function(markers, parent = "CD45") {
     nm <- sub("^TCR-", "", .v)
     g <- c(list(CD3 = "above"), stats::setNames(list("above"), .v))
     add(paste0(nm, " T cells CD69+ (activated)"), c(g, list(CD69 = "above")))
-    add(paste0(nm, " T cells PD-1+ (exhausted)"), c(g, list(`PD-1` = "above")))
+    add(paste0(nm, " T cells PD-1+"),             c(g, list(`PD-1` = "above")))
     add(paste0(nm, " T cells CD57+"),             c(g, list(CD57 = "above")))
     add(paste0(nm, " T cells NKG2D+"),            c(g, list(NKG2D = "above")))
   }
@@ -192,8 +195,16 @@ immune_subset_spec <- function(markers, parent = "CD45") {
           list(CD3 = "below", CD14 = "above", CD16 = "below"))
       add("Intermediate monocytes (CD14+ CD16+)",
           list(CD3 = "below", CD14 = "intermediate", CD16 = "intermediate"))
-      add("Non-classical monocytes (CD14low CD16+)",
-          list(CD3 = "below", CD14 = "below", CD16 = "above"))
+      # CD3- CD14low CD16+ is also every CD16+ NK cell and, in whole blood,
+      # every neutrophil; as the most specific match it outranked "NK cells"
+      # and named NK and neutrophil clusters non-classical monocytes. Monocytes
+      # are HLA-DR+ and those are not, so the subset is defined only with
+      # HLA-DR, and CD56- where CD56 is in the panel.
+      if (has("HLA-DR"))
+        add("Non-classical monocytes (CD14low CD16+)",
+            c(list(CD3 = "below", CD14 = "below", CD16 = "above",
+                   `HLA-DR` = "above"),
+              if (has("CD56")) list(CD56 = "below")))
     }
   }
 
@@ -221,7 +232,9 @@ unreachable_subsets <- function(markers) {
   }
   need("naive / central memory / effector memory / TEMRA T cells",
        c("CD45RA", "CCR7"))
-  need("classical / intermediate / non-classical monocytes", c("CD14", "CD16"))
+  need("classical / intermediate monocytes", c("CD14", "CD16"))
+  need("non-classical monocytes (without HLA-DR, CD14low CD16+ is also NK cells and neutrophils)",
+       c("CD14", "CD16", "HLA-DR"))
   need("senescent T cells (CD28- CD57+)", c("CD28", "CD57"))
   need("plasmablasts (CD19+ CD27++ CD38++)", c("CD19", "CD27", "CD38"))
   need("memory / naive B cells", c("CD19", "CD27", "IgD"))

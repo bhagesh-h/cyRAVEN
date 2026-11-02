@@ -691,9 +691,10 @@ more, and both need an input no public FCS archive carries.
 `--absolute-counts`, which takes a table of measured cells per microlitre per
 sample and population, from bead-based or volumetric counting on the instrument.
 A frequency is a proportion of a parent gate, so it moves when any other
-population moves; an absolute count does not. The QC figure compares the supplied
-counts against the frequencies cyRAVEN measured, which is how a transcription
-error or a sample-name mismatch is caught.
+population moves; an absolute count does not. The QC figure draws every supplied
+count as one log-scale tile per sample and population, which is how a
+transcription error (a tile decades off its column) or a sample-name mismatch (a
+missing row) is caught.
 
 They are absent here because the cohort has no volumetric measurement, and a
 count invented to fill the gap would be indistinguishable in the rendered figure

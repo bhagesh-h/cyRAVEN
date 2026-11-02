@@ -12,13 +12,15 @@ write_config(
   blocks = default_functional_blocks(),
   colmap = default_column_map(),
   valmap = default_value_map(),
-  colors = default_colors()
+  colors = default_colors(),
+  transform_method = "arcsinh"
 )
 }
 \arguments{
 \item{path}{File path.}
 
-\item{derived}{The derived.}
+\item{derived}{Per-marker summary of the derived cuts, written under
+\code{thresholds_derived}.}
 
 \item{cofactors}{The cofactors.}
 
@@ -31,11 +33,25 @@ write_config(
 \item{valmap}{The valmap. Default \code{default_value_map()}.}
 
 \item{colors}{Named list of colours; defaults to the package palette. See \code{\link[=fcs_colors]{fcs_colors()}}. Default \code{default_colors()}.}
+
+\item{transform_method}{The transform the cuts are on (\code{"arcsinh"},
+\code{"logicle"}).}
 }
 \description{
-Every threshold carries its source and a review flag. The config is an
-OVERRIDE mechanism: the script derives everything at runtime and runs without
-it. Values under \code{derived_from_batch} document what THIS batch produced --
-editing them changes future runs; deleting the file changes nothing.
+The config is an OVERRIDE mechanism: the script derives everything at
+runtime and runs without it. Values under \code{derived_from_batch} document what
+THIS batch produced -- editing them changes future runs; deleting the file
+changes nothing.
+}
+\details{
+THE DERIVED CUTS ARE DOCUMENTED, NOT DECLARED. A value under \verb{thresholds:}
+is a fixed cut applied to every sample of the next run. The cuts this run
+derived are per sample, and this used to write each marker's cut from the
+first sample that had one there, so running with the written config
+replaced every sample's own cut by one sample's. They are now summarised
+under \verb{thresholds_derived:} (median, range, sources, how many need review),
+which no run reads; copying a value into \verb{thresholds:} is how an analyst
+fixes a cut. The transform is recorded as the one used, since every cut is
+on its scale.
 }
 \keyword{internal}

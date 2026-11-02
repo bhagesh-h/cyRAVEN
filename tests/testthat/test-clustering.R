@@ -144,3 +144,67 @@ test_that("projection is refused rather than improvised when markers are missing
   expect_null(suppressMessages(
     project_umap(saved, M[, 1:3, drop = FALSE], n_threads = 1L)))
 })
+
+test_that("a rare-weighted subsample is weighted back in agreement and shifts", {
+  # weighted_cliff with equal weights is Cliff's delta, P(b > a) - P(b < a).
+  set.seed(2)
+  a <- round(rnorm(40), 1); b <- round(rnorm(30, 0.4), 1)
+  brute <- mean(outer(b, a, ">")) - mean(outer(b, a, "<"))
+  expect_equal(weighted_cliff(a, b, rep(1, 40), rep(2, 30)), brute)
+
+  # Cluster 2 is over-drawn fourfold; weighted back it holds the share it has
+  # in the cells, not in the draw.
+  cells <- data.frame(population_label = rep(c("A", "B"), c(80, 80)),
+                      sampling_weight = rep(c(1, 0.25), c(80, 80)))
+  cl <- rep(1:2, c(80, 80))
+  ag <- cluster_gate_agreement(cells, cl)
+  pc <- ag$per_cluster
+  expect_equal(pc$pct_of_all_cells[pc$cluster == 2], 20)
+  expect_equal(pc$n_cells[pc$cluster == 2], 80L)
+  # Without weights nothing changes.
+  ag0 <- cluster_gate_agreement(cells[, "population_label", drop = FALSE], cl)
+  expect_equal(ag0$per_cluster$pct_of_all_cells, c(50, 50))
+})
+
+test_that("the density and population-share figures weight a rare-enriched draw back", {
+  withr::local_seed(3)
+  cells <- data.frame(umap_1 = c(stats::rnorm(80), stats::rnorm(80, 5)),
+                      umap_2 = stats::rnorm(160),
+                      population_label = rep(c("A", "B"), c(80, 80)),
+                      sample_id = "S1", sampling_weight = rep(c(1, 0.25), c(80, 80)))
+  td <- withr::local_tempdir()
+  p <- suppressMessages(fig_density_by_sample(cells, file.path(td, "d.png")))
+  b <- ggplot2::layer_data(p, 1)
+  expect_equal(sum(b$count), 100)          # 80 x 1 + 80 x 0.25, not 160 cells
+  p2 <- suppressMessages(fig_umap_populations(cells, file.path(td, "p.png")))
+  key <- p2$scales$get_scales("colour")$labels
+  expect_match(key[["B"]], "(20.0%)", fixed = TRUE)
+})
+
+test_that("a run on another cofactor is carried onto the model's scale before projection", {
+  # The same instrument values transformed at cofactor 600 instead of 150 are
+  # different numbers; without carrying them over they land elsewhere.
+  withr::local_seed(8)
+  L <- cbind(m1 = c(stats::rnorm(300, 0, 100), stats::rnorm(300, 5000, 800)),
+             m2 = c(stats::rnorm(300, 4000, 700), stats::rnorm(300, 0, 100)),
+             m3 = stats::rnorm(600, 1000, 600))
+  tr1 <- make_transform("arcsinh", cofactor = 150)
+  tr2 <- make_transform("arcsinh", cofactor = 600)
+  M1 <- sapply(colnames(L), function(m) tr1$fn(L[, m], m))
+  M2 <- sapply(colnames(L), function(m) tr2$fn(L[, m], m))
+  e <- run_umap(M1, n_neighbors = 10L, n_epochs = 20L, n_threads = 1L,
+                ret_model = TRUE)
+  p <- file.path(withr::local_tempdir(), "m.uwot")
+  suppressMessages(save_umap_model(e$model, p, e$scale_params, colnames(M1),
+                                   transform = tr1))
+  saved <- suppressMessages(load_umap_model(p))
+  # umap_transform() optimises the new points stochastically, so both calls
+  # get the same seed; identical inputs then give identical coordinates.
+  ref <- withr::with_seed(1, suppressMessages(
+    project_umap(saved, M1[1:40, ], transform = tr1)))
+  carried <- withr::with_seed(1, suppressMessages(
+    project_umap(saved, M2[1:40, ], transform = tr2)))
+  raw <- withr::with_seed(1, suppressMessages(project_umap(saved, M2[1:40, ])))
+  expect_equal(carried, ref, tolerance = 1e-6)
+  expect_false(isTRUE(all.equal(raw, ref, tolerance = 1e-3)))
+})

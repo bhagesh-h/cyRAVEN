@@ -17,8 +17,8 @@ WHY IT IS A LOOKUP AND NOT DERIVED. A column list is not a description: a
 reader who meets \code{compositional_concordance.csv} needs to be told that it
 classifies each result against both parameterisations, and no amount of
 inspecting its headers says that. The lines below are the same one-liners the
-\code{outputs} vignette carries, so the report and the documentation cannot drift
-into saying different things about the same file.
+output tables in the Advanced article carry, so the report and the
+documentation cannot drift into saying different things about the same file.
 }
 \details{
 A run with several marker panels writes \verb{group_comparison_stats_<panel>.csv},

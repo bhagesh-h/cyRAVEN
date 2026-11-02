@@ -10,7 +10,8 @@ write_spec_baseline(
   freq,
   spec,
   opt = list(),
-  cofactors = list()
+  cofactors = list(),
+  transforms = list()
 )
 }
 \arguments{
@@ -25,6 +26,10 @@ write_spec_baseline(
 \item{opt}{the resolved option list}
 
 \item{cofactors}{per-panel cofactors}
+
+\item{transforms}{per-panel transforms from \code{\link[=make_transform]{make_transform()}}; their
+method and parameters are stored so a later run's cuts can be put on this
+run's scale (see \code{\link[=specification_conformance]{specification_conformance()}}).}
 }
 \value{
 \code{path}, invisibly

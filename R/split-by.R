@@ -98,7 +98,7 @@ subset_by_sample <- function(x, ids) {
 #'
 #' @param ctx Named list of the shared artefacts: `freq`, `mfi`, `fx`, `rt`,
 #'   `cells`, `tc`, `ufreq`, `markers`, `covariates`, `feature_cols`,
-#'   `panel_label`, `colors`.
+#'   `panel_label`, `colors`, `scale_label` (the run's transform label).
 #' @param dir Destination directory; created if absent.
 #' @param label Timepoint label, added to every figure title.
 #' @return Character vector of the files written.
@@ -109,6 +109,7 @@ emit_timepoint_figures <- function(ctx, dir, label) {
   plab <- if (nzchar(ctx$panel_label %||% ""))
     paste0(ctx$panel_label, " - ", label) else label
   cols <- ctx$colors %||% fcs_colors()
+  slab <- ctx$scale_label %||% "asinh intensity"
 
   # One guarded emitter. The figure functions return their path or NULL, but
   # several return a ggplot object instead, so existence on disk is what counts
@@ -140,10 +141,10 @@ emit_timepoint_figures <- function(ctx, dir, label) {
     emit("population_marker_heatmap.png",
          fig_population_marker_heatmap(ctx$mfi,
            file.path(dir, "population_marker_heatmap.png"),
-           panel_label = plab, colors = cols))
+           panel_label = plab, colors = cols, scale_label = slab))
     emit("marker_state.png",
          fig_marker_state(ctx$mfi, file.path(dir, "marker_state.png"),
-           panel_label = plab, colors = cols))
+           panel_label = plab, colors = cols, scale_label = slab))
   }
   if (!is.null(ctx$fx))
     emit("functional_markers.png",
@@ -184,7 +185,7 @@ emit_timepoint_figures <- function(ctx, dir, label) {
       emit("umap_markers.png",
            fig_marker_grid(ctx$cells, ctx$markers,
              file.path(dir, "umap_markers.png"), panel_label = plab,
-             colors = cols))
+             colors = cols, scale_label = slab))
     if ("population_label" %in% names(ctx$cells))
       emit("cohort_composition_heatmap.png",
            fig_cohort_confusion(ctx$cells,
@@ -204,7 +205,9 @@ emit_timepoint_figures <- function(ctx, dir, label) {
   # written because the comparison between visits is the point, and a reader who
   # wants it should not have to refit it by hand.
   if (!is.null(ctx$clin) && length(ctx$clin) && !is.null(ctx$freq)) {
-    ca <- tryCatch(stats_clinical_association(ctx$freq, ctx$mfi, ctx$clin,
+    # Populations only: the per-visit marker associations were never written,
+    # and at one test per population and marker they are not free to compute.
+    ca <- tryCatch(stats_clinical_association(ctx$freq, NULL, ctx$clin,
                                               patient_of = ctx$patient_of),
                    error = function(e) NULL)
     if (!is.null(ca) && !is.null(ca$populations) && nrow(ca$populations)) {

@@ -18,7 +18,8 @@
 #'     viability and CD45 gates per sample; [density_valley()] places each
 #'     marker threshold at that sample's own bimodal split.
 #'   \item **Score** -- [score_populations()] evaluates a declarative population
-#'     specification (see the `config` vignette).
+#'     specification (see "The gating specification" in
+#'     `vignette("cyRAVEN", package = "cyRAVEN")`).
 #'   \item **Embed** -- [run_umap()] builds one shared embedding per marker
 #'     panel from a size-balanced subsample.
 #'   \item **Test** -- [stats_group_comparison()] for abundance,
@@ -38,8 +39,8 @@
 #' @section Statistical stance:
 #' Replicates are samples, never cells. Anything computed over pooled cells is
 #' labelled descriptive and carries no p-value, because the number of cells is a
-#' property of acquisition rather than of the design. See the
-#' `vignette("statistics", package = "cyRAVEN")`.
+#' property of acquisition rather than of the design. See "Statistics" in
+#' `vignette("advanced", package = "cyRAVEN")`.
 #'
 #' @section Options:
 #' \describe{
