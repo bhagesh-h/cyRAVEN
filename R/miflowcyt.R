@@ -290,8 +290,14 @@ write_miflowcyt <- function(path, reads, opt = NULL, spec = NULL,
         ln <- c(ln, paste0("    ", m, ": ", as.character(d[[m]])[1]))
       if (!is.null(d[["any_of"]])) {
         ln <- c(ln, "    any_of:")
-        for (m in names(d[["any_of"]]))
-          ln <- c(ln, paste0("      ", m, ": ", as.character(d[["any_of"]][[m]])[1]))
+        for (m in names(d[["any_of"]])) {
+          v <- d[["any_of"]][[m]]
+          if (is.list(v)) {
+            ln <- c(ln, paste0("      ", m, ":"))
+            for (mm in names(v))
+              ln <- c(ln, paste0("        ", mm, ": ", as.character(v[[mm]])[1]))
+          } else ln <- c(ln, paste0("      ", m, ": ", as.character(v)[1]))
+        }
       }
     }
     ln <- c(ln, "```", "")

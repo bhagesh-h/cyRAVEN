@@ -744,9 +744,16 @@ expected_positive_markers <- function(spec) {
     direct <- names(rule)[vapply(rule, function(v)
       is.character(v) && length(v) == 1L && identical(v, "above"), logical(1))]
     anyof <- character(0)
-    if (!is.null(rule$any_of) && is.list(rule$any_of))
-      anyof <- names(rule$any_of)[vapply(rule$any_of, function(v)
-        identical(v, "above"), logical(1))]
+    if (!is.null(rule$any_of) && is.list(rule$any_of)) {
+      # a member is one condition or a named set of them; the positive markers
+      # of both kinds count
+      flat <- unlist(lapply(names(rule$any_of), function(k) {
+        v <- rule$any_of[[k]]
+        if (is.list(v)) stats::setNames(as.character(unlist(v)), names(v))
+        else stats::setNames(as.character(v), k)
+      }))
+      anyof <- names(flat)[flat == "above"]
+    }
     setdiff(unique(c(direct, anyof)), "any_of")
   })
   out[vapply(out, length, integer(1)) > 0L]

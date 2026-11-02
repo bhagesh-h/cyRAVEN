@@ -205,13 +205,17 @@ fraction. The canonical case is monocyte subsetting: classical CD14⁺⁺,
 intermediate CD14⁺CD16⁺, non-classical CD14^dim.
 
 `any_of`: a reserved key holding a nested map satisfied when **any** member is.
+A member is one condition or a named set of conditions that must all hold.
 
 ```yaml
   NK cells:
     CD3: below
+    CD14: below
     any_of:
       CD56: above
-      CD16: above
+      CD16 without HLA-DR:      # CD16+ counts only without HLA-DR (monocytes)
+        CD16: above
+        HLA-DR: below
 ```
 
 `parent:`: a reserved key naming another population. This population's own

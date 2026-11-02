@@ -611,6 +611,26 @@ derived from a second density minimum within the positive fraction. Where no
 second minimum exists the population is reported UNAVAILABLE rather than being
 merged into the bright fraction.
 
+`any_of` holds a disjunction: the population needs any one of its members. A
+member is one condition, or a named set of conditions that must all hold, so NK
+cells can be CD56<sup>+</sup>, or CD16<sup>+</sup> without HLA-DR, which keeps
+CD16<sup>+</sup> monocytes out without dropping activated HLA-DR<sup>+</sup> NK
+cells:
+
+```yaml
+  NK cells:
+    CD3: below
+    CD14: below
+    any_of:
+      CD56: above
+      CD16 without HLA-DR:
+        CD16: above
+        HLA-DR: below
+```
+
+A member whose markers are not all in the panel is dropped and the rest still
+gate; with none left the population is UNAVAILABLE.
+
 `parent:` names another population, and the population's own markers are then
 cut on that parent's events instead of across every CD45<sup>+</sup> cell, as a
 gating template derives each gate on its parent (Finak et al. 2014). A cut

@@ -154,3 +154,26 @@ test_that("the parent mask bounds every population", {
   expect_true(all(parent[s$masks$`T cells`]))
   expect_true(all(is.na(s$labels[!parent])))
 })
+
+test_that("an any_of member can be a set of conditions that must all hold", {
+  # "CD56+, or CD16+ and HLA-DR-": the NK rule that keeps CD16+ monocytes
+  # (HLA-DR+) out without dropping HLA-DR+ NK cells (CD56+).
+  tmat <- cbind(CD56 = c(5, 5, 0, 0, 0), CD16 = c(0, 0, 5, 5, 0),
+                `HLA-DR` = c(0, 5, 0, 5, 0))
+  thr <- c(CD56 = 1, CD16 = 1, `HLA-DR` = 1)
+  spec <- list(NK = list(any_of = list(
+    CD56 = "above", `CD16 without HLA-DR` = list(CD16 = "above", `HLA-DR` = "below"))))
+  sc <- score_populations(tmat, thr, rep(TRUE, 5), spec = spec, quiet = TRUE)
+  # CD56+ HLA-DR-, CD56+ HLA-DR+, CD16+ HLA-DR- are NK; CD16+ HLA-DR+ and the
+  # negative cell are not.
+  expect_identical(sc$masks$NK, c(TRUE, TRUE, TRUE, FALSE, FALSE))
+  # A member is usable only when every marker it reads is in the panel.
+  sc2 <- suppressMessages(score_populations(tmat[, c("CD56", "CD16")], thr[1:2],
+                                            rep(TRUE, 5), spec = spec))
+  expect_identical(sc2$masks$NK, c(TRUE, TRUE, FALSE, FALSE, FALSE))
+  # The markers it reads include the grouped ones, and the fingerprint names
+  # them, so changing the grouped marker is a specification change.
+  expect_setequal(any_of_markers(spec$NK$any_of), c("CD56", "CD16", "HLA-DR"))
+  spec_b <- spec; spec_b$NK$any_of[[2]] <- list(CD16 = "above", CD11c = "below")
+  expect_false(identical(spec_fingerprint(spec), spec_fingerprint(spec_b)))
+})

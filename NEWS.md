@@ -194,6 +194,14 @@ on a panel of more than 40 markers (the cofactor's marker subset) or under
   article's group-test example labelled all twelve samples one group and
   printed `NULL`, and its account of the threshold fallback left out the tail
   gate that comes before the quantile.
+- **HLA-DR+ NK cells are NK cells.** The shipped config's NK rule required
+  HLA-DR below to keep CD16+ monocytes out, which also excluded activated
+  HLA-DR+ NK cells; with Dendritic cells requiring CD56 below they were counted
+  under "Other CD45+". An `any_of` member can now be a named set of conditions
+  that must all hold, and NK cells are CD56+, or CD16+ without HLA-DR. On KMT2
+  NK cells rose by a median 0.03 points (at most 0.23), 12 of 19 samples moved
+  closer to the manual gating, whose NK HLA-DR+ gate sits inside NK, and no
+  other population changed.
 - **The explore embedding's UMAP settings are options.** Explore read
   `--explore-neighbors` and `--explore-min-dist`, which were never defined, so
   it always used 30 and 0.1 whatever was asked (the declared run's `--min-dist`

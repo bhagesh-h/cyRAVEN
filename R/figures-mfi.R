@@ -65,7 +65,10 @@ population_phenotype <- function(spec) {
   vapply(spec, function(req) {
     s <- terms(req[setdiff(names(req), "any_of")])
     a <- req[["any_of"]]
-    if (length(a)) s <- c(s, paste0("(", paste(terms(a), collapse = " or "), ")"))
+    # a member is one condition or a named set of conditions that all hold
+    if (length(a)) s <- c(s, paste0("(", paste(vapply(names(a), function(k)
+      if (is.list(a[[k]])) paste(terms(a[[k]]), collapse = " ")
+      else terms(a[k]), character(1)), collapse = " or "), ")"))
     paste(s, collapse = " ")
   }, character(1))
 }

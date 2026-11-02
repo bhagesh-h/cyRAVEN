@@ -69,8 +69,13 @@ report_input_check <- function(fcs, smap, sheet, spec, opt) {
   # scorer's rule here instead of approximating it.
   scatter   <- c("FSC-A", "FSC-H", "SSC-A", "SSC-H")
   direct_of <- function(req) setdiff(names(req), "any_of")
-  anyof_of  <- function(req) if (is.null(req[["any_of"]])) character(0)
-                             else names(req[["any_of"]])
+  anyof_of  <- function(req) any_of_markers(req[["any_of"]])
+  # each member's markers: one condition, or a named set that must all hold
+  any_members <- function(req) {
+    a <- req[["any_of"]]
+    if (is.null(a)) list() else lapply(names(a), function(k)
+      if (is.list(a[[k]])) names(a[[k]]) else k)
+  }
   need_direct <- setdiff(unique(unlist(lapply(spec, direct_of))), scatter)
   need_any    <- setdiff(unique(unlist(lapply(spec, anyof_of))), scatter)
   need   <- unique(c(need_direct, need_any))
@@ -115,8 +120,9 @@ report_input_check <- function(fcs, smap, sheet, spec, opt) {
   # populations rather than the individual names. Members are matched against
   # both spellings for the same reason as above.
   dead_any <- names(spec)[vapply(spec, function(req) {
-    m <- anyof_of(req)
-    length(m) > 0L && !length(intersect(m, union(markers, scorable)))
+    mem <- any_members(req)
+    length(mem) > 0L && !any(vapply(mem, function(mk)
+      all(mk %in% union(markers, scorable)), logical(1)))
   }, logical(1))]
   log_msg("population specification: ", length(spec), " population(s) needing ",
           length(need), " marker(s)")

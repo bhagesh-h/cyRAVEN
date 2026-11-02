@@ -390,7 +390,7 @@ stats_threshold_drift <- function(thr, group_of, spec = NULL, min_n = 3L) {
       r <- spec[[pn]]
       if (!is.list(r)) next
       mk <- setdiff(names(r), "any_of")
-      if (!is.null(r$any_of) && is.list(r$any_of)) mk <- c(mk, names(r$any_of))
+      if (!is.null(r$any_of) && is.list(r$any_of)) mk <- c(mk, any_of_markers(r$any_of))
       for (m in unique(mk)) uses[[m]] <- c(uses[[m]], pn)
     }
   }

@@ -24,7 +24,8 @@
 #   above         value > threshold
 #   below         value < threshold
 #   intermediate  threshold < value < upper bound (bound derived per sample)
-# and the reserved key `any_of` holds a nested map satisfied when ANY member is.
+# and the reserved key `any_of` holds a nested map satisfied when ANY member is;
+# a member is one condition or a named set of conditions that must all hold.
 #
 # Every requirement is ANDed with the CD45+ parent gate, which the script derives
 # from scatter and viability before this spec is evaluated. Populations are
@@ -158,20 +159,21 @@ populations:
   #
   # SSC-A below: neutrophils are CD3- CD19- CD16+, so without it every
   # granulocyte also counted as an NK cell, and in whole blood granulocytes
-  # outnumber NK cells about ten to one. HLA-DR below and CD14 below: CD16+
-  # monocytes have low side scatter too, and NK cells are the HLA-DR-negative,
-  # CD14-negative ones. The cost: HLA-DR+ NK cells whose CD56 clears its cut
-  # match neither this rule nor Dendritic cells (CD56 below) and are counted
-  # under "Other CD45+".
+  # outnumber NK cells about ten to one. CD14 below and, on the CD16 branch,
+  # HLA-DR below: CD16+ monocytes have low side scatter too and are HLA-DR+
+  # and CD56-, so a CD16+ cell counts only without HLA-DR. A CD56+ cell counts
+  # whatever its HLA-DR, so activated HLA-DR+ NK cells are NK cells, as in the
+  # source laboratory's manual gating (its NK HLA-DR+ gate sits inside NK).
   NK cells:
     CD3: below
     CD19: below
     CD14: below
-    HLA-DR: below
     SSC-A: below
     any_of:
-      CD16: above
       CD56: above
+      CD16 without HLA-DR:
+        CD16: above
+        HLA-DR: below
 
 # Functional-marker summaries. This panel carries no activation, exhaustion, or
 # homing markers, so the only meaningful block is the myeloid HLA-DR/CD11c pair;
