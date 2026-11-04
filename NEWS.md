@@ -1,5 +1,27 @@
 # cyRAVEN (development)
 
+## A yellow rhombus
+
+The logo is a yellow rhombus (`#FFCC00`) where it was an orange hexagon. The
+raven, the wordmark and the white band around the shape are the same artwork:
+the masters in `logo/` hold the raven and wordmark pixel for pixel, on a larger
+canvas so that the shape could change without resampling them. The white letters
+gain a thin black outline, because white alone is hard to read on yellow; that
+outline is the one thing drawn over the artwork. The README, the package help,
+the report masthead, the manual's title page, the site's hero and every favicon
+size come from those masters, at the sizes they had.
+
+The colours follow it, in the site, the PDF manual, the run report and the
+illustrations in the articles. Yellow fills and buttons carry dark text. Yellow
+is too light to be text or a thin line on a pale ground, so links, heading
+numbers and thin marks use `#806600`, the same hue darkened to pass WCAG AA on
+the paper. The raven's charcoal replaces the navy as the second colour. In the
+site's dark mode the illustrations now stay light, because the filter that
+darkens article images turns this yellow brown; data figures keep the filter.
+Status colours in the report (ok, warning, stop) keep their meanings, and so do
+the data palettes in `default_colors()`, which are chosen for separation between
+populations and groups and have nothing to do with the logo.
+
 ## PeacoQC and edgeR, opt-in
 
 Two published methods the documentation named as missing, now available. Both

@@ -548,7 +548,7 @@ fig_clinical_detail <- function(freq, clin_values, var_name, outfile,
     d <- d[is.finite(d$.x), , drop = FALSE]
     if (!nrow(d)) return(invisible(NULL))
     fig <- ggplot(d, aes(.x, .y)) +
-      geom_point(size = 1.5, alpha = 0.85, colour = colors$accent %||% "#0a7d4a") +
+      geom_point(size = 1.5, alpha = 0.85, colour = colors$accent %||% "#806600") +
       # A GUIDE FOR THE EYE, AND THE SUBTITLE SAYS SO. The test was Spearman on
       # ranks and this line is least squares on the raw values, so its slope is
       # not the tested quantity: it is here to make the direction of a cloud of
@@ -605,7 +605,7 @@ fig_clinical_detail <- function(freq, clin_values, var_name, outfile,
         geom_boxplot(outlier.shape = NA, fill = colors$na_fill %||% "grey85",
                      colour = colors$bar_outline %||% "grey20", linewidth = 0.3) +
         geom_jitter(width = 0.15, height = 0, size = 1.4, alpha = 0.85,
-                    colour = colors$accent %||% "#0a7d4a") +
+                    colour = colors$accent %||% "#806600") +
         facet_wrap(~ population, scales = "free_y", ncol = ncol) +
         labs(title = paste0("Population abundance by ", var_name),
              subtitle = "one point per sample; box is median and quartiles",

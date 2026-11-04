@@ -5,7 +5,7 @@ template:
   light-switch: true
   # The design language of the author's portfolio site: Bricolage Grotesque for
   # text and headings, IBM Plex Mono for code, ink on a paper ground and the
-  # logo orange. The typefaces are served from this site (pkgdown/assets/fonts,
+  # logo yellow. The typefaces are served from this site (pkgdown/assets/fonts,
   # declared in extra.css) rather than fetched from Google through bslib, which
   # can ask for weights but not for Bricolage's optical-size axis. extra.css
   # holds the colours for both themes; the values here are the same ones, so
@@ -14,8 +14,8 @@ template:
     base_font: "Bricolage Grotesque"
     heading_font: "Bricolage Grotesque"
     code_font: "IBM Plex Mono"
-    primary: "#B04A00"
-    link-color: "#B04A00"
+    primary: "#806600"
+    link-color: "#806600"
     body-bg: "#F2F4F7"
     body-color: "#12151B"
     body-bg-dark: "#0E1014"
