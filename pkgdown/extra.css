@@ -1,8 +1,10 @@
 /* cyRAVEN site styles, in the design language of the author's portfolio site:
  * Bricolage Grotesque for text, IBM Plex Mono for code, ink on a fine-grained
- * paper ground, the logo orange for accents and a navy second colour. The
- * values below are the portfolio's own, so moving between the two sites does
- * not look like leaving one.
+ * paper ground, the logo yellow for accents and the raven's charcoal as a
+ * second colour. The type, the shapes and the ink and paper values are the
+ * portfolio's own, so moving between the two sites does not look like leaving
+ * one; the accent is the logo's, and yellow is too light to be text on paper,
+ * so links and other small marks use its darkened form.
  *
  * Written for a phone first. Base rules target a narrow screen; the media
  * queries at the end widen them. Three rules decided most of this file:
@@ -59,11 +61,11 @@
   --cy-ink: #12151B;
   --cy-muted: #566072;
   --cy-line: #DCE0E7;
-  --cy-orange: #EE6F0F;        /* the logo hexagon; decoration and buttons */
-  --cy-orange-text: #B04A00;   /* the orange that passes WCAG AA as text on paper */
-  --cy-orange-rgb: 176, 74, 0;
-  --cy-navy: #2D3A55;
-  --cy-on-orange: #12151B;
+  --cy-yellow: #FFCC00;        /* the logo rhombus; decoration and buttons */
+  --cy-yellow-text: #806600;   /* the same hue, darkened to pass WCAG AA as text on paper */
+  --cy-yellow-rgb: 128, 102, 0;
+  --cy-raven: #3A3A3A;         /* the raven's charcoal */
+  --cy-on-yellow: #12151B;
   --cy-danger: #B42318;
   --cy-shadow: 18 21 27;
 
@@ -98,8 +100,8 @@
   --bs-border-color: var(--cy-line);
   --bs-secondary-bg: var(--cy-surface);
   --bs-tertiary-bg: var(--cy-surface);
-  --bs-link-color: var(--cy-orange-text);
-  --bs-link-color-rgb: var(--cy-orange-rgb);
+  --bs-link-color: var(--cy-yellow-text);
+  --bs-link-color-rgb: var(--cy-yellow-rgb);
   --bs-link-hover-color: var(--cy-ink);
   --bs-link-hover-color-rgb: 18, 21, 27;
   --bs-code-color: var(--cy-ink);
@@ -115,10 +117,10 @@
   --cy-ink: #ECEEF2;
   --cy-muted: #9AA3B3;
   --cy-line: #272C36;
-  --cy-orange: #F07A1E;
-  --cy-orange-text: #FF9A52;
-  --cy-orange-rgb: 255, 154, 82;
-  --cy-navy: #93A9D1;
+  --cy-yellow: #FFCC00;
+  --cy-yellow-text: #FFD633;
+  --cy-yellow-rgb: 255, 214, 51;
+  --cy-raven: #C9C9C9;
   --cy-danger: #FF8A80;
   --cy-shadow: 0 0 0;
   --cy-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='g' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 .3 0 0 0 -.125'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23g)'/%3E%3C/svg%3E");
@@ -132,8 +134,8 @@
   --bs-border-color: var(--cy-line);
   --bs-secondary-bg: var(--cy-surface);
   --bs-tertiary-bg: var(--cy-surface);
-  --bs-link-color: var(--cy-orange-text);
-  --bs-link-color-rgb: var(--cy-orange-rgb);
+  --bs-link-color: var(--cy-yellow-text);
+  --bs-link-color-rgb: var(--cy-yellow-rgb);
   --bs-link-hover-color: var(--cy-ink);
   --bs-link-hover-color-rgb: 236, 238, 242;
   --bs-code-color: var(--cy-ink);
@@ -172,9 +174,9 @@ body::before {
   body::before { display: none; }
 }
 
-::selection { background: var(--cy-orange); color: var(--cy-on-orange); }
+::selection { background: var(--cy-yellow); color: var(--cy-on-yellow); }
 :focus-visible {
-  outline: 2px solid var(--cy-orange-text);
+  outline: 2px solid var(--cy-yellow-text);
   outline-offset: 3px;
   border-radius: 6px;
 }
@@ -313,18 +315,18 @@ main li { margin-bottom: 0.35rem; }
 main li > p { margin-bottom: 0.4rem; }
 main li::marker { color: var(--cy-muted); }
 main a {
-  color: var(--cy-orange-text);
+  color: var(--cy-yellow-text);
   text-decoration-thickness: 1px;
   text-underline-offset: 0.2em;
 }
-main a:hover { color: var(--cy-ink); text-decoration-color: var(--cy-orange); }
+main a:hover { color: var(--cy-ink); text-decoration-color: var(--cy-yellow); }
 /* Heading anchors are navigation, not links in the prose. */
 main a.anchor { text-decoration: none; }
 
 main blockquote {
   margin: 1.4rem 0;
   padding: 0.2rem 0 0.2rem 1rem;
-  border-left: 3px solid var(--cy-orange);
+  border-left: 3px solid var(--cy-yellow);
   color: var(--cy-muted);
 }
 main blockquote p:last-child { margin-bottom: 0; }
@@ -358,15 +360,15 @@ main :not(pre) > code {
 }
 [data-bs-theme="dark"] main :not(pre) > code { background: rgb(255 255 255 / 0.08); }
 /* Syntax colours from the same palette: commands in ink, flags and numbers in
-   navy, strings and variables in orange, punctuation and comments muted. The
+   charcoal, strings and variables in yellow, punctuation and comments muted. The
    :root prefix outranks pkgdown's dark theme, which is written as
    [data-bs-theme="dark"] pre code span.xx and would otherwise win in dark mode. */
 :root main pre code span.ex, :root main pre code span.fu, :root main pre code span.bu { color: var(--cy-ink); font-weight: 500; }
-:root main pre code span.kw, :root main pre code span.cf { color: var(--cy-navy); font-weight: 500; }
+:root main pre code span.kw, :root main pre code span.cf { color: var(--cy-raven); font-weight: 500; }
 :root main pre code span.at, :root main pre code span.dv, :root main pre code span.fl,
-:root main pre code span.bn, :root main pre code span.cn, :root main pre code span.im { color: var(--cy-navy); }
+:root main pre code span.bn, :root main pre code span.cn, :root main pre code span.im { color: var(--cy-raven); }
 :root main pre code span.st, :root main pre code span.ch, :root main pre code span.ss,
-:root main pre code span.vs, :root main pre code span.va, :root main pre code span.sc { color: var(--cy-orange-text); }
+:root main pre code span.vs, :root main pre code span.va, :root main pre code span.sc { color: var(--cy-yellow-text); }
 :root main pre code span.op, :root main pre code span.dt, :root main pre code span.ot,
 :root main pre code span.an, :root main pre code span.in { color: var(--cy-muted); }
 :root main pre code span.co, :root main pre code span.cv, :root main pre code span.do,
@@ -426,6 +428,12 @@ main .figure img, main p > img {
 }
 main .figure, main p:has(> img) { margin: 1.4rem 0 1.8rem; }
 main .caption, main figcaption { color: var(--cy-muted); font-size: 0.9rem; }
+/* The illustrations stay light in dark mode. pkgdown darkens article images with
+   invert(100%) hue-rotate(180deg), which leaves a mid-luminance colour alone but
+   turns the logo's yellow into brown (#FFCC00 to #6E3B00), because yellow is nearly
+   as light as white. No single colour matrix keeps yellow without turning the
+   illustrations' reds and greens into other colours. Data figures keep the filter. */
+[data-bs-theme="dark"] main img.r-plt[src^="images/"] { filter: none; }
 
 /* ---- sidebars ------------------------------------------------------------ */
 aside h2, #toc > h2 {
@@ -436,7 +444,7 @@ aside h2, #toc > h2 {
   color: var(--cy-muted);
 }
 aside a { color: var(--cy-ink); text-underline-offset: 0.2em; }
-aside a:hover { color: var(--cy-orange-text); }
+aside a:hover { color: var(--cy-yellow-text); }
 #toc .nav-link {
   font-size: 0.875rem;
   color: var(--cy-muted);
@@ -444,11 +452,11 @@ aside a:hover { color: var(--cy-orange-text); }
   padding-bottom: 0.15rem;
 }
 #toc .nav-link:hover { color: var(--cy-ink); }
-#toc .nav-link.active { color: var(--cy-orange-text); font-weight: 600; }
+#toc .nav-link.active { color: var(--cy-yellow-text); font-weight: 600; }
 
 /* ---- home page ----------------------------------------------------------- */
 /* The hero is the portfolio's, with the logo where its portrait is: the name,
-   one line in navy saying what it is, a muted sentence and a filled orange
+   one line in charcoal saying what it is, a muted sentence and a filled yellow
    pill on the left, the logo large on the right. On a phone the logo comes
    first, centred above the name, as the portrait does there. Same proportions
    and the same breakpoint logic: two columns at 1.2 : 0.8 once the column is
@@ -522,7 +530,7 @@ main .cy-hero-logo img {
   font-weight: 500;
   letter-spacing: -0.015em;
   line-height: 1.2;
-  color: var(--cy-navy);
+  color: var(--cy-raven);
 }
 .cy-hero-lede { margin: 0; max-width: 34rem; color: var(--cy-muted); }
 .cy-hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 0.4rem 0 0; }
@@ -542,15 +550,15 @@ main .cy-hero-logo img {
 }
 .cy-btn:active { transform: scale(0.97); }
 .cy-btn-primary {
-  background: var(--cy-orange);
-  border-color: var(--cy-orange);
-  color: var(--cy-on-orange) !important;
+  background: var(--cy-yellow);
+  border-color: var(--cy-yellow);
+  color: var(--cy-on-yellow) !important;
 }
 @media (hover: hover) and (pointer: fine) {
   .cy-btn:hover { border-color: var(--cy-muted); }
   .cy-btn-primary:hover {
-    border-color: var(--cy-orange);
-    box-shadow: 0 10px 24px -10px var(--cy-orange);
+    border-color: var(--cy-yellow);
+    box-shadow: 0 10px 24px -10px var(--cy-yellow);
     transform: translateY(-1px);
   }
 }

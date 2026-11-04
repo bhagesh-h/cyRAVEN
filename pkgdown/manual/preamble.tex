@@ -50,17 +50,18 @@
 \usepackage{ragged2e}
 
 % COLOUR, from the author's portfolio site, which the website follows too: ink
-% on a pale paper ground, the logo orange for chapter numbers, its darkened form
-% for links (it passes WCAG AA as text on the paper), a muted grey for captions
-% and running heads, and the portfolio's navy for the title page's tagline and
-% for flags in code.
+% on a pale paper ground, the logo yellow for the rule under a chapter title, its
+% darkened form for heading numbers and links (it passes WCAG AA as text on the
+% paper, which the yellow itself does not), a muted grey for captions and running
+% heads, and the raven's charcoal for the title page's tagline and for flags in
+% code.
 \usepackage{xcolor}
 \definecolor{RavenPaper}{HTML}{F2F4F7}
 \definecolor{RavenInk}{HTML}{12151B}
-\definecolor{RavenOrange}{HTML}{EE6F0F}
-\definecolor{RavenText}{HTML}{B04A00}
+\definecolor{RavenYellow}{HTML}{FFCC00}
+\definecolor{RavenText}{HTML}{806600}
 \definecolor{RavenMuted}{HTML}{566072}
-\definecolor{RavenNavy}{HTML}{2D3A55}
+\definecolor{RavenCharcoal}{HTML}{3A3A3A}
 \definecolor{RavenLine}{HTML}{DCE0E7}
 % The paper colour on every page, as on the site. Figures and code blocks are
 % white, so they sit on it as the site's white cards do.
@@ -107,8 +108,8 @@
   \fontfamily\ttdefault\selectfont\hyphenchar\font=\m@ne}
 \makeatother
 
-% Syntax colours, the website's: commands in ink, flags and numbers in navy,
-% strings and variables in orange, punctuation and comments muted. pandoc
+% Syntax colours, the website's: commands in ink, flags and numbers in charcoal,
+% strings and variables in yellow, punctuation and comments muted. pandoc
 % defines these only when the document holds highlighted code, so each is
 % provided first and then redefined.
 \newcommand{\cytok}[2]{\providecommand{#1}[1]{}\renewcommand{#1}[1]{#2}}
@@ -116,14 +117,14 @@
 \cytok{\ExtensionTok}{#1}
 \cytok{\FunctionTok}{#1}
 \cytok{\BuiltInTok}{#1}
-\cytok{\KeywordTok}{\textcolor{RavenNavy}{#1}}
-\cytok{\ControlFlowTok}{\textcolor{RavenNavy}{#1}}
-\cytok{\AttributeTok}{\textcolor{RavenNavy}{#1}}
-\cytok{\DecValTok}{\textcolor{RavenNavy}{#1}}
-\cytok{\FloatTok}{\textcolor{RavenNavy}{#1}}
-\cytok{\BaseNTok}{\textcolor{RavenNavy}{#1}}
-\cytok{\ConstantTok}{\textcolor{RavenNavy}{#1}}
-\cytok{\ImportTok}{\textcolor{RavenNavy}{#1}}
+\cytok{\KeywordTok}{\textcolor{RavenCharcoal}{#1}}
+\cytok{\ControlFlowTok}{\textcolor{RavenCharcoal}{#1}}
+\cytok{\AttributeTok}{\textcolor{RavenCharcoal}{#1}}
+\cytok{\DecValTok}{\textcolor{RavenCharcoal}{#1}}
+\cytok{\FloatTok}{\textcolor{RavenCharcoal}{#1}}
+\cytok{\BaseNTok}{\textcolor{RavenCharcoal}{#1}}
+\cytok{\ConstantTok}{\textcolor{RavenCharcoal}{#1}}
+\cytok{\ImportTok}{\textcolor{RavenCharcoal}{#1}}
 \cytok{\StringTok}{\textcolor{RavenText}{#1}}
 \cytok{\CharTok}{\textcolor{RavenText}{#1}}
 \cytok{\SpecialStringTok}{\textcolor{RavenText}{#1}}
@@ -150,7 +151,7 @@
 \DefineVerbatimEnvironment{Highlighting}{Verbatim}{
   breaklines, breakanywhere, commandchars=\\\{\}, fontsize=\normalsize}
 
-% HEADINGS. A small orange number beside a bold title, and one hairline under a
+% HEADINGS. A small gold number beside a bold title, and one yellow rule under a
 % chapter title, instead of the class default's "Chapter 3" set on a line of its
 % own, which spent a third of the opening page on the word "Chapter". Sizes are
 % set in points: at 8pt the class's \Large is too close to the body to mark a
@@ -158,11 +159,11 @@
 \usepackage{titlesec}
 \titleformat{\chapter}[block]
   {\normalfont\cydisplay\fontsize{20}{22}\selectfont}
-  {\textcolor{RavenOrange}{\thechapter}}{0.45em}{}
-  [\vspace{5pt}{\color{RavenLine}\titlerule[0.6pt]}]
+  {\textcolor{RavenText}{\thechapter}}{0.45em}{}
+  [\vspace{5pt}{\color{RavenYellow}\titlerule[1.2pt]}]
 \titlespacing*{\chapter}{0pt}{0pt}{12pt}
 \titleformat{\section}
-  {\normalfont\bfseries\fontsize{11.5}{14}\selectfont}{\textcolor{RavenOrange}{\thesection}}{0.55em}{}
+  {\normalfont\bfseries\fontsize{11.5}{14}\selectfont}{\textcolor{RavenText}{\thesection}}{0.55em}{}
 \titlespacing*{\section}{0pt}{12pt}{4pt}
 \titleformat{\subsection}
   {\normalfont\bfseries\fontsize{9.5}{12}\selectfont}{\textcolor{RavenMuted}{\thesubsection}}{0.55em}{}

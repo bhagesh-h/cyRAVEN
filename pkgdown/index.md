@@ -13,7 +13,7 @@ Every sample is gated separately, and the report is one file.
 </p>
 </div>
 <div class="cy-hero-logo">
-<img src="img/logo-hero-560.webp" srcset="img/logo-hero-360.webp 360w, img/logo-hero-560.webp 560w, img/logo-hero-840.webp 840w" sizes="(min-width: 768px) 22rem, 64vw" width="560" height="653" alt="The cyRAVEN logo: an engraved raven on an orange hexagon" fetchpriority="high" decoding="async">
+<img src="img/logo-hero-560.webp" srcset="img/logo-hero-360.webp 360w, img/logo-hero-560.webp 560w, img/logo-hero-840.webp 840w" sizes="(min-width: 768px) 22rem, 64vw" width="560" height="653" alt="The cyRAVEN logo: an engraved raven on a yellow rhombus" fetchpriority="high" decoding="async">
 </div>
 </div>
 

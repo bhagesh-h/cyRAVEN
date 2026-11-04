@@ -261,7 +261,7 @@ header <- c(
   "")
 
 # The title page follows the website's home page: the logo, the name in the
-# display cut, one line in navy saying what it is, one muted sentence, and the
+# display cut, one line in charcoal saying what it is, one muted sentence, and the
 # version. Written per build because the version and date change.
 writeLines(c(
   "\\makeatletter",
@@ -270,7 +270,7 @@ writeLines(c(
   "  \\IfFileExists{logo.png}{\\includegraphics[width=32mm]{logo.png}\\par\\vspace{10mm}}{}",
   "  {\\cydisplay\\fontsize{46}{46}\\selectfont cyRAVEN\\par}",
   "  \\vspace{6mm}",
-  "  {\\fontsize{15}{19}\\selectfont\\color{RavenNavy} Flow cytometry files in, population",
+  "  {\\fontsize{15}{19}\\selectfont\\color{RavenCharcoal} Flow cytometry files in, population",
   "   frequencies, a UMAP and statistics out.\\par}",
   "  \\vspace{3mm}",
   "  {\\fontsize{10.5}{14}\\selectfont\\color{RavenMuted} Every sample is gated separately,",

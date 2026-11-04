@@ -779,7 +779,7 @@ report_page <- function(secs, title, masthead, banner = "") {
 report_css <- function() {
   paste0(
   ":root{--fg:#1a1a1a;--mut:#5b6470;--line:#e2e5ea;--bg:#fff;--panel:#f7f8fa;",
-  "--accent:#0a7d4a;--warn:#8a6100;--stop:#a4231c;",
+  "--accent:#806600;--accent-fill:#ffcc00;--warn:#8a6100;--stop:#a4231c;",
   "--ui:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;",
   "--mono:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace}",
   # One font stack for every element, set once on the root and inherited. Tables,
@@ -835,7 +835,7 @@ report_css <- function() {
   # report gives no cue where you are or how much is left. Tinted fill plus an
   # accent rule down the left edge, which survives being scrolled past at a
   # glance better than colour alone.
-  ".nav-sec.cur>a.nav-h{background:#e6f1eb;color:var(--accent);",
+  ".nav-sec.cur>a.nav-h{background:#fff4c2;color:var(--accent);",
   "box-shadow:inset 3px 0 0 var(--accent)}",
   # The contents list shows section titles only until a section is opened, and
   # then shows that section's figures and tables. It mirrors the document rather
@@ -903,7 +903,7 @@ report_css <- function() {
   "a.dl,button.dl{font-size:.76rem;color:var(--accent);text-decoration:none;",
   "border:1px solid var(--accent);border-radius:5px;padding:.16rem .5rem;",
   "background:none;cursor:pointer;white-space:nowrap}",
-  "a.dl:hover,button.dl:hover{background:var(--accent);color:#fff}",
+  "a.dl:hover,button.dl:hover{background:var(--accent-fill);color:var(--fg);border-color:var(--accent-fill)}",
   # Back to top. A run report is tens of screens long and the section a
   # reader wants next is reached from the masthead, so the return trip is
   # otherwise a long scroll or a keyboard shortcut not everyone knows.
@@ -917,7 +917,7 @@ report_css <- function() {
   "opacity:0;visibility:hidden;transform:translateY(.4rem);",
   "transition:opacity .16s ease,transform .16s ease,visibility .16s}",
   "#cytop.on{opacity:1;visibility:visible;transform:none}",
-  "#cytop:hover{background:var(--accent);color:#fff;border-color:var(--accent)}",
+  "#cytop:hover{background:var(--accent-fill);color:var(--fg);border-color:var(--accent-fill)}",
   "#cytop:focus-visible{outline:2px solid var(--accent);outline-offset:2px}",
   # A reader who asked the system for less motion gets the state change
   # without the slide, and cyTop() checks the same query before smooth-scrolling.
@@ -1061,11 +1061,11 @@ report_css <- function() {
   ".res{display:block;padding:.48rem .75rem;border-bottom:1px solid var(--line);",
   "cursor:pointer;color:var(--fg);text-decoration:none}",
   ".res:last-child{border-bottom:none}",
-  ".res:hover,.res.on{background:#eef5f1}",
+  ".res:hover,.res.on{background:#fff9e0}",
   ".res .k{font-size:.64rem;text-transform:uppercase;letter-spacing:.06em;",
   "font-weight:700;color:#fff;background:var(--mut);border-radius:3px;",
   "padding:.06rem .36rem;margin-right:.45rem;vertical-align:1px}",
-  ".res .k.Section{background:var(--accent)}.res .k.Figure{background:#2f6db3}",
+  ".res .k.Section{background:var(--accent-fill);color:var(--fg)}.res .k.Figure{background:#2f6db3}",
   ".res .k.Table{background:#8a6100}.res .k.Rows{background:#7a4ea3}",
   ".res .n{font-family:var(--mono);font-size:.78rem;color:var(--mut);",
   "margin-right:.4rem}",
@@ -1080,8 +1080,8 @@ report_css <- function() {
   # after the page has jumped.
   "section.sec,figure.fig,.tab{scroll-margin-top:4.4rem}",
   ".flash{animation:cyflash 1.8s ease-out}",
-  "@keyframes cyflash{0%{box-shadow:0 0 0 3px #f2c230}",
-  "100%{box-shadow:0 0 0 3px rgba(242,194,48,0)}}",
+  "@keyframes cyflash{0%{box-shadow:0 0 0 3px #ffcc00}",
+  "100%{box-shadow:0 0 0 3px rgba(255,204,0,0)}}",
   ".navtoggle{display:none;flex:0 0 auto;width:2.4rem;height:2.3rem;",
   "border:1px solid var(--line);border-radius:7px;background:#fff;",
   "cursor:pointer;font-size:1.1rem;line-height:1}",
