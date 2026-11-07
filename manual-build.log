@@ -1,0 +1,91 @@
+'getOption("repos")' replaces Bioconductor standard repositories, see
+'help("repositories", package = "BiocManager")' for details.
+Replacement repositories:
+    CRAN: https://cran.rstudio.com
+R:        R version 4.6.2 (2026-10-29)
+wd:       /home/runner/work/cyRAVEN/cyRAVEN
+pandoc:   /usr/bin/pandoc
+tinytex:  0.61
+is_tinytex before: FALSE
+trying URL 'https://github.com/rstudio/tinytex-releases/releases/download/v2026.08/TinyTeX-1-linux-x86_64-v2026.08.tar.xz'
+Content type 'application/octet-stream' length 53980584 bytes (51.5 MB)
+==================================================
+downloaded 51.5 MB
+
+tlmgr option sys_bin ~/bin
+tlmgr: setting option sys_bin to /home/runner/bin.
+tlmgr: updating /home/runner/.TinyTeX/tlpkg/texlive.tlpdb
+tlmgr option repository 'https://tlnet.yihui.org'
+tlmgr: setting default package repository to https://tlnet.yihui.org
+tlmgr: updating /home/runner/.TinyTeX/tlpkg/texlive.tlpdb
+tlmgr update --list
+===============================================================================
+tlmgr itself needs to be updated.
+Please do this via either
+  tlmgr update --self
+or by getting the latest updater for Unix-ish systems:
+  https://mirror.ctan.org/systems/texlive/tlnet/update-tlmgr-latest.sh
+and/or Windows systems:
+  https://mirror.ctan.org/systems/texlive/tlnet/update-tlmgr-latest.exe
+Then continue with other updates as usual.
+===============================================================================
+tlmgr: package repository https://tlnet.yihui.org (verified)
+update:   amsmath             [32k]: local:    79234, source:    80868
+update:   babel              [248k]: local:    79370, source:    80853
+update:   bookmark             [9k]: local:    79461, source:    80800
+update:   fancyvrb            [12k]: local:    78721, source:    80718
+update:   firstaid             [6k]: local:    79234, source:    80868
+update:   fontspec            [27k]: local:    77682, source:    79934
+update:   graphics            [16k]: local:    79234, source:    80868
+update:   hyperref            [83k]: local:    79408, source:    80959
+update:   l3kernel           [202k]: local:    79405, source:    80334
+update:   latex              [261k]: local:    79618, source:    80868
+update:   latex-bin            [1k]: local:    78282, source:    80015
+update:   texlive.infra      [466k]: local:    79653, source:    80721
+update:   texlive-scripts    [752k]: local:    79836, source:    80976
+update:   tools               [49k]: local:    79234, source:    80868
+update:   unicode-data       [316k]: local:    76413, source:    80380
+update:   xetex                [8k]: local:    77830, source:    80015
+You may have to restart your system after installing TinyTeX to make sure ~/bin appears in your PATH variable (https://github.com/rstudio/tinytex/issues/16).
+is_tinytex after:  TRUE
+tlmgr:    
+pdflatex: 
+tlmgr update --all --self
+tlmgr install pdflscape titlesec fancyhdr fvextra xurl ragged2e booktabs framed environ trimspaces koma-script nameref float fontspec xkeyval extsizes tools caption
+tlmgr: package repository https://tlnet.yihui.org (verified)
+tlmgr install: package already present: booktabs
+tlmgr install: package already present: float
+tlmgr install: package already present: fontspec
+tlmgr install: package already present: framed
+tlmgr install: package already present: tools
+tlmgr install: package already present: xkeyval
+tlmgr: prefetching 15 containers using 4 parallel downloads (aria2c)
+[1/15, ??:??/??:??] install: caption [61k]
+[2/15, 00:00/00:00] install: environ [2k]
+[3/15, 00:00/00:00] install: extsizes [12k]
+[4/15, 00:00/00:00] install: fancyhdr [9k]
+[5/15, 00:00/00:00] install: fvextra [17k]
+[6/15, 00:00/00:00] install: koma-script [6553k]
+[7/15, 00:01/00:01] install: lineno [62k]
+[8/15, 00:01/00:01] install: nameref [4k]
+[9/15, 00:01/00:01] install: pdflscape [3k]
+[10/15, 00:01/00:01] install: ragged2e [3k]
+[11/15, 00:01/00:01] install: titlesec [20k]
+[12/15, 00:01/00:01] install: trimspaces [1k]
+[13/15, 00:01/00:01] install: upquote [2k]
+[14/15, 00:01/00:01] install: xpatch [2k]
+[15/15, 00:01/00:01] install: xurl [2k]
+running mktexlsr ...
+done running mktexlsr.
+tlmgr: package log updated: /home/runner/.TinyTeX/texmf-var/web2c/tlmgr.log
+tlmgr: command log updated: /home/runner/.TinyTeX/texmf-var/web2c/tlmgr-commands.log
+=== building ===
+  chapter: About cyRAVEN (546 lines)
+  chapter: About flow cytometry (207 lines)
+  chapter: Get started (1929 lines)
+  chapter: Advanced (2610 lines)
+  chapter: Gallery (677 lines)
+  chapter: Limitations (341 lines)
+  rendering: /tmp/Rtmp96TLu4/manual/manual.md (exists: TRUE)
+wrote docs/cyRAVEN-manual.pdf (28.7 MB, 6 chapters)
+result: 28.7 MB

@@ -1,0 +1,74 @@
+# Read one FCS file and resolve marker symbols
+
+WHY marker symbols, not channel names: detector/channel names are
+instrument-specific and `alter.names = TRUE` mangles them (e.g.
+`[[RB613]]-A` becomes `X..RB613...A`). The biological identity lives in
+\$PnS, which on this instrument reads "CD45 : SparkUV-387 - Area" – the
+symbol is the text before " : ". Building an embedding on channel names
+(as the original template did) means no marker identity ever reaches the
+analysis.
+
+## Usage
+
+``` r
+read_fcs_resolved(
+  path,
+  sample_id = NULL,
+  max_events = 0L,
+  ignore_channels = NULL,
+  margins = c("remove", "cap")
+)
+```
+
+## Arguments
+
+- path:
+
+  File path.
+
+- sample_id:
+
+  The sample id.
+
+- max_events:
+
+  The max events. Default `0L`.
+
+- ignore_channels:
+
+  Character vector of marker names to drop before the panel fingerprint
+  is taken, or NULL. Names match whole and case-insensitively; a name
+  containing `*` is treated as a glob.
+
+- margins:
+
+  `"remove"` (default) drops every event at the top of the range of a
+  marker or scatter channel; `"cap"` keeps the event and sets the value
+  to the top of the range instead, which is what earlier versions did.
+
+## Value
+
+list(exprs, marker_cols, scatter_cols, channel_names, descs, keywords,
+channel_range, margin, n_events, n_events_file, subsampled, file,
+sample_id)
+
+## Details
+
+Note: FCS files larger than 99,999,999 bytes cannot express their data
+offset in the 8-character HEADER field and write 0 there; the true
+offsets live in the \$BEGINDATA/\$ENDDATA keywords. flowCore handles
+this fallback internally.
+
+LOG-AMPLIFIED DATA ARE LINEARISED. An analog instrument with log
+amplifiers writes integer channel numbers on a log scale and says so in
+`$PnE`. Every transform this package applies assumes linear intensities,
+so those channels are converted first, exactly as flowCore's own default
+does: see
+[`linearise_channels()`](https://bhagesh-h.github.io/cyRAVEN/reference/linearise_channels.md).
+
+MARGIN EVENTS ARE REMOVED. An event at or beyond the top of a channel's
+range has no true value in that channel, so it is dropped, as flowAI and
+PeacoQC's `RemoveMargins()` do. See
+[`margin_events()`](https://bhagesh-h.github.io/cyRAVEN/reference/margin_events.md)
+for which channels are judged, and `margins = "cap"` for the earlier
+behaviour.
