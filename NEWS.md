@@ -1,15 +1,14 @@
 # cyRAVEN (development)
 
-## A yellow rhombus
+## A yellow logo
 
-The logo is a yellow rhombus (`#FFCC00`) where it was an orange hexagon. The
-raven, the wordmark and the white band around the shape are the same artwork:
-the masters in `logo/` hold the raven and wordmark pixel for pixel, on a larger
-canvas so that the shape could change without resampling them. The white letters
-gain a thin black outline, because white alone is hard to read on yellow; that
-outline is the one thing drawn over the artwork. The README, the package help,
-the report masthead, the manual's title page, the site's hero and every favicon
-size come from those masters, at the sizes they had.
+The logo's hexagon is yellow (`#FFCC00`) where it was orange. The shape, the
+raven, the wordmark and the white band are the same artwork: the masters in
+`logo/` hold them pixel for pixel. The white letters gain a thin black outline,
+because white alone is hard to read on yellow; that outline is the one thing
+drawn over the artwork. The README, the package help, the report masthead, the
+manual's title page, the site's hero and every favicon size come from those
+masters, at the sizes they had.
 
 The colours follow it, in the site, the PDF manual, the run report and the
 illustrations in the articles. Yellow fills and buttons carry dark text. Yellow

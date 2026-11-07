@@ -780,7 +780,7 @@ recommendation for flow data (den Braanker et al. 2021; Azad et al. 2016).
 `--per-marker-cofactor` gives each marker its own, estimated by the same
 criterion on that marker's negative population, reconstructed from its values
 below zero. It is not the default. On a whole-blood cohort scored against
-manual gating it ranked samples no better (mean Spearman ρ 0.64 for both), its
+manual gating it ranked samples no better (mean Spearman rho 0.64 for both), its
 worst-sample errors were larger and one more file failed staining QC, and on a
 PBMC cohort it emptied CD4 T cells in 3 of 30 samples and regulatory T cells and
 NKT cells in 6 each. Logicle, which fits its width per channel, scored the same
