@@ -34,11 +34,15 @@ say("is_tinytex after:  ", tinytex::is_tinytex())
 say("tlmgr:    ", Sys.which("tlmgr"))
 say("pdflatex: ", Sys.which("pdflatex"))
 
-# latexmk installs a missing style file on demand, so this is a pre-fetch and one
-# unresolvable name must not stop the build before it has tried.
+# pandoc runs xelatex itself here, so nothing installs a missing style file on
+# demand: a package this list misses stops the build at that file. One
+# unresolvable name must still not stop the build before it has tried.
 r <- tryCatch(tinytex::tlmgr_install(
   c("pdflscape", "titlesec", "fancyhdr", "fvextra", "xurl", "ragged2e",
     "booktabs", "framed", "environ", "trimspaces", "koma-script",
+    # hyperref requires nameref, which is a TeX Live package of its own in the
+    # hyperref this call updates to, and updating hyperref does not pull it in.
+    "nameref",
     # float pins each figure where it was written instead of letting it drift
     # away from the heading above it; see preamble.tex and page-fit.lua.
     "float",

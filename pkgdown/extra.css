@@ -61,7 +61,7 @@
   --cy-ink: #12151B;
   --cy-muted: #566072;
   --cy-line: #DCE0E7;
-  --cy-yellow: #FFCC00;        /* the logo rhombus; decoration and buttons */
+  --cy-yellow: #FFCC00;        /* the logo hexagon; decoration and buttons */
   --cy-yellow-text: #806600;   /* the same hue, darkened to pass WCAG AA as text on paper */
   --cy-yellow-rgb: 128, 102, 0;
   --cy-raven: #3A3A3A;         /* the raven's charcoal */
