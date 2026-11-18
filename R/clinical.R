@@ -667,8 +667,8 @@ fig_clinical_detail <- function(freq, clin_values, var_name, outfile,
 #     from a table of correlations.
 #
 #   And where a cohort was sampled repeatedly:  fig_clinical_trajectory()
-#     Per-patient lines across timepoints, split by outcome. In the critical-care
-#     literature this is the figure that separates survivors from non-survivors:
+#     Per-patient lines across timepoints, split by outcome. In the
+#     critical-care literature this is the figure that separates survivors from non-survivors:
 #     the difference is in the direction of travel, not in any single timepoint,
 #     and a boxplot per timepoint averages exactly that away.
 # -----------------------------------------------------------------------------

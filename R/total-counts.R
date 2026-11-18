@@ -45,7 +45,7 @@
 #
 #     d0      |                   |  | d3      |          ...  <- block labels
 #     Patient | PBMC count x 10^6 |  | Patient | PBMC ...      <- block headers
-#     PT_016 | 15                |  | PT_016 | -             <- one row/patient
+#     PT_016  | 15                |  | PT_016  | -             <- one row/patient
 #
 # A single unblocked block (just an identifier column and a count column, no
 # timepoint row above) is also accepted, and then the join is on patient alone.

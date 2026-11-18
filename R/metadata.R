@@ -80,7 +80,7 @@ default_value_map <- function() {
          Port = "port catheter", ZNS = "central nervous system",
          Weichgewebe = "soft tissue", Mediastinitis = "mediastinitis",
          Sinusitis = "sinusitis", Tonsillitis = "tonsillitis",
-         "Bakteri\u00e4mie" = "bacteraemia",,
+         "Bakteri\u00e4mie" = "bacteraemia",
          unbekannt = "unknown", unklar = "unclear", keiner = "none",
          kein = "none", Sonstige = "other", andere = "other"))
 }
